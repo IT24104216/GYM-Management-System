@@ -1,0 +1,82 @@
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { ROLES, ROUTES } from '@/shared/utils/constants';
+
+// Layout
+import AppShell from '@/shared/components/layout/AppShell';
+import ProtectedRoute from './ProtectedRoute';
+
+// Public pages
+import LoginPage from '@/features/auth/pages/LoginPage';
+import RegisterPage from '@/features/auth/pages/RegisterPage';
+import NotFoundPage from '@/pages/errors/NotFoundPage';
+import UnauthorizedPage from '@/pages/errors/UnauthorizedPage';
+
+// User pages
+import UserDashboard from '@/features/user/pages/UserDashboard';
+import UserWorkouts from '@/features/user/pages/UserWorkouts';
+import UserProfile from '@/features/user/pages/UserProfile';
+
+// Admin pages
+import AdminDashboard from '@/features/admin/pages/AdminDashboard';
+import AdminUsers from '@/features/admin/pages/AdminUsers';
+import AdminSettings from '@/features/admin/pages/AdminSettings';
+
+// Dietitian pages
+import DietitianDashboard from '@/features/dietitian/pages/DietitianDashboard';
+import DietitianClients from '@/features/dietitian/pages/DietitianClients';
+import DietitianMealPlans from '@/features/dietitian/pages/DietitianMealPlans';
+
+// Coach pages
+import CoachDashboard from '@/features/coach/pages/CoachDashboard';
+import CoachClients from '@/features/coach/pages/CoachClients';
+import CoachWorkoutPlans from '@/features/coach/pages/CoachWorkoutPlans';
+
+function AppRouter() {
+  return (
+    <Routes>
+      {/* ── Root redirect ─────────────────────────────────────── */}
+      <Route index element={<Navigate to={ROUTES.LOGIN} replace />} />
+
+      {/* ── Public routes (no layout, no auth) ───────────────── */}
+      <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+      <Route path={ROUTES.REGISTER} element={<RegisterPage />} />
+      <Route path={ROUTES.UNAUTHORIZED} element={<UnauthorizedPage />} />
+
+      {/* ── Protected routes (shared AppShell layout) ─────────── */}
+      <Route element={<AppShell />}>
+        {/* User */}
+        <Route element={<ProtectedRoute allowedRoles={[ROLES.USER]} />}>
+          <Route path={ROUTES.USER_DASHBOARD} element={<UserDashboard />} />
+          <Route path={ROUTES.USER_WORKOUTS} element={<UserWorkouts />} />
+          <Route path={ROUTES.USER_PROFILE} element={<UserProfile />} />
+        </Route>
+
+        {/* Admin */}
+        <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN]} />}>
+          <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboard />} />
+          <Route path={ROUTES.ADMIN_USERS} element={<AdminUsers />} />
+          <Route path={ROUTES.ADMIN_SETTINGS} element={<AdminSettings />} />
+        </Route>
+
+        {/* Dietitian */}
+        <Route element={<ProtectedRoute allowedRoles={[ROLES.DIETITIAN]} />}>
+          <Route path={ROUTES.DIETITIAN_DASHBOARD} element={<DietitianDashboard />} />
+          <Route path={ROUTES.DIETITIAN_CLIENTS} element={<DietitianClients />} />
+          <Route path={ROUTES.DIETITIAN_MEAL_PLANS} element={<DietitianMealPlans />} />
+        </Route>
+
+        {/* Coach */}
+        <Route element={<ProtectedRoute allowedRoles={[ROLES.COACH]} />}>
+          <Route path={ROUTES.COACH_DASHBOARD} element={<CoachDashboard />} />
+          <Route path={ROUTES.COACH_CLIENTS} element={<CoachClients />} />
+          <Route path={ROUTES.COACH_WORKOUT_PLANS} element={<CoachWorkoutPlans />} />
+        </Route>
+      </Route>
+
+      {/* ── Catch-all 404 ─────────────────────────────────────── */}
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  );
+}
+
+export default AppRouter;
