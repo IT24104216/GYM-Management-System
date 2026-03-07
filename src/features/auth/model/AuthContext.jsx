@@ -7,6 +7,7 @@ import { getToken, getUser, setToken, setUser, clearAuth } from '@/shared/utils/
 const AuthContext = createContext(null);
 
 const USE_MOCK_AUTH = import.meta.env.VITE_USE_MOCK_AUTH !== 'false';
+const STRICT_MOCK_PASSWORD = import.meta.env.VITE_MOCK_AUTH_STRICT_PASSWORD === 'true';
 const MOCK_USERS_KEY = 'gympro_mock_users';
 
 const wait = (ms) => new Promise((resolve) => {
@@ -66,7 +67,13 @@ export function AuthProvider({ children }) {
       const users = readMockUsers();
       const savedUser = users.find((item) => item.email === email);
 
-      if (savedUser && savedUser.password && savedUser.password !== password) {
+      // Keep UI flow unblocked by stale local mock passwords unless strict mode is requested.
+      if (
+        STRICT_MOCK_PASSWORD
+        && savedUser
+        && savedUser.password
+        && savedUser.password !== password
+      ) {
         throw new Error('Invalid email or password.');
       }
 
