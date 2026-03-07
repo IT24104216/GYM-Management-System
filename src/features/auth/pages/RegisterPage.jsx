@@ -8,7 +8,6 @@ import {
   Alert,
   Paper,
   MenuItem,
-  Divider,
 } from '@mui/material';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -33,6 +32,28 @@ function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const inputSx = {
+    mb: 2,
+    '& .MuiOutlinedInput-root': {
+      borderRadius: 3,
+      backgroundColor: '#f2f6fd',
+      '& fieldset': {
+        borderColor: '#d5dfed',
+      },
+      '&:hover fieldset': {
+        borderColor: '#b8c9e0',
+      },
+      '&.Mui-focused fieldset': {
+        borderColor: '#2b8eff',
+        borderWidth: '1px',
+      },
+    },
+    '& .MuiInputLabel-root': {
+      color: '#66758c',
+      fontWeight: 500,
+    },
+  };
 
   const handleChange = (e) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -65,18 +86,34 @@ function RegisterPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        bgcolor: 'background.default',
+        background: 'linear-gradient(180deg, #edf4ff 0%, #f8fbff 72%, #ffffff 100%)',
         p: 2,
       }}
     >
-      <Paper sx={{ p: 4, width: '100%', maxWidth: 440 }}>
+      <Paper
+        sx={{
+          width: '100%',
+          maxWidth: 460,
+          borderRadius: 4,
+          border: '1px solid #dbe7f5',
+          boxShadow: '0 30px 70px rgba(52, 85, 140, 0.16)',
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          sx={{
+            height: 4,
+            background: 'linear-gradient(90deg, #8fc8ff 0%, #2789f8 55%, #8fc8ff 100%)',
+          }}
+        />
+        <Box sx={{ p: { xs: 3, sm: 4 } }}>
         {/* Brand */}
-        <Box sx={{ textAlign: 'center', mb: 3 }}>
-          <FitnessCenterIcon sx={{ fontSize: 40, color: 'secondary.main' }} />
-          <Typography variant="h5" fontWeight={700} color="primary" mt={0.5}>
+        <Box sx={{ textAlign: 'center', mb: 3.2 }}>
+          <FitnessCenterIcon sx={{ fontSize: 36, color: '#2b8eff' }} />
+          <Typography sx={{ color: '#0e1a2e', fontSize: '2rem', fontWeight: 800, mt: 0.5 }}>
             Create your account
           </Typography>
-          <Typography variant="body2" color="text.secondary" mt={0.5}>
+          <Typography sx={{ color: '#8793a7', fontSize: '0.98rem', mt: 0.5 }}>
             Join GymPro today
           </Typography>
         </Box>
@@ -94,7 +131,7 @@ function RegisterPage() {
             value={form.name}
             onChange={handleChange}
             required
-            sx={{ mb: 2 }}
+            sx={inputSx}
             autoFocus
           />
           <TextField
@@ -104,7 +141,7 @@ function RegisterPage() {
             value={form.email}
             onChange={handleChange}
             required
-            sx={{ mb: 2 }}
+            sx={inputSx}
           />
           <TextField
             label="Role"
@@ -113,7 +150,7 @@ function RegisterPage() {
             value={form.role}
             onChange={handleChange}
             required
-            sx={{ mb: 2 }}
+            sx={inputSx}
           >
             {ROLE_OPTIONS.map((opt) => (
               <MenuItem key={opt.value} value={opt.value}>
@@ -128,7 +165,7 @@ function RegisterPage() {
             value={form.password}
             onChange={handleChange}
             required
-            sx={{ mb: 2 }}
+            sx={inputSx}
           />
           <TextField
             label="Confirm password"
@@ -137,7 +174,7 @@ function RegisterPage() {
             value={form.confirmPassword}
             onChange={handleChange}
             required
-            sx={{ mb: 3 }}
+            sx={{ ...inputSx, mb: 2.5 }}
           />
 
           <Button
@@ -146,20 +183,48 @@ function RegisterPage() {
             fullWidth
             size="large"
             disabled={loading}
+            sx={{
+              py: 1.2,
+              borderRadius: 3,
+              background: 'linear-gradient(180deg, #2b91ff 0%, #0f79ed 100%)',
+              fontSize: '1rem',
+              fontWeight: 700,
+              '&:hover': {
+                background: 'linear-gradient(180deg, #2386ef 0%, #0a6cd4 100%)',
+              },
+              '&.Mui-disabled': {
+                background: '#b6d5fb',
+                color: '#ffffff',
+              },
+            }}
           >
-            {loading ? 'Creating account…' : 'Create Account'}
+            {loading ? 'Creating account...' : 'Create Account'}
           </Button>
-        </Box>
 
-        <Divider sx={{ my: 2.5 }} />
-
-        <Box sx={{ textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary" mb={1}>
+          <Box sx={{ textAlign: 'center', mt: 3.4 }}>
+            <Typography sx={{ color: '#7f8ba0', fontSize: '0.95rem' }}>
             Already have an account?
-          </Typography>
-          <Button variant="text" onClick={() => navigate(ROUTES.LOGIN)}>
-            Sign in
-          </Button>
+              {' '}
+              <Box
+                component="button"
+                type="button"
+                onClick={() => navigate(ROUTES.LOGIN)}
+                sx={{
+                  border: 0,
+                  p: 0,
+                  m: 0,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  color: '#2b8eff',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                }}
+              >
+                Sign in
+              </Box>
+            </Typography>
+          </Box>
+        </Box>
         </Box>
       </Paper>
     </Box>
