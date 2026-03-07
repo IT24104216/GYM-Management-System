@@ -52,7 +52,7 @@ function RegisterPage() {
       const newUser = await register(payload);
       navigate(ROLE_HOME[newUser.role], { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || 'Registration failed. Please try again.');
+      setError(err?.response?.data?.message || err?.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
