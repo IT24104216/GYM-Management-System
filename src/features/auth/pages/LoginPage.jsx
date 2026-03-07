@@ -79,7 +79,7 @@ function LoginPage() {
       const from = location.state?.from || ROLE_HOME[loggedInUser.role];
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || 'Invalid email or password.');
+      setError(err?.response?.data?.message || err?.message || 'Invalid email or password.');
     } finally {
       setLoading(false);
     }
