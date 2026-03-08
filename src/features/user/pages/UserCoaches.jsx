@@ -12,6 +12,7 @@ import {
   DialogTitle,
   FormControl,
   InputLabel,
+  LinearProgress,
   MenuItem,
   Select,
   Snackbar,
@@ -92,6 +93,7 @@ const BOOKINGS = [
     appointmentType: 'In-person',
     goal: 'Weight Reducing',
     status: 'upcoming',
+    progressStatus: 'confirmed',
   },
   {
     id: 'b2',
@@ -101,6 +103,7 @@ const BOOKINGS = [
     appointmentType: 'Online',
     goal: 'Weight Gaining',
     status: 'upcoming',
+    progressStatus: 'pending',
   },
   {
     id: 'b3',
@@ -110,6 +113,7 @@ const BOOKINGS = [
     appointmentType: 'In-person',
     goal: 'Weight Reducing',
     status: 'past',
+    progressStatus: 'completed',
   },
   {
     id: 'b4',
@@ -119,8 +123,16 @@ const BOOKINGS = [
     appointmentType: 'Online',
     goal: 'Weight Gaining',
     status: 'past',
+    progressStatus: 'cancelled',
   },
 ];
+
+const BOOKING_PROGRESS_META = {
+  pending: { label: 'Pending', value: 25, color: '#f59e0b' },
+  confirmed: { label: 'Confirmed', value: 65, color: '#3b82f6' },
+  completed: { label: 'Completed', value: 100, color: '#22c55e' },
+  cancelled: { label: 'Cancelled', value: 100, color: '#ef4444' },
+};
 
 function UserCoaches() {
   const navigate = useNavigate();
@@ -352,39 +364,77 @@ function UserCoaches() {
           </Stack>
 
           <Stack spacing={1.4}>
-            {filteredBookings.map((booking) => (
-              <Card
-                key={booking.id}
-                sx={{
-                  borderRadius: 2.5,
-                  border: `1px solid ${isDark ? '#2b3d58' : '#e5edf8'}`,
-                  bgcolor: theme.palette.background.paper,
-                }}
-              >
-                <CardContent sx={{ p: 2 }}>
-                  <Stack
-                    direction={{ xs: 'column', md: 'row' }}
-                    alignItems={{ xs: 'flex-start', md: 'center' }}
-                    justifyContent="space-between"
-                    spacing={1.2}
-                  >
-                    <Box>
-                      <Typography sx={{ fontWeight: 800, color: theme.palette.text.primary }}>
-                        {booking.coachName}
-                      </Typography>
-                      <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
-                        {booking.date} at {booking.time}
-                      </Typography>
-                    </Box>
+            {filteredBookings.map((booking) => {
+              const progress = BOOKING_PROGRESS_META[booking.progressStatus] || BOOKING_PROGRESS_META.pending;
 
-                    <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
-                      <Chip label={booking.appointmentType} size="small" />
-                      <Chip label={booking.goal} size="small" />
+              return (
+                <Card
+                  key={booking.id}
+                  sx={{
+                    borderRadius: 2.5,
+                    border: `1px solid ${isDark ? '#2b3d58' : '#e5edf8'}`,
+                    bgcolor: theme.palette.background.paper,
+                  }}
+                >
+                  <CardContent sx={{ p: 2 }}>
+                    <Stack
+                      direction={{ xs: 'column', md: 'row' }}
+                      alignItems={{ xs: 'flex-start', md: 'center' }}
+                      justifyContent="space-between"
+                      spacing={1.2}
+                    >
+                      <Box>
+                        <Typography sx={{ fontWeight: 800, color: theme.palette.text.primary }}>
+                          {booking.coachName}
+                        </Typography>
+                        <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
+                          {booking.date} at {booking.time}
+                        </Typography>
+                      </Box>
+
+                      <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
+                        <Chip label={booking.appointmentType} size="small" />
+                        <Chip label={booking.goal} size="small" />
+                        <Chip
+                          label={progress.label}
+                          size="small"
+                          sx={{
+                            bgcolor: `${progress.color}22`,
+                            color: progress.color,
+                            fontWeight: 700,
+                          }}
+                        />
+                      </Stack>
                     </Stack>
-                  </Stack>
-                </CardContent>
-              </Card>
-            ))}
+
+                    <Box sx={{ mt: 1.4 }}>
+                      <Stack direction="row" justifyContent="space-between" mb={0.5}>
+                        <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
+                          Progress Tracking
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.8rem', color: progress.color, fontWeight: 700 }}>
+                          {progress.value}%
+                        </Typography>
+                      </Stack>
+
+                      <LinearProgress
+                        variant="determinate"
+                        value={progress.value}
+                        sx={{
+                          height: 8,
+                          borderRadius: 999,
+                          bgcolor: isDark ? '#1b2a3d' : '#e9eef7',
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 999,
+                            bgcolor: progress.color,
+                          },
+                        }}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
+              );
+            })}
 
             {filteredBookings.length === 0 && (
               <Card
