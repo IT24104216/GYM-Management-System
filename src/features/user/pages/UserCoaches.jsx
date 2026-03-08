@@ -2,7 +2,6 @@ import { motion } from 'framer-motion';
 import {
   Avatar,
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
@@ -14,9 +13,6 @@ import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
-import { useNavigate } from 'react-router-dom';
-import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
 
@@ -28,6 +24,8 @@ const COACHES = [
     experience: '8 years',
     rating: 4.9,
     slots: 'Mon - Fri, 6:00 AM - 10:00 AM',
+    qualification: 'BSc Sports Science',
+    certificates: 'NASM-CPT, TRX Certified',
     avatar: 'EC',
     tags: ['Fat Loss', 'Strength', 'Mobility'],
   },
@@ -38,6 +36,8 @@ const COACHES = [
     experience: '6 years',
     rating: 4.8,
     slots: 'Mon - Sat, 5:00 PM - 9:00 PM',
+    qualification: 'BSc Exercise Physiology',
+    certificates: 'ACE-CPT, Kettlebell L1',
     avatar: 'NB',
     tags: ['Athletic', 'Core', 'Endurance'],
   },
@@ -48,6 +48,8 @@ const COACHES = [
     experience: '5 years',
     rating: 4.7,
     slots: 'Tue - Sun, 7:00 AM - 1:00 PM',
+    qualification: 'Diploma in Fitness Coaching',
+    certificates: 'ISSA CPT, Mobility Coach',
     avatar: 'SR',
     tags: ['Beginner', 'Weight Training', 'Form'],
   },
@@ -58,13 +60,14 @@ const COACHES = [
     experience: '9 years',
     rating: 5.0,
     slots: 'Mon - Fri, 1:00 PM - 7:00 PM',
+    qualification: 'MSc Strength and Conditioning',
+    certificates: 'NSCA-CSCS, Nutrition Specialist',
     avatar: 'LH',
     tags: ['Bulking', 'Powerlifting', 'Nutrition'],
   },
 ];
 
 function UserCoaches() {
-  const navigate = useNavigate();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -169,28 +172,15 @@ function UserCoaches() {
                   </Stack>
                 </Stack>
 
-                <Stack direction="row" spacing={1.2}>
-                  <Button
-                    variant="contained"
-                    startIcon={<CalendarMonthRoundedIcon />}
-                    onClick={() => navigate(ROUTES.USER_WORKOUTS)}
-                    sx={{
-                      borderRadius: 2,
-                      px: 2.2,
-                      fontWeight: 700,
-                      background: 'linear-gradient(180deg, #2b91ff 0%, #0f79ed 100%)',
-                      '&:hover': { background: 'linear-gradient(180deg, #2386ef 0%, #0a6cd4 100%)' },
-                    }}
-                  >
-                    Book Session
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate(ROUTES.USER_PROFILE)}
-                    sx={{ borderRadius: 2, fontWeight: 700 }}
-                  >
-                    View Profile
-                  </Button>
+                <Stack spacing={0.8}>
+                  <Typography sx={{ color: theme.palette.text.primary, fontSize: '0.92rem' }}>
+                    <Box component="span" sx={{ fontWeight: 700 }}>Qualification:</Box>{' '}
+                    {coach.qualification}
+                  </Typography>
+                  <Typography sx={{ color: theme.palette.text.primary, fontSize: '0.92rem' }}>
+                    <Box component="span" sx={{ fontWeight: 700 }}>Certificates:</Box>{' '}
+                    {coach.certificates}
+                  </Typography>
                 </Stack>
               </CardContent>
             </MotionCard>
