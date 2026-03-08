@@ -446,7 +446,7 @@ function UserCoaches() {
                                     fontSize: '0.92rem',
                                   }}
                                   >
-                                    {isCancelledStep ? '✕' : (isDone ? '✓' : '')}
+                                    {isCancelledStep ? '✓' : (isDone ? '✓' : '')}
                                 </Box>
                                 {index < stepKeys.length - 1 && (
                                   <Box
@@ -499,6 +499,11 @@ function UserCoaches() {
 
                     {booking.status === 'upcoming' && !isCancelled && (
                       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>
+                        {effectiveStatus !== 'confirmed' && (
+                          <Button size="small" variant="outlined" sx={{ borderRadius: 2, fontWeight: 700 }}>
+                            Edit
+                          </Button>
+                        )}
                         <Button
                           size="small"
                           variant="outlined"
