@@ -7,6 +7,31 @@ const ThemeContext = createContext(null);
 
 const THEME_KEY = 'gympro_theme_mode';
 
+const MODE_PALETTE = {
+  light: {
+    mode: 'light',
+    background: {
+      default: '#f4f6f8',
+      paper: '#ffffff',
+    },
+    text: {
+      primary: '#1a1a2e',
+      secondary: '#6b7280',
+    },
+  },
+  dark: {
+    mode: 'dark',
+    background: {
+      default: '#0b1220',
+      paper: '#111b2f',
+    },
+    text: {
+      primary: '#e6edf9',
+      secondary: '#9aa8c0',
+    },
+  },
+};
+
 export function AppThemeProvider({ children }) {
   const [mode, setMode] = useState(() => {
     return localStorage.getItem(THEME_KEY) || 'light';
@@ -18,10 +43,23 @@ export function AppThemeProvider({ children }) {
 
   const toggleTheme = () => setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
 
-  // Merge the mode override into the base muiTheme
+  const selectedPalette = MODE_PALETTE[mode] || MODE_PALETTE.light;
+
+  // Merge mode-specific palette values into the base theme.
   const theme = createTheme({
     ...muiTheme,
-    palette: { ...muiTheme.palette, mode },
+    palette: {
+      ...muiTheme.palette,
+      ...selectedPalette,
+      primary: {
+        ...muiTheme.palette.primary,
+        ...(mode === 'dark' ? { main: '#90caf9', light: '#b5e0ff', dark: '#5f9fd1' } : {}),
+      },
+      secondary: {
+        ...muiTheme.palette.secondary,
+        ...(mode === 'dark' ? { main: '#f48fb1', light: '#f8bbd0', dark: '#d66f95' } : {}),
+      },
+    },
   });
 
   return (
