@@ -378,6 +378,7 @@ function UserCoaches() {
                 : booking.progressStatus;
               const progress = BOOKING_PROGRESS_META[effectiveStatus] || BOOKING_PROGRESS_META.pending;
               const isCancelled = effectiveStatus === 'cancelled';
+              const stepKeys = isCancelled ? ['pending', 'confirmed', 'cancelled'] : STATUS_STEPS;
 
               return (
                 <Card
@@ -419,10 +420,15 @@ function UserCoaches() {
                         </Stack>
 
                         <Stack direction="row" alignItems="center" sx={{ mb: 0.8 }}>
-                          {STATUS_STEPS.map((stepKey, index) => {
+                          {stepKeys.map((stepKey, index) => {
                             const isDone = index <= progress.step;
-                            const circleBg = isCancelled ? '#ef4444' : (isDone ? '#16a34a' : '#d9de9e');
-                            const connectorBg = isCancelled ? '#ef4444' : (index < progress.step ? '#16a34a' : '#d9de9e');
+                            const isCancelledStep = isCancelled && stepKey === 'cancelled';
+                            const circleBg = isCancelledStep
+                              ? '#ef4444'
+                              : (isDone ? '#16a34a' : '#d9de9e');
+                            const connectorBg = isCancelled
+                              ? (index === 0 ? '#16a34a' : '#ef4444')
+                              : (index < progress.step ? '#16a34a' : '#d9de9e');
 
                             return (
                               <Stack key={stepKey} direction="row" alignItems="center" sx={{ flex: 1 }}>
@@ -439,10 +445,10 @@ function UserCoaches() {
                                     fontWeight: 800,
                                     fontSize: '0.92rem',
                                   }}
-                                >
-                                  {isCancelled ? '' : (isDone ? '✓' : '')}
+                                  >
+                                    {isCancelledStep ? '✕' : (isDone ? '✓' : '')}
                                 </Box>
-                                {index < STATUS_STEPS.length - 1 && (
+                                {index < stepKeys.length - 1 && (
                                   <Box
                                     sx={{
                                       height: 4,
@@ -459,8 +465,9 @@ function UserCoaches() {
                         </Stack>
 
                         <Stack direction="row" alignItems="flex-start" sx={{ mb: 1.1 }}>
-                          {STATUS_STEPS.map((stepKey, index) => {
+                          {stepKeys.map((stepKey, index) => {
                             const isDone = index <= progress.step;
+                            const isCancelledStep = isCancelled && stepKey === 'cancelled';
 
                             return (
                               <Stack key={`${stepKey}-label`} direction="row" alignItems="flex-start" sx={{ flex: 1 }}>
@@ -468,8 +475,10 @@ function UserCoaches() {
                                   <Typography
                                     sx={{
                                       fontSize: '0.73rem',
-                                      fontWeight: isDone ? 700 : 600,
-                                      color: isCancelled ? '#ef4444' : (isDone ? '#16a34a' : theme.palette.text.secondary),
+                                        fontWeight: (isDone || isCancelledStep) ? 700 : 600,
+                                        color: isCancelledStep
+                                          ? '#ef4444'
+                                          : (isDone ? '#16a34a' : theme.palette.text.secondary),
                                       textTransform: 'capitalize',
                                       textAlign: 'center',
                                     }}
@@ -478,7 +487,7 @@ function UserCoaches() {
                                   </Typography>
                                 </Box>
 
-                                {index < STATUS_STEPS.length - 1 && (
+                                {index < stepKeys.length - 1 && (
                                   <Box sx={{ flex: 1, mx: 0.7 }} />
                                 )}
                               </Stack>
