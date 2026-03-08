@@ -14,6 +14,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Snackbar,
   Stack,
   TextField,
   Typography,
@@ -129,6 +130,7 @@ function UserCoaches() {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
+  const [bookingSuccessOpen, setBookingSuccessOpen] = useState(false);
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
@@ -173,6 +175,12 @@ function UserCoaches() {
     });
 
     handleCloseBooking();
+    setBookingSuccessOpen(true);
+  };
+
+  const handleCloseSuccess = (_, reason) => {
+    if (reason === 'clickaway') return;
+    setBookingSuccessOpen(false);
   };
 
   const filteredBookings = BOOKINGS.filter((booking) => booking.status === bookingView);
@@ -497,6 +505,19 @@ function UserCoaches() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={bookingSuccessOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSuccess}
+        message="Booking confirmed successfully"
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        action={(
+          <Button color="inherit" size="small" onClick={handleCloseSuccess}>
+            Close
+          </Button>
+        )}
+      />
     </Box>
   );
 }
