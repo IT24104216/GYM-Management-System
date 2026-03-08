@@ -6,7 +6,16 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -15,6 +24,7 @@ import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
 
@@ -67,6 +77,47 @@ function UserCoaches() {
   const navigate = useNavigate();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [selectedCoach, setSelectedCoach] = useState(null);
+  const [bookingForm, setBookingForm] = useState({
+    appointmentType: '',
+    goal: '',
+    description: '',
+    medicalConditions: '',
+  });
+
+  const handleOpenBooking = (coach) => {
+    setSelectedCoach(coach);
+    setBookingForm({
+      appointmentType: '',
+      goal: '',
+      description: '',
+      medicalConditions: '',
+    });
+    setIsBookingOpen(true);
+  };
+
+  const handleCloseBooking = () => {
+    setIsBookingOpen(false);
+    setSelectedCoach(null);
+  };
+
+  const handleFieldChange = (field) => (event) => {
+    setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleSubmitBooking = (event) => {
+    event.preventDefault();
+
+    // Placeholder until API integration is added in the next step.
+    console.log('Booking payload:', {
+      coachId: selectedCoach?.id,
+      coachName: selectedCoach?.name,
+      ...bookingForm,
+    });
+
+    handleCloseBooking();
+  };
 
   return (
     <Box
@@ -106,6 +157,7 @@ function UserCoaches() {
               initial={{ opacity: 0, y: 22 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: index * 0.08 }}
+              onClick={() => handleOpenBooking(coach)}
               sx={{
                 borderRadius: 3,
                 border: `1px solid ${isDark ? '#2b3d58' : '#e5edf8'}`,
@@ -113,6 +165,7 @@ function UserCoaches() {
                 boxShadow: isDark
                   ? '0 12px 28px rgba(4, 11, 24, 0.45)'
                   : '0 12px 28px rgba(29, 58, 101, 0.11)',
+                cursor: 'pointer',
               }}
             >
               <CardContent sx={{ p: 2.8 }}>
@@ -173,7 +226,10 @@ function UserCoaches() {
                   <Button
                     variant="contained"
                     startIcon={<CalendarMonthRoundedIcon />}
-                    onClick={() => navigate(ROUTES.USER_WORKOUTS)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleOpenBooking(coach);
+                    }}
                     sx={{
                       borderRadius: 2,
                       px: 2.2,
@@ -186,7 +242,10 @@ function UserCoaches() {
                   </Button>
                   <Button
                     variant="outlined"
-                    onClick={() => navigate(ROUTES.USER_PROFILE)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      navigate(ROUTES.USER_PROFILE);
+                    }}
                     sx={{ borderRadius: 2, fontWeight: 700 }}
                   >
                     View Profile
@@ -197,6 +256,87 @@ function UserCoaches() {
           ))}
         </Box>
       </Box>
+
+      <Dialog
+        open={isBookingOpen}
+        onClose={handleCloseBooking}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          component: 'form',
+          onSubmit: handleSubmitBooking,
+          sx: { borderRadius: 3 },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>
+          Book Appointment {selectedCoach ? `with ${selectedCoach.name}` : ''}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1, pb: 0.5 }}>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <FormControl fullWidth required>
+              <InputLabel id="appointment-type-label">Appointment Type</InputLabel>
+              <Select
+                labelId="appointment-type-label"
+                label="Appointment Type"
+                value={bookingForm.appointmentType}
+                onChange={handleFieldChange('appointmentType')}
+              >
+                <MenuItem value="inperson">In-person</MenuItem>
+                <MenuItem value="online">Online</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth required>
+              <InputLabel id="goal-label">Goal</InputLabel>
+              <Select
+                labelId="goal-label"
+                label="Goal"
+                value={bookingForm.goal}
+                onChange={handleFieldChange('goal')}
+              >
+                <MenuItem value="weight-gaining">Weight Gaining</MenuItem>
+                <MenuItem value="weight-reducing">Weight Reducing</MenuItem>
+              </Select>
+            </FormControl>
+
+            <TextField
+              label="Description"
+              value={bookingForm.description}
+              onChange={handleFieldChange('description')}
+              multiline
+              minRows={3}
+              required
+              placeholder="Share your expectations for this appointment"
+            />
+
+            <TextField
+              label="Medical Conditions"
+              value={bookingForm.medicalConditions}
+              onChange={handleFieldChange('medicalConditions')}
+              multiline
+              minRows={3}
+              placeholder="Mention injuries, allergies, or ongoing conditions"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.2 }}>
+          <Button onClick={handleCloseBooking} variant="outlined" sx={{ borderRadius: 2, fontWeight: 700 }}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="contained"
+            sx={{
+              borderRadius: 2,
+              fontWeight: 700,
+              background: 'linear-gradient(180deg, #2b91ff 0%, #0f79ed 100%)',
+              '&:hover': { background: 'linear-gradient(180deg, #2386ef 0%, #0a6cd4 100%)' },
+            }}
+          >
+            Confirm Booking
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
