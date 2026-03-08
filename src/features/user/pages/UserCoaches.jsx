@@ -26,6 +26,7 @@ import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
@@ -82,11 +83,16 @@ const COACHES = [
 ];
 
 function UserCoaches() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [bookingForm, setBookingForm] = useState({
+    userName: '',
+    userEmail: '',
+    mobileNumber: '',
     appointmentType: '',
     goal: '',
     description: '',
@@ -96,6 +102,9 @@ function UserCoaches() {
   const handleOpenBooking = (coach) => {
     setSelectedCoach(coach);
     setBookingForm({
+      userName: user?.name || '',
+      userEmail: user?.email || '',
+      mobileNumber: user?.mobileNumber || user?.mobile || user?.phone || '',
       appointmentType: '',
       goal: '',
       description: '',
@@ -274,6 +283,26 @@ function UserCoaches() {
         </DialogTitle>
         <DialogContent sx={{ pt: 1, pb: 0.5 }}>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField
+              label="User Name"
+              value={bookingForm.userName}
+              InputProps={{ readOnly: true }}
+            />
+
+            <TextField
+              label="User Email"
+              value={bookingForm.userEmail}
+              InputProps={{ readOnly: true }}
+            />
+
+            <TextField
+              label="Mobile Number"
+              value={bookingForm.mobileNumber}
+              onChange={handleFieldChange('mobileNumber')}
+              required
+              placeholder="Enter your mobile number"
+            />
+
             <FormControl fullWidth required>
               <InputLabel id="appointment-type-label">Appointment Type</InputLabel>
               <Select
