@@ -89,6 +89,8 @@ const BOOKINGS = [
     coachName: 'Emma Carter',
     date: '2026-03-15',
     time: '07:30 AM',
+    fromTime: '07:30',
+    toTime: '08:30',
     appointmentType: 'In-person',
     goal: 'Weight Reducing',
     status: 'upcoming',
@@ -99,6 +101,8 @@ const BOOKINGS = [
     coachName: 'Noah Bennett',
     date: '2026-03-19',
     time: '06:00 PM',
+    fromTime: '18:00',
+    toTime: '19:00',
     appointmentType: 'Online',
     goal: 'Weight Gaining',
     status: 'upcoming',
@@ -109,6 +113,8 @@ const BOOKINGS = [
     coachName: 'Sophia Reed',
     date: '2026-02-22',
     time: '09:00 AM',
+    fromTime: '09:00',
+    toTime: '10:00',
     appointmentType: 'In-person',
     goal: 'Weight Reducing',
     status: 'past',
@@ -119,6 +125,8 @@ const BOOKINGS = [
     coachName: 'Liam Hayes',
     date: '2026-02-10',
     time: '05:30 PM',
+    fromTime: '17:30',
+    toTime: '18:30',
     appointmentType: 'Online',
     goal: 'Weight Gaining',
     status: 'past',
@@ -135,6 +143,52 @@ const BOOKING_PROGRESS_META = {
   cancelled: { label: 'Cancelled', step: -1, color: '#ef4444' },
 };
 
+const getTodayDate = () => new Date().toISOString().split('T')[0];
+
+const normalizeTimeTo24h = (rawTime) => {
+  if (!rawTime) return '';
+  if (rawTime.includes(':') && !rawTime.toUpperCase().includes('AM') && !rawTime.toUpperCase().includes('PM')) {
+    return rawTime;
+  }
+
+  const [timePart, meridiemRaw] = rawTime.trim().split(' ');
+  if (!timePart || !meridiemRaw) return '';
+  const [hourRaw, minuteRaw] = timePart.split(':').map(Number);
+  const meridiem = meridiemRaw.toUpperCase();
+
+  let hour = hourRaw;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  if (meridiem === 'PM' && hour !== 12) hour += 12;
+
+  const hh = String(hour).padStart(2, '0');
+  const mm = String(minuteRaw || 0).padStart(2, '0');
+  return `${hh}:${mm}`;
+};
+
+const toMinuteValue = (time24h) => {
+  const [h, m] = (time24h || '').split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return NaN;
+  return h * 60 + m;
+};
+
+const toDisplayTime = (time24h) => {
+  if (!time24h) return '';
+  const [hRaw, mRaw] = time24h.split(':').map(Number);
+  if (Number.isNaN(hRaw) || Number.isNaN(mRaw)) return '';
+  const meridiem = hRaw >= 12 ? 'PM' : 'AM';
+  const h12 = hRaw % 12 || 12;
+  return `${String(h12).padStart(2, '0')}:${String(mRaw).padStart(2, '0')} ${meridiem}`;
+};
+
+const getCoachSlotRange = (coach) => {
+  const slotPart = coach?.slots?.split(',')?.[1]?.trim() || '';
+  const [startRaw, endRaw] = slotPart.split('-').map((t) => t.trim());
+  return {
+    start: normalizeTimeTo24h(startRaw),
+    end: normalizeTimeTo24h(endRaw),
+  };
+};
+
 function UserCoaches() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -144,11 +198,16 @@ function UserCoaches() {
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
   const [bookingSuccessOpen, setBookingSuccessOpen] = useState(false);
-  const [cancelledBookingIds, setCancelledBookingIds] = useState([]);
+  const [bookings, setBookings] = useState(BOOKINGS);
+  const [editingBookingId, setEditingBookingId] = useState(null);
+  const [slotError, setSlotError] = useState('');
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
     mobileNumber: '',
+    date: '',
+    fromTime: '',
+    toTime: '',
     appointmentType: '',
     goal: '',
     description: '',
@@ -161,17 +220,44 @@ function UserCoaches() {
       userName: user?.name || '',
       userEmail: user?.email || '',
       mobileNumber: user?.mobileNumber || user?.mobile || user?.phone || '',
+      date: getTodayDate(),
+      fromTime: '',
+      toTime: '',
       appointmentType: '',
       goal: '',
       description: '',
       medicalConditions: '',
     });
+    setEditingBookingId(null);
+    setSlotError('');
+    setIsBookingOpen(true);
+  };
+
+  const handleEditBooking = (booking) => {
+    const coach = COACHES.find((item) => item.name === booking.coachName) || null;
+    setSelectedCoach(coach);
+    setBookingForm({
+      userName: user?.name || '',
+      userEmail: user?.email || '',
+      mobileNumber: user?.mobileNumber || user?.mobile || user?.phone || '',
+      date: booking.date || getTodayDate(),
+      fromTime: booking.fromTime || normalizeTimeTo24h(booking.time),
+      toTime: booking.toTime || '',
+      appointmentType: booking.appointmentType?.toLowerCase() === 'in-person' ? 'inperson' : 'online',
+      goal: booking.goal?.toLowerCase().includes('reducing') ? 'weight-reducing' : 'weight-gaining',
+      description: booking.description || '',
+      medicalConditions: booking.medicalConditions || '',
+    });
+    setEditingBookingId(booking.id);
+    setSlotError('');
     setIsBookingOpen(true);
   };
 
   const handleCloseBooking = () => {
     setIsBookingOpen(false);
     setSelectedCoach(null);
+    setEditingBookingId(null);
+    setSlotError('');
   };
 
   const handleFieldChange = (field) => (event) => {
@@ -180,6 +266,60 @@ function UserCoaches() {
 
   const handleSubmitBooking = (event) => {
     event.preventDefault();
+
+    const fromMinutes = toMinuteValue(bookingForm.fromTime);
+    const toMinutes = toMinuteValue(bookingForm.toTime);
+    if (Number.isNaN(fromMinutes) || Number.isNaN(toMinutes) || fromMinutes >= toMinutes) {
+      setSlotError('Unavailable at that time. Please choose an available time slot.');
+      return;
+    }
+
+    const selectedRange = getCoachSlotRange(selectedCoach);
+    const coachStart = toMinuteValue(selectedRange.start);
+    const coachEnd = toMinuteValue(selectedRange.end);
+    const isWithinCoachRange = (
+      !Number.isNaN(coachStart)
+      && !Number.isNaN(coachEnd)
+      && fromMinutes >= coachStart
+      && toMinutes <= coachEnd
+    );
+
+    if (!isWithinCoachRange) {
+      setSlotError('Unavailable at that time. Please choose an available time slot.');
+      return;
+    }
+
+    setSlotError('');
+
+    const nextBookingPayload = {
+      coachName: selectedCoach?.name || '',
+      date: bookingForm.date,
+      fromTime: bookingForm.fromTime,
+      toTime: bookingForm.toTime,
+      time: toDisplayTime(bookingForm.fromTime),
+      appointmentType: bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online',
+      goal: bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing',
+      description: bookingForm.description,
+      medicalConditions: bookingForm.medicalConditions,
+      status: 'upcoming',
+      progressStatus: editingBookingId ? 'pending' : 'pending',
+    };
+
+    if (editingBookingId) {
+      setBookings((prev) => prev.map((item) => (
+        item.id === editingBookingId
+          ? { ...item, ...nextBookingPayload }
+          : item
+      )));
+    } else {
+      setBookings((prev) => [
+        {
+          id: `b${Date.now()}`,
+          ...nextBookingPayload,
+        },
+        ...prev,
+      ]);
+    }
 
     // Placeholder until API integration is added in the next step.
     console.log('Booking payload:', {
@@ -198,12 +338,14 @@ function UserCoaches() {
   };
 
   const handleCancelBooking = (bookingId) => {
-    setCancelledBookingIds((prev) => (
-      prev.includes(bookingId) ? prev : [...prev, bookingId]
-    ));
+    setBookings((prev) => prev.map((item) => (
+      item.id === bookingId
+        ? { ...item, progressStatus: 'cancelled' }
+        : item
+    )));
   };
 
-  const filteredBookings = BOOKINGS.filter((booking) => booking.status === bookingView);
+  const filteredBookings = bookings.filter((booking) => booking.status === bookingView);
 
   return (
     <Box
@@ -373,12 +515,13 @@ function UserCoaches() {
 
           <Stack spacing={1.4}>
             {filteredBookings.map((booking) => {
-              const effectiveStatus = cancelledBookingIds.includes(booking.id)
-                ? 'cancelled'
-                : booking.progressStatus;
+              const effectiveStatus = booking.progressStatus;
               const progress = BOOKING_PROGRESS_META[effectiveStatus] || BOOKING_PROGRESS_META.pending;
               const isCancelled = effectiveStatus === 'cancelled';
               const stepKeys = isCancelled ? ['pending', 'confirmed', 'cancelled'] : STATUS_STEPS;
+              const displayTime = booking.fromTime && booking.toTime
+                ? `${toDisplayTime(booking.fromTime)} - ${toDisplayTime(booking.toTime)}`
+                : booking.time;
 
               return (
                 <Card
@@ -401,7 +544,7 @@ function UserCoaches() {
                           {booking.coachName}
                         </Typography>
                         <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
-                          {booking.date} at {booking.time}
+                          {booking.date} at {displayTime}
                         </Typography>
                       </Box>
 
@@ -500,7 +643,12 @@ function UserCoaches() {
                     {booking.status === 'upcoming' && !isCancelled && (
                       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>
                         {effectiveStatus !== 'confirmed' && (
-                          <Button size="small" variant="outlined" sx={{ borderRadius: 2, fontWeight: 700 }}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleEditBooking(booking)}
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
                             Edit
                           </Button>
                         )}
@@ -554,10 +702,16 @@ function UserCoaches() {
         }}
       >
         <DialogTitle sx={{ fontWeight: 800 }}>
-          Book Appointment {selectedCoach ? `with ${selectedCoach.name}` : ''}
+          {editingBookingId ? 'Edit Booking' : 'Book Appointment'} {selectedCoach ? `with ${selectedCoach.name}` : ''}
         </DialogTitle>
         <DialogContent sx={{ pt: 1, pb: 0.5 }}>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField
+              label="Coach"
+              value={selectedCoach?.name || ''}
+              InputProps={{ readOnly: true }}
+            />
+
             <TextField
               label="User Name"
               value={bookingForm.userName}
@@ -577,6 +731,47 @@ function UserCoaches() {
               required
               placeholder="Enter your mobile number"
             />
+
+            <TextField
+              label="Date"
+              type="date"
+              value={bookingForm.date}
+              onChange={handleFieldChange('date')}
+              InputLabelProps={{ shrink: true }}
+              inputProps={{ min: getTodayDate() }}
+              required
+            />
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
+              <TextField
+                label="From Time"
+                type="time"
+                value={bookingForm.fromTime}
+                onChange={handleFieldChange('fromTime')}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                required
+              />
+              <TextField
+                label="To Time"
+                type="time"
+                value={bookingForm.toTime}
+                onChange={handleFieldChange('toTime')}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                required
+              />
+            </Stack>
+
+            <Typography sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary }}>
+              Available slot: {selectedCoach?.slots || 'N/A'}
+            </Typography>
+
+            {slotError && (
+              <Typography sx={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 600 }}>
+                {slotError}
+              </Typography>
+            )}
 
             <FormControl fullWidth required>
               <InputLabel id="appointment-type-label">Appointment Type</InputLabel>
@@ -638,7 +833,7 @@ function UserCoaches() {
               '&:hover': { background: 'linear-gradient(180deg, #2386ef 0%, #0a6cd4 100%)' },
             }}
           >
-            Confirm Booking
+            {editingBookingId ? 'Update Booking' : 'Confirm Booking'}
           </Button>
         </DialogActions>
       </Dialog>
