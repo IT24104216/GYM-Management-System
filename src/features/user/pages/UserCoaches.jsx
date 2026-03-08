@@ -145,6 +145,16 @@ const BOOKING_PROGRESS_META = {
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
+const DAY_TO_INDEX = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
+
 const normalizeTimeTo24h = (rawTime) => {
   if (!rawTime) return '';
   if (rawTime.includes(':') && !rawTime.toUpperCase().includes('AM') && !rawTime.toUpperCase().includes('PM')) {
@@ -187,6 +197,27 @@ const getCoachSlotRange = (coach) => {
     start: normalizeTimeTo24h(startRaw),
     end: normalizeTimeTo24h(endRaw),
   };
+};
+
+const isDateWithinCoachSchedule = (coach, dateValue) => {
+  if (!coach?.slots || !dateValue) return false;
+
+  const dayPart = coach.slots.split(',')?.[0]?.trim() || '';
+  const [fromRaw, toRaw] = dayPart.split('-').map((item) => item.trim().slice(0, 3).toLowerCase());
+  const fromIndex = DAY_TO_INDEX[fromRaw];
+  const toIndex = DAY_TO_INDEX[toRaw];
+
+  if (typeof fromIndex !== 'number' || typeof toIndex !== 'number') return false;
+
+  const selectedDay = new Date(`${dateValue}T00:00:00`).getDay();
+  if (Number.isNaN(selectedDay)) return false;
+
+  if (fromIndex <= toIndex) {
+    return selectedDay >= fromIndex && selectedDay <= toIndex;
+  }
+
+  // Supports wrapped ranges like Fri - Mon
+  return selectedDay >= fromIndex || selectedDay <= toIndex;
 };
 
 function UserCoaches() {
@@ -266,6 +297,12 @@ function UserCoaches() {
 
   const handleSubmitBooking = (event) => {
     event.preventDefault();
+
+    const isDateAvailable = isDateWithinCoachSchedule(selectedCoach, bookingForm.date);
+    if (!isDateAvailable) {
+      setSlotError('Unavailable on selected date. Please choose an available date.');
+      return;
+    }
 
     const fromMinutes = toMinuteValue(bookingForm.fromTime);
     const toMinutes = toMinuteValue(bookingForm.toTime);
@@ -661,7 +698,12 @@ function UserCoaches() {
                         >
                           Cancel
                         </Button>
-                        <Button size="small" variant="contained" sx={{ borderRadius: 2, fontWeight: 700 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleEditBooking(booking)}
+                          sx={{ borderRadius: 2, fontWeight: 700 }}
+                        >
                           Reschedule
                         </Button>
                       </Stack>
