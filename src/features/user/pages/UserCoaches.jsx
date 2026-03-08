@@ -144,6 +144,7 @@ function UserCoaches() {
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
   const [bookingSuccessOpen, setBookingSuccessOpen] = useState(false);
+  const [cancelledBookingIds, setCancelledBookingIds] = useState([]);
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
@@ -194,6 +195,12 @@ function UserCoaches() {
   const handleCloseSuccess = (_, reason) => {
     if (reason === 'clickaway') return;
     setBookingSuccessOpen(false);
+  };
+
+  const handleCancelBooking = (bookingId) => {
+    setCancelledBookingIds((prev) => (
+      prev.includes(bookingId) ? prev : [...prev, bookingId]
+    ));
   };
 
   const filteredBookings = BOOKINGS.filter((booking) => booking.status === bookingView);
@@ -366,7 +373,11 @@ function UserCoaches() {
 
           <Stack spacing={1.4}>
             {filteredBookings.map((booking) => {
-              const progress = BOOKING_PROGRESS_META[booking.progressStatus] || BOOKING_PROGRESS_META.pending;
+              const effectiveStatus = cancelledBookingIds.includes(booking.id)
+                ? 'cancelled'
+                : booking.progressStatus;
+              const progress = BOOKING_PROGRESS_META[effectiveStatus] || BOOKING_PROGRESS_META.pending;
+              const isCancelled = effectiveStatus === 'cancelled';
 
               return (
                 <Card
@@ -396,105 +407,96 @@ function UserCoaches() {
                       <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
                         <Chip label={booking.appointmentType} size="small" />
                         <Chip label={booking.goal} size="small" />
-                        <Chip
-                          label={progress.label}
-                          size="small"
-                          sx={{
-                            bgcolor: `${progress.color}22`,
-                            color: progress.color,
-                            fontWeight: 700,
-                          }}
-                        />
                       </Stack>
                     </Stack>
 
                     <Box sx={{ mt: 1.4 }}>
-                      {booking.progressStatus === 'cancelled' ? (
-                        <Typography sx={{ fontSize: '0.82rem', color: '#ef4444', fontWeight: 700 }}>
-                          Status: Cancelled
-                        </Typography>
-                      ) : (
-                        <Box>
-                          <Stack direction="row" justifyContent="space-between" mb={1}>
-                            <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
-                              Status Tracking
-                            </Typography>
-                          </Stack>
+                      <Box>
+                        <Stack direction="row" justifyContent="space-between" mb={1}>
+                          <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
+                            Status Tracking
+                          </Typography>
+                        </Stack>
 
-                          <Stack direction="row" alignItems="center" sx={{ mb: 0.8 }}>
-                            {STATUS_STEPS.map((stepKey, index) => {
-                              const isDone = index <= progress.step;
-                              const circleBg = isDone ? '#16a34a' : '#d9de9e';
-                              const connectorBg = index < progress.step ? '#16a34a' : '#d9de9e';
+                        <Stack direction="row" alignItems="center" sx={{ mb: 0.8 }}>
+                          {STATUS_STEPS.map((stepKey, index) => {
+                            const isDone = index <= progress.step;
+                            const circleBg = isCancelled ? '#ef4444' : (isDone ? '#16a34a' : '#d9de9e');
+                            const connectorBg = isCancelled ? '#ef4444' : (index < progress.step ? '#16a34a' : '#d9de9e');
 
-                              return (
-                                <Stack key={stepKey} direction="row" alignItems="center" sx={{ flex: 1 }}>
+                            return (
+                              <Stack key={stepKey} direction="row" alignItems="center" sx={{ flex: 1 }}>
+                                <Box
+                                  sx={{
+                                    width: 28,
+                                    height: 28,
+                                    borderRadius: '50%',
+                                    bgcolor: circleBg,
+                                    color: '#fff',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontWeight: 800,
+                                    fontSize: '0.92rem',
+                                  }}
+                                >
+                                  {isCancelled ? '' : (isDone ? '✓' : '')}
+                                </Box>
+                                {index < STATUS_STEPS.length - 1 && (
                                   <Box
                                     sx={{
-                                      width: 28,
-                                      height: 28,
-                                      borderRadius: '50%',
-                                      bgcolor: circleBg,
-                                      color: '#fff',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      fontWeight: 800,
-                                      fontSize: '0.92rem',
+                                      height: 4,
+                                      flex: 1,
+                                      mx: 0.7,
+                                      borderRadius: 999,
+                                      bgcolor: connectorBg,
+                                    }}
+                                  />
+                                )}
+                              </Stack>
+                            );
+                          })}
+                        </Stack>
+
+                        <Stack direction="row" alignItems="flex-start" sx={{ mb: 1.1 }}>
+                          {STATUS_STEPS.map((stepKey, index) => {
+                            const isDone = index <= progress.step;
+
+                            return (
+                              <Stack key={`${stepKey}-label`} direction="row" alignItems="flex-start" sx={{ flex: 1 }}>
+                                <Box sx={{ width: 28, display: 'flex', justifyContent: 'center' }}>
+                                  <Typography
+                                    sx={{
+                                      fontSize: '0.73rem',
+                                      fontWeight: isDone ? 700 : 600,
+                                      color: isCancelled ? '#ef4444' : (isDone ? '#16a34a' : theme.palette.text.secondary),
+                                      textTransform: 'capitalize',
+                                      textAlign: 'center',
                                     }}
                                   >
-                                    {isDone ? '✓' : ''}
-                                  </Box>
-                                  {index < STATUS_STEPS.length - 1 && (
-                                    <Box
-                                      sx={{
-                                        height: 4,
-                                        flex: 1,
-                                        mx: 0.7,
-                                        borderRadius: 999,
-                                        bgcolor: connectorBg,
-                                      }}
-                                    />
-                                  )}
-                                </Stack>
-                              );
-                            })}
-                          </Stack>
+                                    {BOOKING_PROGRESS_META[stepKey].label}
+                                  </Typography>
+                                </Box>
 
-                          <Stack direction="row" alignItems="flex-start" sx={{ mb: 1.1 }}>
-                            {STATUS_STEPS.map((stepKey, index) => {
-                              const isDone = index <= progress.step;
-
-                              return (
-                                <Stack key={`${stepKey}-label`} direction="row" alignItems="flex-start" sx={{ flex: 1 }}>
-                                  <Box sx={{ width: 28, display: 'flex', justifyContent: 'center' }}>
-                                    <Typography
-                                      sx={{
-                                        fontSize: '0.73rem',
-                                        fontWeight: isDone ? 700 : 600,
-                                        color: isDone ? '#16a34a' : theme.palette.text.secondary,
-                                        textTransform: 'capitalize',
-                                        textAlign: 'center',
-                                      }}
-                                    >
-                                      {BOOKING_PROGRESS_META[stepKey].label}
-                                    </Typography>
-                                  </Box>
-
-                                  {index < STATUS_STEPS.length - 1 && (
-                                    <Box sx={{ flex: 1, mx: 0.7 }} />
-                                  )}
-                                </Stack>
-                              );
-                            })}
-                          </Stack>
-                        </Box>
-                      )}
+                                {index < STATUS_STEPS.length - 1 && (
+                                  <Box sx={{ flex: 1, mx: 0.7 }} />
+                                )}
+                              </Stack>
+                            );
+                          })}
+                        </Stack>
+                      </Box>
                     </Box>
 
-                    {booking.status === 'upcoming' && booking.progressStatus !== 'cancelled' && (
+                    {booking.status === 'upcoming' && !isCancelled && (
                       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>
-                        <Button size="small" variant="outlined" color="error" sx={{ borderRadius: 2, fontWeight: 700 }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          onClick={() => handleCancelBooking(booking.id)}
+                          sx={{ borderRadius: 2, fontWeight: 700 }}
+                        >
                           Cancel
                         </Button>
                         <Button size="small" variant="contained" sx={{ borderRadius: 2, fontWeight: 700 }}>
