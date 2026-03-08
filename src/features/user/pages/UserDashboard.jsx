@@ -11,6 +11,7 @@ import {
   Stack,
   Link,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import MonitorHeartOutlinedIcon from '@mui/icons-material/MonitorHeartOutlined';
 import RestaurantOutlinedIcon from '@mui/icons-material/RestaurantOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
@@ -92,7 +93,28 @@ const STATS = [
 function UserDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const colors = {
+    pageBg: theme.palette.background.default,
+    sectionBg: isDark ? '#0d1627' : '#f6f8fc',
+    cardBg: theme.palette.background.paper,
+    cardBorder: isDark ? '#24334b' : '#edf2fa',
+    heading: theme.palette.text.primary,
+    body: theme.palette.text.secondary,
+    softShadow: isDark
+      ? '0 14px 34px rgba(1, 8, 20, 0.55)'
+      : '0 14px 34px rgba(19, 31, 53, 0.12)',
+    imageShadow: isDark
+      ? '0 24px 48px rgba(0, 0, 0, 0.58)'
+      : '0 24px 48px rgba(20, 37, 66, 0.22)',
+    floatingBg: isDark ? '#13213a' : '#ffffff',
+    footerBg: isDark ? '#070d19' : '#0f1727',
+    footerMuted: isDark ? '#8fa0bd' : '#9ca8be',
+    footerSoft: isDark ? '#8597b5' : '#93a0b5',
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -112,7 +134,7 @@ function UserDashboard() {
   };
 
   return (
-    <Box sx={{ width: '100%', overflowX: 'hidden', bgcolor: '#ffffff' }}>
+    <Box sx={{ width: '100%', overflowX: 'hidden', bgcolor: colors.pageBg }}>
       <Box sx={{ position: 'relative', height: { xs: '62vh', md: '70vh' }, overflow: 'hidden' }}>
         <AnimatePresence mode="wait">
           <MotionBox
@@ -269,7 +291,7 @@ function UserDashboard() {
           <Typography sx={{ fontSize: { xs: '2rem', md: '3.2rem' }, fontWeight: 800, mb: 1.4 }}>
             Our Services
           </Typography>
-          <Typography sx={{ color: '#5b6472', fontSize: { xs: '1rem', md: '1.28rem' }, maxWidth: 760, mx: 'auto' }}>
+          <Typography sx={{ color: colors.body, fontSize: { xs: '1rem', md: '1.28rem' }, maxWidth: 760, mx: 'auto' }}>
             Comprehensive fitness solutions designed to help you achieve your goals
           </Typography>
         </MotionBox>
@@ -296,9 +318,9 @@ function UserDashboard() {
                   cursor: 'pointer',
                   borderRadius: 4,
                   overflow: 'hidden',
-                  boxShadow: '0 14px 34px rgba(19, 31, 53, 0.12)',
-                  border: '1px solid #edf2fa',
-                  bgcolor: '#ffffff',
+                  boxShadow: colors.softShadow,
+                  border: `1px solid ${colors.cardBorder}`,
+                  bgcolor: colors.cardBg,
                   position: 'relative',
                 }}
               >
@@ -339,10 +361,10 @@ function UserDashboard() {
                 </Box>
 
                 <CardContent sx={{ p: 3 }}>
-                  <Typography sx={{ fontSize: '1.55rem', fontWeight: 800, mb: 1 }}>
+                  <Typography sx={{ fontSize: '1.55rem', fontWeight: 800, mb: 1, color: colors.heading }}>
                     {service.title}
                   </Typography>
-                  <Typography sx={{ color: '#586272', lineHeight: 1.6 }}>
+                  <Typography sx={{ color: colors.body, lineHeight: 1.6 }}>
                     {service.description}
                   </Typography>
                 </CardContent>
@@ -366,7 +388,7 @@ function UserDashboard() {
         </Box>
       </Box>
 
-      <Box sx={{ bgcolor: '#f6f8fc', py: { xs: 8, md: 12 } }}>
+      <Box sx={{ bgcolor: colors.sectionBg, py: { xs: 8, md: 12 } }}>
         <Box
           sx={{
             maxWidth: 1240,
@@ -387,12 +409,12 @@ function UserDashboard() {
             <Typography sx={{ fontSize: { xs: '2rem', md: '3.1rem' }, fontWeight: 800, lineHeight: 1.15, mb: 2.2 }}>
               Why Choose <Box component="span" sx={{ color: '#84cc16' }}>GymPro Coach</Box>?
             </Typography>
-            <Typography sx={{ color: '#4d5768', fontSize: '1.06rem', lineHeight: 1.85, mb: 2.2 }}>
+            <Typography sx={{ color: colors.body, fontSize: '1.06rem', lineHeight: 1.85, mb: 2.2 }}>
               At GymPro Coach, we believe fitness is more than just exercise, it is a lifestyle.
               Our state-of-the-art facilities, expert trainers, and personalized programs are
               designed to help you reach peak performance.
             </Typography>
-            <Typography sx={{ color: '#4d5768', fontSize: '1.06rem', lineHeight: 1.85, mb: 3.5 }}>
+            <Typography sx={{ color: colors.body, fontSize: '1.06rem', lineHeight: 1.85, mb: 3.5 }}>
               Whether you are starting out or pushing your limits, our approach combines strength
               training, nutrition guidance, and ongoing support to ensure long-term progress.
             </Typography>
@@ -423,8 +445,8 @@ function UserDashboard() {
                       <Icon sx={{ fontSize: 21 }} />
                     </Box>
                     <Box>
-                      <Typography sx={{ fontWeight: 800, fontSize: '1.28rem' }}>{item.value}</Typography>
-                      <Typography sx={{ color: '#6a7586', fontSize: '0.94rem' }}>{item.label}</Typography>
+                      <Typography sx={{ fontWeight: 800, fontSize: '1.28rem', color: colors.heading }}>{item.value}</Typography>
+                      <Typography sx={{ color: colors.body, fontSize: '0.94rem' }}>{item.label}</Typography>
                     </Box>
                   </Stack>
                 );
@@ -439,7 +461,7 @@ function UserDashboard() {
             transition={{ duration: 0.55 }}
             sx={{ position: 'relative' }}
           >
-            <Card sx={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 24px 48px rgba(20, 37, 66, 0.22)' }}>
+            <Card sx={{ borderRadius: 4, overflow: 'hidden', boxShadow: colors.imageShadow }}>
               <Box
                 component="img"
                 src="https://images.unsplash.com/photo-1687521278757-aed659b751e9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmaXRuZXNzJTIwc3R1ZGlvJTIwc3RyZW5ndGglMjB0cmFpbmluZ3xlbnwxfHx8fDE3NzI5MTkyNjR8MA&ixlib=rb-4.1.0&q=80&w=1080"
@@ -459,10 +481,10 @@ function UserDashboard() {
                 position: 'absolute',
                 left: { xs: 12, md: -28 },
                 bottom: { xs: -24, md: -30 },
-                bgcolor: '#fff',
+                bgcolor: colors.floatingBg,
                 p: 2.4,
                 borderRadius: 2.5,
-                boxShadow: '0 16px 30px rgba(24, 47, 86, 0.18)',
+                boxShadow: isDark ? '0 16px 30px rgba(0, 0, 0, 0.45)' : '0 16px 30px rgba(24, 47, 86, 0.18)',
               }}
             >
               <Stack direction="row" spacing={1.4} alignItems="center">
@@ -480,8 +502,8 @@ function UserDashboard() {
                   <MonitorHeartOutlinedIcon sx={{ fontSize: 30 }} />
                 </Box>
                 <Box>
-                  <Typography sx={{ fontSize: '1.5rem', fontWeight: 800, lineHeight: 1 }}>98%</Typography>
-                  <Typography sx={{ color: '#606c7e' }}>Member Satisfaction</Typography>
+                  <Typography sx={{ fontSize: '1.5rem', fontWeight: 800, lineHeight: 1, color: colors.heading }}>98%</Typography>
+                  <Typography sx={{ color: colors.body }}>Member Satisfaction</Typography>
                 </Box>
               </Stack>
             </MotionBox>
@@ -489,7 +511,7 @@ function UserDashboard() {
         </Box>
       </Box>
 
-      <Box component="footer" sx={{ bgcolor: '#0f1727', color: '#fff', py: { xs: 8, md: 10 } }}>
+      <Box component="footer" sx={{ bgcolor: colors.footerBg, color: '#fff', py: { xs: 8, md: 10 } }}>
         <Box sx={{ maxWidth: 1240, mx: 'auto', px: { xs: 2, md: 3 } }}>
           <Box
             sx={{
@@ -503,7 +525,7 @@ function UserDashboard() {
               <Typography sx={{ fontSize: '1.7rem', fontWeight: 800, color: '#84cc16', mb: 1.8 }}>
                 GymPro Coach
               </Typography>
-              <Typography sx={{ color: '#9ca8be', mb: 2.5, lineHeight: 1.7 }}>
+              <Typography sx={{ color: colors.footerMuted, mb: 2.5, lineHeight: 1.7 }}>
                 Your fitness destination for achieving peak performance and long-term wellness.
               </Typography>
               <Stack direction="row" spacing={1.2}>
@@ -516,7 +538,7 @@ function UserDashboard() {
                         width: 36,
                         height: 36,
                         borderRadius: '50%',
-                        bgcolor: '#1f2939',
+                        bgcolor: isDark ? '#1a2740' : '#1f2939',
                         color: '#fff',
                         display: 'grid',
                         placeItems: 'center',
@@ -534,7 +556,7 @@ function UserDashboard() {
               <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 2 }}>Quick Links</Typography>
               <Stack spacing={1.2}>
                 {['About Us', 'Services', 'Pricing', 'Careers'].map((item) => (
-                  <Link key={item} href="#" underline="none" sx={{ color: '#9ca8be', '&:hover': { color: '#84cc16' } }}>
+                  <Link key={item} href="#" underline="none" sx={{ color: colors.footerMuted, '&:hover': { color: '#84cc16' } }}>
                     {item}
                   </Link>
                 ))}
@@ -545,7 +567,7 @@ function UserDashboard() {
               <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 2 }}>Support</Typography>
               <Stack spacing={1.2}>
                 {['Help Center', 'FAQs', 'Privacy Policy', 'Terms of Service'].map((item) => (
-                  <Link key={item} href="#" underline="none" sx={{ color: '#9ca8be', '&:hover': { color: '#84cc16' } }}>
+                  <Link key={item} href="#" underline="none" sx={{ color: colors.footerMuted, '&:hover': { color: '#84cc16' } }}>
                     {item}
                   </Link>
                 ))}
@@ -557,17 +579,17 @@ function UserDashboard() {
               <Stack spacing={1.6}>
                 <Stack direction="row" spacing={1.2} alignItems="flex-start">
                   <LocationOnOutlinedIcon sx={{ color: '#84cc16', mt: 0.2 }} />
-                  <Typography sx={{ color: '#9ca8be' }}>
+                  <Typography sx={{ color: colors.footerMuted }}>
                     123 Fitness Street, Health City, HC 12345
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1.2} alignItems="center">
                   <PhoneOutlinedIcon sx={{ color: '#84cc16' }} />
-                  <Typography sx={{ color: '#9ca8be' }}>+1 (555) 123-4567</Typography>
+                  <Typography sx={{ color: colors.footerMuted }}>+1 (555) 123-4567</Typography>
                 </Stack>
                 <Stack direction="row" spacing={1.2} alignItems="center">
                   <MailOutlineIcon sx={{ color: '#84cc16' }} />
-                  <Typography sx={{ color: '#9ca8be' }}>info@gymprocoach.com</Typography>
+                  <Typography sx={{ color: colors.footerMuted }}>info@gymprocoach.com</Typography>
                 </Stack>
               </Stack>
             </Box>
@@ -575,7 +597,7 @@ function UserDashboard() {
 
           <Box
             sx={{
-              borderTop: '1px solid #263246',
+              borderTop: `1px solid ${isDark ? '#2a3a57' : '#263246'}`,
               pt: 3.3,
               display: 'flex',
               flexDirection: { xs: 'column', md: 'row' },
@@ -584,12 +606,12 @@ function UserDashboard() {
               gap: 1.8,
             }}
           >
-            <Typography sx={{ color: '#93a0b5', fontSize: '0.9rem' }}>
+            <Typography sx={{ color: colors.footerSoft, fontSize: '0.9rem' }}>
               © 2026 GymPro Coach. All rights reserved.
             </Typography>
             <Stack direction="row" spacing={3}>
               {['Privacy', 'Terms', 'Cookies'].map((item) => (
-                <Link key={item} href="#" underline="none" sx={{ color: '#93a0b5', fontSize: '0.9rem', '&:hover': { color: '#84cc16' } }}>
+                <Link key={item} href="#" underline="none" sx={{ color: colors.footerSoft, fontSize: '0.9rem', '&:hover': { color: '#84cc16' } }}>
                   {item}
                 </Link>
               ))}
