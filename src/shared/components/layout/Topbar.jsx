@@ -13,11 +13,10 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useAppTheme } from '@/shared/hooks/useAppTheme';
 import { ROUTES } from '@/shared/utils/constants';
-import { capitalizeFirst } from '@/shared/utils/helpers';
 
 const DRAWER_WIDTH = 240;
 
@@ -25,7 +24,9 @@ function Topbar({ onMenuClick }) {
   const { user, logout } = useAuth();
   const { mode, toggleTheme } = useAppTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [anchorEl, setAnchorEl] = useState(null);
+  const isUserRoute = location.pathname.startsWith('/user/');
 
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -41,8 +42,8 @@ function Topbar({ onMenuClick }) {
       position="fixed"
       color="inherit"
       sx={{
-        width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
-        ml: { sm: `${DRAWER_WIDTH}px` },
+        width: { sm: isUserRoute ? '100%' : `calc(100% - ${DRAWER_WIDTH}px)` },
+        ml: { sm: isUserRoute ? 0 : `${DRAWER_WIDTH}px` },
         borderBottom: '1px solid',
         borderColor: 'divider',
       }}
@@ -51,14 +52,29 @@ function Topbar({ onMenuClick }) {
         <IconButton
           edge="start"
           onClick={onMenuClick}
-          sx={{ mr: 2, display: { sm: 'none' } }}
+          sx={{ mr: 2, display: isUserRoute ? 'none' : { sm: 'none' } }}
           aria-label="open sidebar"
         >
           <MenuIcon />
         </IconButton>
 
-        <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-          {capitalizeFirst(user?.role || '')} Portal
+        <Typography
+          variant="h6"
+          noWrap
+          component="button"
+          onClick={() => navigate(ROUTES.USER_DASHBOARD)}
+          sx={{
+            flexGrow: 1,
+            border: 0,
+            p: 0,
+            m: 0,
+            background: 'transparent',
+            textAlign: 'left',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          GymPro
         </Typography>
 
         <Tooltip title={mode === 'light' ? 'Dark mode' : 'Light mode'}>
