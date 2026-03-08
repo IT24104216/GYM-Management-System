@@ -13,6 +13,7 @@ import UnauthorizedPage from '@/pages/errors/UnauthorizedPage';
 
 // User pages
 import UserDashboard from '@/features/user/pages/UserDashboard';
+import UserCoaches from '@/features/user/pages/UserCoaches';
 import UserWorkouts from '@/features/user/pages/UserWorkouts';
 import UserProfile from '@/features/user/pages/UserProfile';
 
@@ -47,6 +48,7 @@ function AppRouter() {
         {/* User */}
         <Route element={<ProtectedRoute allowedRoles={[ROLES.USER]} />}>
           <Route path={ROUTES.USER_DASHBOARD} element={<UserDashboard />} />
+          <Route path={ROUTES.USER_COACHES} element={<UserCoaches />} />
           <Route path={ROUTES.USER_WORKOUTS} element={<UserWorkouts />} />
           <Route path={ROUTES.USER_PROFILE} element={<UserProfile />} />
         </Route>
