@@ -10,6 +10,7 @@ export const ROUTES = {
   REGISTER: '/register',
   UNAUTHORIZED: '/unauthorized',
   USER_DASHBOARD: '/user/dashboard',
+  USER_COACHES: '/user/coaches',
   USER_WORKOUTS: '/user/workouts',
   USER_PROFILE: '/user/profile',
   ADMIN_DASHBOARD: '/admin/dashboard',
