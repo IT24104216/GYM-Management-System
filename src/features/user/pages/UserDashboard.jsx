@@ -47,7 +47,7 @@ const SERVICES = [
     image:
       'https://images.unsplash.com/photo-1574269252556-89926e7c5805?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx3b3Jrb3V0JTIwcGxhbm5pbmclMjBmaXRuZXNzJTIwcGxhbnxlbnwxfHx8fDE3NzI5MTkyNjh8MA&ixlib=rb-4.1.0&q=80&w=1080',
     icon: FitnessCenterIcon,
-    link: ROUTES.USER_WORKOUTS,
+    link: ROUTES.USER_COACHES,
   },
   {
     title: 'Nutrition Consultation',
