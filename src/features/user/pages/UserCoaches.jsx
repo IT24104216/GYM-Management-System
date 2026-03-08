@@ -13,6 +13,7 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
+  Rating,
   Select,
   Snackbar,
   Stack,
@@ -143,6 +144,13 @@ const BOOKING_PROGRESS_META = {
   cancelled: { label: 'Cancelled', step: -1, color: '#ef4444' },
 };
 
+const isBookingCompletedByTime = (booking) => {
+  if (!booking?.date || !booking?.toTime) return false;
+  const bookingEnd = new Date(`${booking.date}T${booking.toTime}:00`);
+  if (Number.isNaN(bookingEnd.getTime())) return false;
+  return Date.now() >= bookingEnd.getTime();
+};
+
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
 const DAY_TO_INDEX = {
@@ -228,10 +236,14 @@ function UserCoaches() {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
-  const [bookingSuccessOpen, setBookingSuccessOpen] = useState(false);
+  const [toastState, setToastState] = useState({ open: false, message: '' });
   const [bookings, setBookings] = useState(BOOKINGS);
   const [editingBookingId, setEditingBookingId] = useState(null);
   const [slotError, setSlotError] = useState('');
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackTarget, setFeedbackTarget] = useState(null);
+  const [feedbackForm, setFeedbackForm] = useState({ rating: 0, comment: '' });
+  const [feedbackError, setFeedbackError] = useState('');
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
@@ -366,12 +378,50 @@ function UserCoaches() {
     });
 
     handleCloseBooking();
-    setBookingSuccessOpen(true);
+    setToastState({
+      open: true,
+      message: editingBookingId ? 'Booking updated successfully' : 'Booking confirmed successfully',
+    });
   };
 
   const handleCloseSuccess = (_, reason) => {
     if (reason === 'clickaway') return;
-    setBookingSuccessOpen(false);
+    setToastState((prev) => ({ ...prev, open: false }));
+  };
+
+  const handleOpenFeedback = (booking) => {
+    setFeedbackTarget(booking);
+    setFeedbackForm({ rating: 0, comment: '' });
+    setFeedbackError('');
+    setIsFeedbackOpen(true);
+  };
+
+  const handleCloseFeedback = () => {
+    setIsFeedbackOpen(false);
+    setFeedbackTarget(null);
+    setFeedbackError('');
+  };
+
+  const handleFeedbackFieldChange = (field) => (event) => {
+    setFeedbackForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleFeedbackSubmit = (event) => {
+    event.preventDefault();
+    if (!feedbackForm.rating) {
+      setFeedbackError('Please select a rating before submitting.');
+      return;
+    }
+
+    console.log('Feedback payload:', {
+      bookingId: feedbackTarget?.id,
+      coachName: feedbackTarget?.coachName,
+      rating: feedbackForm.rating,
+      comment: feedbackForm.comment,
+    });
+
+    handleCloseFeedback();
+    setToastState({ open: true, message: 'Feedback submitted successfully' });
   };
 
   const handleCancelBooking = (bookingId) => {
@@ -552,9 +602,14 @@ function UserCoaches() {
 
           <Stack spacing={1.4}>
             {filteredBookings.map((booking) => {
-              const effectiveStatus = booking.progressStatus;
+              const effectiveStatus = (
+                booking.progressStatus !== 'cancelled' && isBookingCompletedByTime(booking)
+              )
+                ? 'completed'
+                : booking.progressStatus;
               const progress = BOOKING_PROGRESS_META[effectiveStatus] || BOOKING_PROGRESS_META.pending;
               const isCancelled = effectiveStatus === 'cancelled';
+              const isCompleted = effectiveStatus === 'completed';
               const stepKeys = isCancelled ? ['pending', 'confirmed', 'cancelled'] : STATUS_STEPS;
               const displayTime = booking.fromTime && booking.toTime
                 ? `${toDisplayTime(booking.fromTime)} - ${toDisplayTime(booking.toTime)}`
@@ -677,7 +732,7 @@ function UserCoaches() {
                       </Box>
                     </Box>
 
-                    {booking.status === 'upcoming' && !isCancelled && (
+                    {booking.status === 'upcoming' && !isCancelled && !isCompleted && (
                       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>
                         {effectiveStatus !== 'confirmed' && (
                           <Button
@@ -705,6 +760,19 @@ function UserCoaches() {
                           sx={{ borderRadius: 2, fontWeight: 700 }}
                         >
                           Reschedule
+                        </Button>
+                      </Stack>
+                    )}
+
+                    {isCompleted && (
+                      <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1.4 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleOpenFeedback(booking)}
+                          sx={{ borderRadius: 2, fontWeight: 700 }}
+                        >
+                          Feedback
                         </Button>
                       </Stack>
                     )}
@@ -881,10 +949,10 @@ function UserCoaches() {
       </Dialog>
 
       <Snackbar
-        open={bookingSuccessOpen}
+        open={toastState.open}
         autoHideDuration={3000}
         onClose={handleCloseSuccess}
-        message="Booking confirmed successfully"
+        message={toastState.message}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         action={(
           <Button color="inherit" size="small" onClick={handleCloseSuccess}>
@@ -892,6 +960,67 @@ function UserCoaches() {
           </Button>
         )}
       />
+
+      <Dialog
+        open={isFeedbackOpen}
+        onClose={handleCloseFeedback}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{
+          component: 'form',
+          onSubmit: handleFeedbackSubmit,
+          sx: { borderRadius: 3 },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>
+          Rate Coach
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1, pb: 0.5 }}>
+          <Stack spacing={1.8} sx={{ mt: 0.5 }}>
+            <TextField
+              label="Coach"
+              value={feedbackTarget?.coachName || ''}
+              InputProps={{ readOnly: true }}
+            />
+
+            <Box>
+              <Typography sx={{ mb: 0.6, fontSize: '0.88rem', color: theme.palette.text.secondary }}>
+                Rating
+              </Typography>
+              <Rating
+                value={feedbackForm.rating}
+                onChange={(_, value) => {
+                  setFeedbackForm((prev) => ({ ...prev, rating: value || 0 }));
+                  setFeedbackError('');
+                }}
+                precision={1}
+              />
+            </Box>
+
+            <TextField
+              label="Comment (Optional)"
+              value={feedbackForm.comment}
+              onChange={handleFeedbackFieldChange('comment')}
+              multiline
+              minRows={3}
+            />
+
+            {feedbackError && (
+              <Typography sx={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 600 }}>
+                {feedbackError}
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.2 }}>
+          <Button onClick={handleCloseFeedback} variant="outlined" sx={{ borderRadius: 2, fontWeight: 700 }}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="contained" sx={{ borderRadius: 2, fontWeight: 700 }}>
+            Give Feedback
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
