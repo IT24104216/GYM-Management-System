@@ -82,6 +82,45 @@ const COACHES = [
   },
 ];
 
+const BOOKINGS = [
+  {
+    id: 'b1',
+    coachName: 'Emma Carter',
+    date: '2026-03-15',
+    time: '07:30 AM',
+    appointmentType: 'In-person',
+    goal: 'Weight Reducing',
+    status: 'upcoming',
+  },
+  {
+    id: 'b2',
+    coachName: 'Noah Bennett',
+    date: '2026-03-19',
+    time: '06:00 PM',
+    appointmentType: 'Online',
+    goal: 'Weight Gaining',
+    status: 'upcoming',
+  },
+  {
+    id: 'b3',
+    coachName: 'Sophia Reed',
+    date: '2026-02-22',
+    time: '09:00 AM',
+    appointmentType: 'In-person',
+    goal: 'Weight Reducing',
+    status: 'past',
+  },
+  {
+    id: 'b4',
+    coachName: 'Liam Hayes',
+    date: '2026-02-10',
+    time: '05:30 PM',
+    appointmentType: 'Online',
+    goal: 'Weight Gaining',
+    status: 'past',
+  },
+];
+
 function UserCoaches() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -89,6 +128,7 @@ function UserCoaches() {
   const isDark = theme.palette.mode === 'dark';
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedCoach, setSelectedCoach] = useState(null);
+  const [bookingView, setBookingView] = useState('upcoming');
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
@@ -134,6 +174,8 @@ function UserCoaches() {
 
     handleCloseBooking();
   };
+
+  const filteredBookings = BOOKINGS.filter((booking) => booking.status === bookingView);
 
   return (
     <Box
@@ -264,6 +306,94 @@ function UserCoaches() {
               </CardContent>
             </MotionCard>
           ))}
+        </Box>
+
+        <Box sx={{ mt: 5.5 }}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            alignItems={{ xs: 'flex-start', sm: 'center' }}
+            justifyContent="space-between"
+            spacing={2}
+            mb={2.2}
+          >
+            <Box>
+              <Typography sx={{ fontSize: { xs: '1.4rem', md: '1.8rem' }, fontWeight: 800 }}>
+                My Bookings
+              </Typography>
+              <Typography sx={{ color: theme.palette.text.secondary }}>
+                Switch between upcoming and past appointments.
+              </Typography>
+            </Box>
+
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant={bookingView === 'upcoming' ? 'contained' : 'outlined'}
+                onClick={() => setBookingView('upcoming')}
+                sx={{ borderRadius: 2, fontWeight: 700 }}
+              >
+                Upcoming
+              </Button>
+              <Button
+                variant={bookingView === 'past' ? 'contained' : 'outlined'}
+                onClick={() => setBookingView('past')}
+                sx={{ borderRadius: 2, fontWeight: 700 }}
+              >
+                Past
+              </Button>
+            </Stack>
+          </Stack>
+
+          <Stack spacing={1.4}>
+            {filteredBookings.map((booking) => (
+              <Card
+                key={booking.id}
+                sx={{
+                  borderRadius: 2.5,
+                  border: `1px solid ${isDark ? '#2b3d58' : '#e5edf8'}`,
+                  bgcolor: theme.palette.background.paper,
+                }}
+              >
+                <CardContent sx={{ p: 2 }}>
+                  <Stack
+                    direction={{ xs: 'column', md: 'row' }}
+                    alignItems={{ xs: 'flex-start', md: 'center' }}
+                    justifyContent="space-between"
+                    spacing={1.2}
+                  >
+                    <Box>
+                      <Typography sx={{ fontWeight: 800, color: theme.palette.text.primary }}>
+                        {booking.coachName}
+                      </Typography>
+                      <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
+                        {booking.date} at {booking.time}
+                      </Typography>
+                    </Box>
+
+                    <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
+                      <Chip label={booking.appointmentType} size="small" />
+                      <Chip label={booking.goal} size="small" />
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </Card>
+            ))}
+
+            {filteredBookings.length === 0 && (
+              <Card
+                sx={{
+                  borderRadius: 2.5,
+                  border: `1px solid ${isDark ? '#2b3d58' : '#e5edf8'}`,
+                  bgcolor: theme.palette.background.paper,
+                }}
+              >
+                <CardContent>
+                  <Typography sx={{ color: theme.palette.text.secondary }}>
+                    No {bookingView} bookings found.
+                  </Typography>
+                </CardContent>
+              </Card>
+            )}
+          </Stack>
         </Box>
       </Box>
 
