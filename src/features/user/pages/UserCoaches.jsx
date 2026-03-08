@@ -12,7 +12,6 @@ import {
   DialogTitle,
   FormControl,
   InputLabel,
-  LinearProgress,
   MenuItem,
   Select,
   Snackbar,
@@ -127,11 +126,13 @@ const BOOKINGS = [
   },
 ];
 
+const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
+
 const BOOKING_PROGRESS_META = {
-  pending: { label: 'Pending', value: 25, color: '#f59e0b' },
-  confirmed: { label: 'Confirmed', value: 65, color: '#3b82f6' },
-  completed: { label: 'Completed', value: 100, color: '#22c55e' },
-  cancelled: { label: 'Cancelled', value: 100, color: '#ef4444' },
+  pending: { label: 'Pending', step: 0, color: '#16a34a' },
+  confirmed: { label: 'Confirmed', step: 1, color: '#16a34a' },
+  completed: { label: 'Completed', step: 2, color: '#16a34a' },
+  cancelled: { label: 'Cancelled', step: -1, color: '#ef4444' },
 };
 
 function UserCoaches() {
@@ -408,28 +409,78 @@ function UserCoaches() {
                     </Stack>
 
                     <Box sx={{ mt: 1.4 }}>
-                      <Stack direction="row" justifyContent="space-between" mb={0.5}>
-                        <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
-                          Progress Tracking
+                      {booking.progressStatus === 'cancelled' ? (
+                        <Typography sx={{ fontSize: '0.82rem', color: '#ef4444', fontWeight: 700 }}>
+                          Status: Cancelled
                         </Typography>
-                        <Typography sx={{ fontSize: '0.8rem', color: progress.color, fontWeight: 700 }}>
-                          {progress.value}%
-                        </Typography>
-                      </Stack>
+                      ) : (
+                        <Box>
+                          <Stack direction="row" justifyContent="space-between" mb={1}>
+                            <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
+                              Status Tracking
+                            </Typography>
+                          </Stack>
 
-                      <LinearProgress
-                        variant="determinate"
-                        value={progress.value}
-                        sx={{
-                          height: 8,
-                          borderRadius: 999,
-                          bgcolor: isDark ? '#1b2a3d' : '#e9eef7',
-                          '& .MuiLinearProgress-bar': {
-                            borderRadius: 999,
-                            bgcolor: progress.color,
-                          },
-                        }}
-                      />
+                          <Stack direction="row" alignItems="center" sx={{ mb: 0.8 }}>
+                            {STATUS_STEPS.map((stepKey, index) => {
+                              const isDone = index <= progress.step;
+                              const circleBg = isDone ? '#16a34a' : '#d9de9e';
+                              const connectorBg = index < progress.step ? '#16a34a' : '#d9de9e';
+
+                              return (
+                                <Stack key={stepKey} direction="row" alignItems="center" sx={{ flex: 1 }}>
+                                  <Box
+                                    sx={{
+                                      width: 28,
+                                      height: 28,
+                                      borderRadius: '50%',
+                                      bgcolor: circleBg,
+                                      color: '#fff',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontWeight: 800,
+                                      fontSize: '0.92rem',
+                                    }}
+                                  >
+                                    {isDone ? '✓' : ''}
+                                  </Box>
+                                  {index < STATUS_STEPS.length - 1 && (
+                                    <Box
+                                      sx={{
+                                        height: 4,
+                                        flex: 1,
+                                        mx: 0.7,
+                                        borderRadius: 999,
+                                        bgcolor: connectorBg,
+                                      }}
+                                    />
+                                  )}
+                                </Stack>
+                              );
+                            })}
+                          </Stack>
+
+                          <Stack direction="row" justifyContent="space-between" sx={{ px: 0.1 }}>
+                            {STATUS_STEPS.map((stepKey, index) => {
+                              const isDone = index <= progress.step;
+                              return (
+                                <Typography
+                                  key={`${stepKey}-label`}
+                                  sx={{
+                                    fontSize: '0.73rem',
+                                    fontWeight: isDone ? 700 : 600,
+                                    color: isDone ? '#16a34a' : theme.palette.text.secondary,
+                                    textTransform: 'capitalize',
+                                  }}
+                                >
+                                  {BOOKING_PROGRESS_META[stepKey].label}
+                                </Typography>
+                              );
+                            })}
+                          </Stack>
+                        </Box>
+                      )}
                     </Box>
                   </CardContent>
                 </Card>
