@@ -13,6 +13,7 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
+  Rating,
   Select,
   Snackbar,
   Stack,
@@ -80,6 +81,62 @@ const DIETITIANS = [
   },
 ];
 
+const BOOKINGS = [
+  {
+    id: 'db1',
+    dietitianName: 'Olivia Martin',
+    date: '2026-03-08',
+    fromTime: '09:00',
+    toTime: '10:00',
+    appointmentType: 'In-person',
+    goal: 'Weight Reducing',
+    status: 'upcoming',
+    progressStatus: 'confirmed',
+  },
+  {
+    id: 'db2',
+    dietitianName: 'Daniel Perera',
+    date: '2026-03-19',
+    fromTime: '16:00',
+    toTime: '17:00',
+    appointmentType: 'Online',
+    goal: 'Weight Gaining',
+    status: 'upcoming',
+    progressStatus: 'pending',
+  },
+  {
+    id: 'db3',
+    dietitianName: 'Ayesha Fernando',
+    date: '2026-02-21',
+    fromTime: '10:00',
+    toTime: '11:00',
+    appointmentType: 'In-person',
+    goal: 'Weight Reducing',
+    status: 'past',
+    progressStatus: 'completed',
+  },
+  {
+    id: 'db4',
+    dietitianName: 'Michael Silva',
+    date: '2026-02-14',
+    fromTime: '17:00',
+    toTime: '18:00',
+    appointmentType: 'Online',
+    goal: 'Weight Gaining',
+    status: 'past',
+    progressStatus: 'cancelled',
+  },
+];
+
+const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
+
+const BOOKING_PROGRESS_META = {
+  pending: { label: 'Pending', step: 0 },
+  confirmed: { label: 'Confirmed', step: 1 },
+  completed: { label: 'Completed', step: 2 },
+  cancelled: { label: 'Cancelled', step: -1 },
+};
+
 const DAY_TO_INDEX = {
   sun: 0,
   mon: 1,
@@ -118,6 +175,15 @@ const toMinuteValue = (time24h) => {
   return h * 60 + m;
 };
 
+const toDisplayTime = (time24h) => {
+  if (!time24h) return '';
+  const [hRaw, mRaw] = time24h.split(':').map(Number);
+  if (Number.isNaN(hRaw) || Number.isNaN(mRaw)) return '';
+  const meridiem = hRaw >= 12 ? 'PM' : 'AM';
+  const h12 = hRaw % 12 || 12;
+  return `${String(h12).padStart(2, '0')}:${String(mRaw).padStart(2, '0')} ${meridiem}`;
+};
+
 const getDietitianSlotRange = (dietitian) => {
   const slotPart = dietitian?.slots?.split(',')?.[1]?.trim() || '';
   const [startRaw, endRaw] = slotPart.split('-').map((t) => t.trim());
@@ -140,21 +206,36 @@ const isDateWithinDietitianSchedule = (dietitian, dateValue) => {
   const selectedDay = new Date(`${dateValue}T00:00:00`).getDay();
   if (Number.isNaN(selectedDay)) return false;
 
-  if (fromIndex <= toIndex) {
-    return selectedDay >= fromIndex && selectedDay <= toIndex;
-  }
+  if (fromIndex <= toIndex) return selectedDay >= fromIndex && selectedDay <= toIndex;
 
   return selectedDay >= fromIndex || selectedDay <= toIndex;
+};
+
+const isBookingCompletedByTime = (booking) => {
+  if (!booking?.date || !booking?.toTime) return false;
+  const bookingEnd = new Date(`${booking.date}T${booking.toTime}:00`);
+  if (Number.isNaN(bookingEnd.getTime())) return false;
+  return Date.now() >= bookingEnd.getTime();
 };
 
 function UserDietitians() {
   const { user } = useAuth();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [selectedDietitian, setSelectedDietitian] = useState(null);
+  const [bookingView, setBookingView] = useState('upcoming');
+  const [bookings, setBookings] = useState(BOOKINGS);
+  const [editingBookingId, setEditingBookingId] = useState(null);
   const [availabilityError, setAvailabilityError] = useState('');
-  const [bookingSuccessOpen, setBookingSuccessOpen] = useState(false);
+  const [toastState, setToastState] = useState({ open: false, message: '' });
+
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackTarget, setFeedbackTarget] = useState(null);
+  const [feedbackForm, setFeedbackForm] = useState({ rating: 0, comment: '' });
+  const [feedbackError, setFeedbackError] = useState('');
+
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
@@ -182,6 +263,27 @@ function UserDietitians() {
       description: '',
       medicalConditions: '',
     });
+    setEditingBookingId(null);
+    setAvailabilityError('');
+    setIsBookingOpen(true);
+  };
+
+  const handleEditBooking = (booking) => {
+    const dietitian = DIETITIANS.find((item) => item.name === booking.dietitianName) || null;
+    setSelectedDietitian(dietitian);
+    setBookingForm({
+      userName: user?.name || '',
+      userEmail: user?.email || '',
+      mobileNumber: user?.mobileNumber || user?.mobile || user?.phone || '',
+      date: booking.date || getTodayDate(),
+      fromTime: booking.fromTime || '',
+      toTime: booking.toTime || '',
+      appointmentType: booking.appointmentType?.toLowerCase() === 'in-person' ? 'inperson' : 'online',
+      goal: booking.goal?.toLowerCase().includes('reducing') ? 'weight-reducing' : 'weight-gaining',
+      description: booking.description || '',
+      medicalConditions: booking.medicalConditions || '',
+    });
+    setEditingBookingId(booking.id);
     setAvailabilityError('');
     setIsBookingOpen(true);
   };
@@ -189,6 +291,7 @@ function UserDietitians() {
   const handleCloseBooking = () => {
     setIsBookingOpen(false);
     setSelectedDietitian(null);
+    setEditingBookingId(null);
     setAvailabilityError('');
   };
 
@@ -227,15 +330,71 @@ function UserDietitians() {
       return;
     }
 
+    const nextPayload = {
+      dietitianName: selectedDietitian?.name || '',
+      date: bookingForm.date,
+      fromTime: bookingForm.fromTime,
+      toTime: bookingForm.toTime,
+      appointmentType: bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online',
+      goal: bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing',
+      description: bookingForm.description,
+      medicalConditions: bookingForm.medicalConditions,
+      status: 'upcoming',
+      progressStatus: 'pending',
+    };
+
+    if (editingBookingId) {
+      setBookings((prev) => prev.map((item) => (
+        item.id === editingBookingId ? { ...item, ...nextPayload } : item
+      )));
+    } else {
+      setBookings((prev) => [{ id: `db${Date.now()}`, ...nextPayload }, ...prev]);
+    }
+
     setAvailabilityError('');
     handleCloseBooking();
-    setBookingSuccessOpen(true);
+    setToastState({
+      open: true,
+      message: editingBookingId ? 'Dietitian booking updated successfully' : 'Dietitian appointment booked successfully',
+    });
   };
 
-  const handleCloseSuccess = (_, reason) => {
-    if (reason === 'clickaway') return;
-    setBookingSuccessOpen(false);
+  const handleCancelBooking = (bookingId) => {
+    setBookings((prev) => prev.map((item) => (
+      item.id === bookingId ? { ...item, progressStatus: 'cancelled' } : item
+    )));
   };
+
+  const handleOpenFeedback = (booking) => {
+    setFeedbackTarget(booking);
+    setFeedbackForm({ rating: 0, comment: '' });
+    setFeedbackError('');
+    setIsFeedbackOpen(true);
+  };
+
+  const handleCloseFeedback = () => {
+    setIsFeedbackOpen(false);
+    setFeedbackTarget(null);
+    setFeedbackError('');
+  };
+
+  const handleFeedbackSubmit = (event) => {
+    event.preventDefault();
+    if (!feedbackForm.rating) {
+      setFeedbackError('Please select a rating before submitting.');
+      return;
+    }
+
+    handleCloseFeedback();
+    setToastState({ open: true, message: 'Feedback submitted successfully' });
+  };
+
+  const handleCloseToast = (_, reason) => {
+    if (reason === 'clickaway') return;
+    setToastState((prev) => ({ ...prev, open: false }));
+  };
+
+  const filteredBookings = bookings.filter((booking) => booking.status === bookingView);
 
   return (
     <Box
@@ -354,6 +513,232 @@ function UserDietitians() {
             </MotionCard>
           ))}
         </Box>
+
+        <Box sx={{ mt: 5.5 }}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            alignItems={{ xs: 'flex-start', sm: 'center' }}
+            justifyContent="space-between"
+            spacing={2}
+            mb={2.2}
+          >
+            <Box>
+              <Typography sx={{ fontSize: { xs: '1.4rem', md: '1.8rem' }, fontWeight: 800 }}>
+                My Bookings
+              </Typography>
+              <Typography sx={{ color: theme.palette.text.secondary }}>
+                Switch between upcoming and past appointments.
+              </Typography>
+            </Box>
+
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant={bookingView === 'upcoming' ? 'contained' : 'outlined'}
+                onClick={() => setBookingView('upcoming')}
+                sx={{ borderRadius: 2, fontWeight: 700 }}
+              >
+                Upcoming
+              </Button>
+              <Button
+                variant={bookingView === 'past' ? 'contained' : 'outlined'}
+                onClick={() => setBookingView('past')}
+                sx={{ borderRadius: 2, fontWeight: 700 }}
+              >
+                Past
+              </Button>
+            </Stack>
+          </Stack>
+
+          <Stack spacing={1.4}>
+            {filteredBookings.map((booking) => {
+              const effectiveStatus = (
+                booking.progressStatus !== 'cancelled' && isBookingCompletedByTime(booking)
+              ) ? 'completed' : booking.progressStatus;
+
+              const progress = BOOKING_PROGRESS_META[effectiveStatus] || BOOKING_PROGRESS_META.pending;
+              const isCancelled = effectiveStatus === 'cancelled';
+              const isCompleted = effectiveStatus === 'completed';
+              const stepKeys = isCancelled ? ['pending', 'confirmed', 'cancelled'] : STATUS_STEPS;
+
+              return (
+                <Card
+                  key={booking.id}
+                  sx={{
+                    borderRadius: 2.5,
+                    border: `1px solid ${isDark ? '#2b3d58' : '#e5edf8'}`,
+                    bgcolor: theme.palette.background.paper,
+                  }}
+                >
+                  <CardContent sx={{ p: 2 }}>
+                    <Stack
+                      direction={{ xs: 'column', md: 'row' }}
+                      alignItems={{ xs: 'flex-start', md: 'center' }}
+                      justifyContent="space-between"
+                      spacing={1.2}
+                    >
+                      <Box>
+                        <Typography sx={{ fontWeight: 800, color: theme.palette.text.primary }}>
+                          {booking.dietitianName}
+                        </Typography>
+                        <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
+                          {booking.date} at {toDisplayTime(booking.fromTime)} - {toDisplayTime(booking.toTime)}
+                        </Typography>
+                      </Box>
+
+                      <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
+                        <Chip label={booking.appointmentType} size="small" />
+                        <Chip label={booking.goal} size="small" />
+                      </Stack>
+                    </Stack>
+
+                    <Box sx={{ mt: 1.4 }}>
+                      <Stack direction="row" justifyContent="space-between" mb={1}>
+                        <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
+                          Status Tracking
+                        </Typography>
+                      </Stack>
+
+                      <Stack direction="row" alignItems="center" sx={{ mb: 0.8 }}>
+                        {stepKeys.map((stepKey, index) => {
+                          const isDone = index <= progress.step;
+                          const isCancelledStep = isCancelled && stepKey === 'cancelled';
+                          const circleBg = isCancelledStep ? '#ef4444' : (isDone ? '#16a34a' : '#d9de9e');
+                          const connectorBg = isCancelled
+                            ? (index === 0 ? '#16a34a' : '#ef4444')
+                            : (index < progress.step ? '#16a34a' : '#d9de9e');
+
+                          return (
+                            <Stack key={stepKey} direction="row" alignItems="center" sx={{ flex: 1 }}>
+                              <Box
+                                sx={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: '50%',
+                                  bgcolor: circleBg,
+                                  color: '#fff',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontWeight: 800,
+                                  fontSize: '0.92rem',
+                                }}
+                              >
+                                {isCancelledStep ? '✓' : (isDone ? '✓' : '')}
+                              </Box>
+                              {index < stepKeys.length - 1 && (
+                                <Box
+                                  sx={{
+                                    height: 4,
+                                    flex: 1,
+                                    mx: 0.7,
+                                    borderRadius: 999,
+                                    bgcolor: connectorBg,
+                                  }}
+                                />
+                              )}
+                            </Stack>
+                          );
+                        })}
+                      </Stack>
+
+                      <Stack direction="row" alignItems="flex-start" sx={{ mb: 1.1 }}>
+                        {stepKeys.map((stepKey, index) => {
+                          const isDone = index <= progress.step;
+                          const isCancelledStep = isCancelled && stepKey === 'cancelled';
+
+                          return (
+                            <Stack key={`${stepKey}-label`} direction="row" alignItems="flex-start" sx={{ flex: 1 }}>
+                              <Box sx={{ width: 28, display: 'flex', justifyContent: 'center' }}>
+                                <Typography
+                                  sx={{
+                                    fontSize: '0.73rem',
+                                    fontWeight: (isDone || isCancelledStep) ? 700 : 600,
+                                    color: isCancelledStep
+                                      ? '#ef4444'
+                                      : (isDone ? '#16a34a' : theme.palette.text.secondary),
+                                    textTransform: 'capitalize',
+                                    textAlign: 'center',
+                                  }}
+                                >
+                                  {BOOKING_PROGRESS_META[stepKey].label}
+                                </Typography>
+                              </Box>
+
+                              {index < stepKeys.length - 1 && (
+                                <Box sx={{ flex: 1, mx: 0.7 }} />
+                              )}
+                            </Stack>
+                          );
+                        })}
+                      </Stack>
+                    </Box>
+
+                    {booking.status === 'upcoming' && !isCancelled && !isCompleted && (
+                      <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>
+                        {effectiveStatus !== 'confirmed' && (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleEditBooking(booking)}
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Edit
+                          </Button>
+                        )}
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          onClick={() => handleCancelBooking(booking.id)}
+                          sx={{ borderRadius: 2, fontWeight: 700 }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleEditBooking(booking)}
+                          sx={{ borderRadius: 2, fontWeight: 700 }}
+                        >
+                          Reschedule
+                        </Button>
+                      </Stack>
+                    )}
+
+                    {isCompleted && (
+                      <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1.4 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleOpenFeedback(booking)}
+                          sx={{ borderRadius: 2, fontWeight: 700 }}
+                        >
+                          Feedback
+                        </Button>
+                      </Stack>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {filteredBookings.length === 0 && (
+              <Card
+                sx={{
+                  borderRadius: 2.5,
+                  border: `1px solid ${isDark ? '#2b3d58' : '#e5edf8'}`,
+                  bgcolor: theme.palette.background.paper,
+                }}
+              >
+                <CardContent>
+                  <Typography sx={{ color: theme.palette.text.secondary }}>
+                    No {bookingView} bookings found.
+                  </Typography>
+                </CardContent>
+              </Card>
+            )}
+          </Stack>
+        </Box>
       </Box>
 
       <Dialog
@@ -368,7 +753,7 @@ function UserDietitians() {
         }}
       >
         <DialogTitle sx={{ fontWeight: 800 }}>
-          Book Appointment {selectedDietitian ? `with ${selectedDietitian.name}` : ''}
+          {editingBookingId ? 'Edit Booking' : 'Book Appointment'} {selectedDietitian ? `with ${selectedDietitian.name}` : ''}
         </DialogTitle>
         <DialogContent sx={{ pt: 1, pb: 0.5 }}>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
@@ -483,32 +868,91 @@ function UserDietitians() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.2 }}>
-          <Button onClick={handleCloseBooking} variant="outlined" sx={{ borderRadius: 3, fontWeight: 700 }}>
+          <Button onClick={handleCloseBooking} variant="outlined" sx={{ borderRadius: 2, fontWeight: 700 }}>
             Cancel
           </Button>
           <Button
             type="submit"
             variant="contained"
             sx={{
-              borderRadius: 3,
+              borderRadius: 2,
               fontWeight: 700,
               background: 'linear-gradient(180deg, #2b91ff 0%, #0f79ed 100%)',
               '&:hover': { background: 'linear-gradient(180deg, #2386ef 0%, #0a6cd4 100%)' },
             }}
           >
-            Confirm Booking
+            {editingBookingId ? 'Update Booking' : 'Confirm Booking'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={isFeedbackOpen}
+        onClose={handleCloseFeedback}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{
+          component: 'form',
+          onSubmit: handleFeedbackSubmit,
+          sx: { borderRadius: 3 },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Rate Dietitian</DialogTitle>
+        <DialogContent sx={{ pt: 1, pb: 0.5 }}>
+          <Stack spacing={1.8} sx={{ mt: 0.5 }}>
+            <TextField
+              label="Dietitian"
+              value={feedbackTarget?.dietitianName || ''}
+              InputProps={{ readOnly: true }}
+            />
+
+            <Box>
+              <Typography sx={{ mb: 0.6, fontSize: '0.88rem', color: theme.palette.text.secondary }}>
+                Rating
+              </Typography>
+              <Rating
+                value={feedbackForm.rating}
+                onChange={(_, value) => {
+                  setFeedbackForm((prev) => ({ ...prev, rating: value || 0 }));
+                  setFeedbackError('');
+                }}
+                precision={1}
+              />
+            </Box>
+
+            <TextField
+              label="Comment (Optional)"
+              value={feedbackForm.comment}
+              onChange={(event) => setFeedbackForm((prev) => ({ ...prev, comment: event.target.value }))}
+              multiline
+              minRows={3}
+            />
+
+            {feedbackError && (
+              <Typography sx={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 600 }}>
+                {feedbackError}
+              </Typography>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.2 }}>
+          <Button onClick={handleCloseFeedback} variant="outlined" sx={{ borderRadius: 2, fontWeight: 700 }}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="contained" sx={{ borderRadius: 2, fontWeight: 700 }}>
+            Give Feedback
           </Button>
         </DialogActions>
       </Dialog>
 
       <Snackbar
-        open={bookingSuccessOpen}
+        open={toastState.open}
         autoHideDuration={3000}
-        onClose={handleCloseSuccess}
-        message="Dietitian appointment booked successfully"
+        onClose={handleCloseToast}
+        message={toastState.message}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         action={(
-          <Button color="inherit" size="small" onClick={handleCloseSuccess}>
+          <Button color="inherit" size="small" onClick={handleCloseToast}>
             Close
           </Button>
         )}
