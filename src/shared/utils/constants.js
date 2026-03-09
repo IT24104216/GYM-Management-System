@@ -13,6 +13,7 @@ export const ROUTES = {
   USER_COACHES: '/user/coaches',
   USER_DIETITIANS: '/user/dietitians',
   USER_COACH_FEEDBACKS: '/user/coach-feedbacks',
+  USER_DIETITIAN_FEEDBACKS: '/user/dietitian-feedbacks',
   USER_WORKOUTS: '/user/workouts',
   USER_PROFILE: '/user/profile',
   ADMIN_DASHBOARD: '/admin/dashboard',
