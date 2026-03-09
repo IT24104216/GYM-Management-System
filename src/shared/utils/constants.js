@@ -11,6 +11,7 @@ export const ROUTES = {
   UNAUTHORIZED: '/unauthorized',
   USER_DASHBOARD: '/user/dashboard',
   USER_COACHES: '/user/coaches',
+  USER_DIETITIANS: '/user/dietitians',
   USER_COACH_FEEDBACKS: '/user/coach-feedbacks',
   USER_WORKOUTS: '/user/workouts',
   USER_PROFILE: '/user/profile',
