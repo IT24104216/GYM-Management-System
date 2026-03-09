@@ -144,6 +144,7 @@ const buildInitialCoachStats = () => {
 };
 
 const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
+const FEEDBACK_STORAGE_KEY = 'gympro_feedbacks';
 
 const BOOKING_PROGRESS_META = {
   pending: { label: 'Pending', step: 0, color: '#16a34a' },
@@ -428,6 +429,33 @@ function UserCoaches() {
       rating: feedbackForm.rating,
       comment: feedbackForm.comment,
     });
+
+    const newFeedback = {
+      id: `f-${Date.now()}`,
+      user: user?.name || 'Member',
+      authorEmail: user?.email || '',
+      rating: feedbackForm.rating,
+      comment: feedbackForm.comment,
+      date: getTodayDate(),
+    };
+
+    const rawFeedbacks = localStorage.getItem(FEEDBACK_STORAGE_KEY);
+    let storedFeedbacks = {};
+    try {
+      storedFeedbacks = rawFeedbacks ? JSON.parse(rawFeedbacks) : {};
+    } catch {
+      storedFeedbacks = {};
+    }
+
+    const coachKey = feedbackTarget?.coachName || 'Coach';
+    const coachFeedbacks = Array.isArray(storedFeedbacks[coachKey]) ? storedFeedbacks[coachKey] : [];
+    localStorage.setItem(
+      FEEDBACK_STORAGE_KEY,
+      JSON.stringify({
+        ...storedFeedbacks,
+        [coachKey]: [newFeedback, ...coachFeedbacks],
+      }),
+    );
 
     const targetCoach = COACHES.find((item) => item.name === feedbackTarget?.coachName);
     if (targetCoach) {
