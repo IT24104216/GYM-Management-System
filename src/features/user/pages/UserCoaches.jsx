@@ -96,8 +96,6 @@ const BOOKINGS = [
     goal: 'Weight Reducing',
     status: 'upcoming',
     progressStatus: 'confirmed',
-    ratingAverage: 4.7,
-    feedbackCount: 1,
   },
   {
     id: 'b2',
@@ -110,8 +108,6 @@ const BOOKINGS = [
     goal: 'Weight Gaining',
     status: 'upcoming',
     progressStatus: 'pending',
-    ratingAverage: 4.8,
-    feedbackCount: 2,
   },
   {
     id: 'b3',
@@ -124,8 +120,6 @@ const BOOKINGS = [
     goal: 'Weight Reducing',
     status: 'past',
     progressStatus: 'completed',
-    ratingAverage: 4.6,
-    feedbackCount: 1,
   },
   {
     id: 'b4',
@@ -138,10 +132,16 @@ const BOOKINGS = [
     goal: 'Weight Gaining',
     status: 'past',
     progressStatus: 'cancelled',
-    ratingAverage: 4.9,
-    feedbackCount: 3,
   },
 ];
+
+const buildInitialCoachStats = () => {
+  const stats = {};
+  COACHES.forEach((coach) => {
+    stats[coach.id] = { average: coach.rating, count: 0 };
+  });
+  return stats;
+};
 
 const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
 
@@ -246,6 +246,7 @@ function UserCoaches() {
   const [bookingView, setBookingView] = useState('upcoming');
   const [toastState, setToastState] = useState({ open: false, message: '' });
   const [bookings, setBookings] = useState(BOOKINGS);
+  const [coachStats, setCoachStats] = useState(buildInitialCoachStats);
   const [editingBookingId, setEditingBookingId] = useState(null);
   const [slotError, setSlotError] = useState('');
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
@@ -428,20 +429,22 @@ function UserCoaches() {
       comment: feedbackForm.comment,
     });
 
-    setBookings((prev) => prev.map((item) => {
-      if (item.id !== feedbackTarget?.id) return item;
+    const targetCoach = COACHES.find((item) => item.name === feedbackTarget?.coachName);
+    if (targetCoach) {
+      setCoachStats((prev) => {
+        const current = prev[targetCoach.id] || { average: targetCoach.rating, count: 0 };
+        const nextCount = current.count + 1;
+        const nextAverage = ((current.average * current.count) + feedbackForm.rating) / nextCount;
 
-      const oldCount = item.feedbackCount || 0;
-      const oldAverage = item.ratingAverage || 0;
-      const nextCount = oldCount + 1;
-      const nextAverage = ((oldAverage * oldCount) + feedbackForm.rating) / nextCount;
-
-      return {
-        ...item,
-        feedbackCount: nextCount,
-        ratingAverage: Number(nextAverage.toFixed(1)),
-      };
-    }));
+        return {
+          ...prev,
+          [targetCoach.id]: {
+            average: Number(nextAverage.toFixed(1)),
+            count: nextCount,
+          },
+        };
+      });
+    }
 
     handleCloseFeedback();
     setToastState({ open: true, message: 'Feedback submitted successfully' });
@@ -490,6 +493,10 @@ function UserCoaches() {
           }}
         >
           {COACHES.map((coach, index) => (
+            (() => {
+              const coachStat = coachStats[coach.id] || { average: coach.rating, count: 0 };
+
+              return (
             <MotionCard
               key={coach.id}
               initial={{ opacity: 0, y: 22 }}
@@ -543,7 +550,8 @@ function UserCoaches() {
                   <Stack direction="row" spacing={1} alignItems="center">
                     <StarRoundedIcon sx={{ color: '#f59e0b', fontSize: 18 }} />
                     <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
-                      Rating {coach.rating}
+                      Rating {coachStat.average.toFixed(1)}
+                      {coachStat.count > 0 ? ` (${coachStat.count})` : ''}
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -585,6 +593,8 @@ function UserCoaches() {
                 </Stack>
               </CardContent>
             </MotionCard>
+              );
+            })()
           ))}
         </Box>
 
@@ -666,8 +676,6 @@ function UserCoaches() {
                       <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
                         <Chip label={booking.appointmentType} size="small" />
                         <Chip label={booking.goal} size="small" />
-                        <Chip label={`Rating ${booking.ratingAverage?.toFixed(1) || '0.0'}`} size="small" />
-                        <Chip label={`Feedback ${booking.feedbackCount || 0}`} size="small" />
                       </Stack>
                     </Stack>
 
