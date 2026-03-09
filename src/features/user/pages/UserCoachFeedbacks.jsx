@@ -6,6 +6,8 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 
+const FEEDBACK_STORAGE_KEY = 'gympro_feedbacks';
+
 const MOCK_FEEDBACKS = {
   'Emma Carter': [
     {
@@ -70,7 +72,23 @@ function UserCoachFeedbacks() {
   const theme = useTheme();
   const [searchParams] = useSearchParams();
   const coachName = searchParams.get('coach') || 'Coach';
-  const [feedbacksByCoach, setFeedbacksByCoach] = useState(MOCK_FEEDBACKS);
+  const [feedbacksByCoach, setFeedbacksByCoach] = useState(() => {
+    const rawFeedbacks = localStorage.getItem(FEEDBACK_STORAGE_KEY);
+    let storedFeedbacks = {};
+    try {
+      storedFeedbacks = rawFeedbacks ? JSON.parse(rawFeedbacks) : {};
+    } catch {
+      storedFeedbacks = {};
+    }
+
+    const merged = { ...MOCK_FEEDBACKS };
+    Object.keys(storedFeedbacks).forEach((coachKey) => {
+      const persisted = Array.isArray(storedFeedbacks[coachKey]) ? storedFeedbacks[coachKey] : [];
+      const base = Array.isArray(merged[coachKey]) ? merged[coachKey] : [];
+      merged[coachKey] = [...persisted, ...base];
+    });
+    return merged;
+  });
   const [editingFeedback, setEditingFeedback] = useState(null);
   const [editingForm, setEditingForm] = useState({ rating: 0, comment: '' });
   const [editingError, setEditingError] = useState('');
