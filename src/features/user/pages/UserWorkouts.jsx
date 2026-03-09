@@ -83,7 +83,7 @@ function ExerciseCard({ workout, index }) {
       transition={{ duration: 0.35, delay: index * 0.06 }}
       whileHover={{ y: -5 }}
       sx={{
-        borderRadius: 3,
+        borderRadius: 2.5,
         overflow: 'hidden',
         border: `1px solid ${isDark ? '#223149' : '#e2e8f0'}`,
         bgcolor: theme.palette.background.paper,
@@ -92,7 +92,7 @@ function ExerciseCard({ workout, index }) {
           : '0 14px 28px rgba(16, 24, 40, 0.08)',
       }}
     >
-      <Box sx={{ height: 128, background: workout.gradient, position: 'relative' }}>
+      <Box sx={{ height: 108, background: workout.gradient, position: 'relative' }}>
         {workout.done && (
           <Chip
             icon={<GradeRoundedIcon sx={{ fontSize: 15 }} />}
@@ -100,8 +100,8 @@ function ExerciseCard({ workout, index }) {
             size="small"
             sx={{
               position: 'absolute',
-              right: 12,
-              top: 12,
+              right: 10,
+              top: 10,
               fontWeight: 700,
               color: '#047857',
               bgcolor: '#dcfce7',
@@ -110,10 +110,10 @@ function ExerciseCard({ workout, index }) {
         )}
       </Box>
 
-      <Box sx={{ p: 2.4 }}>
-        <Stack spacing={0.5} mb={2}>
+      <Box sx={{ p: 2 }}>
+        <Stack spacing={0.35} mb={1.4}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-            <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.25rem', md: '1.8rem' }, color: theme.palette.text.primary }}>
+            <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.08rem', md: '1.26rem' }, color: theme.palette.text.primary }}>
               {workout.title}
             </Typography>
             <Chip
@@ -127,14 +127,14 @@ function ExerciseCard({ workout, index }) {
               }}
             />
           </Stack>
-          <Typography sx={{ color: theme.palette.text.secondary, fontSize: '1.15rem' }}>
+          <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '0.94rem', md: '1rem' } }}>
             {workout.muscles}
           </Typography>
         </Stack>
 
         <Box
           sx={{
-            pt: 1.4,
+            pt: 1,
             borderTop: `1px solid ${isDark ? '#1f2c41' : '#e5eaf1'}`,
             display: 'grid',
             gridTemplateColumns: '1fr auto',
@@ -142,17 +142,17 @@ function ExerciseCard({ workout, index }) {
             alignItems: 'center',
           }}
         >
-          <Stack direction="row" spacing={2} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+          <Stack direction="row" spacing={1.4} alignItems="center" sx={{ flexWrap: 'wrap' }}>
             <Stack direction="row" spacing={0.6} alignItems="center">
-              <AccessTimeRoundedIcon sx={{ color: theme.palette.text.secondary, fontSize: 17 }} />
-              <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>
+              <AccessTimeRoundedIcon sx={{ color: theme.palette.text.secondary, fontSize: 16 }} />
+              <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 600, fontSize: '0.92rem' }}>
                 {workout.duration}
               </Typography>
             </Stack>
 
             <Stack direction="row" spacing={0.6} alignItems="center">
-              <FitnessCenterRoundedIcon sx={{ color: theme.palette.text.secondary, fontSize: 16 }} />
-              <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 600 }}>
+              <FitnessCenterRoundedIcon sx={{ color: theme.palette.text.secondary, fontSize: 15 }} />
+              <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 600, fontSize: '0.92rem' }}>
                 {workout.level}
               </Typography>
             </Stack>
@@ -175,26 +175,26 @@ function UserWorkouts() {
         minHeight: '100vh',
         bgcolor: theme.palette.background.default,
         px: { xs: 2, md: 3 },
-        py: { xs: 3.5, md: 4.5 },
+        py: { xs: 3, md: 3.8 },
       }}
     >
-      <Box sx={{ maxWidth: 1180, mx: 'auto' }}>
+      <Box sx={{ maxWidth: 1120, mx: 'auto' }}>
         <MotionBox
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
           sx={{
-            borderRadius: 3,
+            borderRadius: 2.5,
             border: `1px solid ${isDark ? '#23344d' : '#e3eaf3'}`,
             bgcolor: theme.palette.background.paper,
             boxShadow: isDark
               ? '0 16px 28px rgba(3, 9, 20, 0.52)'
               : '0 16px 28px rgba(17, 24, 39, 0.08)',
-            p: { xs: 2, md: 3.2 },
-            mb: 4,
+            p: { xs: 1.8, md: 2.4 },
+            mb: 3,
           }}
         >
-          <Stack direction="row" spacing={1.2} alignItems="center" mb={1.6}>
+          <Stack direction="row" spacing={1} alignItems="center" mb={1.1}>
             <Chip
               label="TODAY'S PLAN"
               sx={{
@@ -202,28 +202,29 @@ function UserWorkouts() {
                 color: '#65a30d',
                 fontWeight: 800,
                 letterSpacing: 0.2,
+                height: 28,
               }}
             />
             <Stack direction="row" spacing={0.5} alignItems="center">
-              <CalendarMonthRoundedIcon sx={{ color: theme.palette.text.secondary, fontSize: 19 }} />
-              <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 500 }}>
+              <CalendarMonthRoundedIcon sx={{ color: theme.palette.text.secondary, fontSize: 17 }} />
+              <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 500, fontSize: '0.92rem' }}>
                 {TODAY_PLAN.dateLabel}
               </Typography>
             </Stack>
           </Stack>
 
-          <Typography sx={{ fontSize: { xs: '2rem', md: '3rem' }, fontWeight: 900, color: theme.palette.text.primary, mb: 1 }}>
+          <Typography sx={{ fontSize: { xs: '1.55rem', md: '2rem' }, fontWeight: 850, color: theme.palette.text.primary, mb: 0.8 }}>
             {TODAY_PLAN.title}
           </Typography>
 
-          <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '1.1rem', md: '1.9rem' }, maxWidth: 980, mb: 2.2 }}>
+          <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '0.96rem', md: '1.03rem' }, maxWidth: 780, mb: 1.8, lineHeight: 1.6 }}>
             {TODAY_PLAN.description}
           </Typography>
 
-          <Stack direction="row" spacing={1.1} flexWrap="wrap" useFlexGap sx={{ mb: 2.3 }}>
-            <Chip icon={<AccessTimeRoundedIcon />} label={TODAY_PLAN.duration} sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
-            <Chip icon={<FitnessCenterRoundedIcon />} label={TODAY_PLAN.intensity} sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
-            <Chip icon={<EmojiEventsRoundedIcon />} label={TODAY_PLAN.xp} sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.8 }}>
+            <Chip icon={<AccessTimeRoundedIcon sx={{ fontSize: 17 }} />} label={TODAY_PLAN.duration} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
+            <Chip icon={<FitnessCenterRoundedIcon sx={{ fontSize: 16 }} />} label={TODAY_PLAN.intensity} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
+            <Chip icon={<EmojiEventsRoundedIcon sx={{ fontSize: 17 }} />} label={TODAY_PLAN.xp} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
           </Stack>
 
           <Button
@@ -231,10 +232,10 @@ function UserWorkouts() {
             startIcon={<PlayArrowRoundedIcon />}
             sx={{
               borderRadius: 2.2,
-              px: 3,
-              py: 1,
+              px: 2.4,
+              py: 0.8,
               fontWeight: 800,
-              fontSize: '1rem',
+              fontSize: '0.92rem',
               textTransform: 'none',
               background: 'linear-gradient(180deg, #0f1f3b 0%, #0b1730 100%)',
               boxShadow: '0 8px 20px rgba(11, 23, 48, 0.4)',
@@ -247,11 +248,11 @@ function UserWorkouts() {
           </Button>
         </MotionBox>
 
-        <Stack spacing={1} mb={2}>
-          <Typography sx={{ fontSize: { xs: '1.3rem', md: '2.5rem' }, fontWeight: 900, color: theme.palette.text.primary }}>
+        <Stack spacing={0.6} mb={1.4}>
+          <Typography sx={{ fontSize: { xs: '1.18rem', md: '1.45rem' }, fontWeight: 850, color: theme.palette.text.primary }}>
             Upcoming Exercises
           </Typography>
-          <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '1rem', md: '1.5rem' } }}>
+          <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '0.92rem', md: '0.98rem' } }}>
             Coach-assigned plans that are ready for your next session.
           </Typography>
         </Stack>
@@ -260,8 +261,8 @@ function UserWorkouts() {
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-            gap: 2,
-            mb: 3.8,
+            gap: 1.6,
+            mb: 2.6,
           }}
         >
           {upcomingExercises.map((workout, index) => (
@@ -269,11 +270,11 @@ function UserWorkouts() {
           ))}
         </Box>
 
-        <Stack spacing={1} mb={2}>
-          <Typography sx={{ fontSize: { xs: '1.3rem', md: '2.5rem' }, fontWeight: 900, color: theme.palette.text.primary }}>
+        <Stack spacing={0.6} mb={1.4}>
+          <Typography sx={{ fontSize: { xs: '1.18rem', md: '1.45rem' }, fontWeight: 850, color: theme.palette.text.primary }}>
             Previous Exercises
           </Typography>
-          <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '1rem', md: '1.5rem' } }}>
+          <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '0.92rem', md: '0.98rem' } }}>
             Completed workouts are marked with a Done badge.
           </Typography>
         </Stack>
@@ -282,7 +283,7 @@ function UserWorkouts() {
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' },
-            gap: 2,
+            gap: 1.6,
           }}
         >
           {previousExercises.map((workout, index) => (
