@@ -31,6 +31,7 @@ const EXERCISE_LIBRARY = [
     id: 'w1',
     title: 'Upper Body Power',
     muscles: 'Chest, Back, Shoulders',
+    workoutDate: 'Mar 14, 2026',
     duration: '60 min',
     level: 'Advanced',
     rating: 4.8,
@@ -41,6 +42,7 @@ const EXERCISE_LIBRARY = [
     id: 'w2',
     title: 'Lower Body Hypertrophy',
     muscles: 'Quads, Hamstrings, Glutes',
+    workoutDate: 'Mar 05, 2026',
     duration: '75 min',
     level: 'Intermediate',
     rating: 4.9,
@@ -51,6 +53,7 @@ const EXERCISE_LIBRARY = [
     id: 'w3',
     title: 'Core and Cardio Blast',
     muscles: 'Abs, Obliques, Heart',
+    workoutDate: 'Mar 03, 2026',
     duration: '45 min',
     level: 'Beginner',
     rating: 4.6,
@@ -61,6 +64,7 @@ const EXERCISE_LIBRARY = [
     id: 'w4',
     title: 'Active Recovery Yoga',
     muscles: 'Full Body',
+    workoutDate: 'Mar 16, 2026',
     duration: '30 min',
     level: 'All Levels',
     rating: 4.7,
@@ -95,7 +99,7 @@ function ExerciseCard({ workout, index }) {
       <Box sx={{ height: 108, background: workout.gradient, position: 'relative' }}>
         {workout.done && (
           <Chip
-            icon={<GradeRoundedIcon sx={{ fontSize: 15 }} />}
+            icon={<GradeRoundedIcon sx={{ fontSize: 15, color: isDark ? '#ff9f1c !important' : undefined }} />}
             label="Done"
             size="small"
             sx={{
@@ -103,8 +107,9 @@ function ExerciseCard({ workout, index }) {
               right: 10,
               top: 10,
               fontWeight: 700,
-              color: '#047857',
-              bgcolor: '#dcfce7',
+              color: isDark ? '#ffd6a0' : '#047857',
+              bgcolor: isDark ? '#3a2200' : '#dcfce7',
+              border: isDark ? '1px solid #7a3e00' : 'none',
             }}
           />
         )}
@@ -122,13 +127,23 @@ function ExerciseCard({ workout, index }) {
               size="small"
               sx={{
                 fontWeight: 700,
-                bgcolor: isDark ? '#1f2937' : '#fff7e6',
-                color: '#f59e0b',
+                bgcolor: isDark ? '#3a2200' : '#fff7e6',
+                color: isDark ? '#ff9f1c' : '#f59e0b',
+                border: isDark ? '1px solid #7a3e00' : 'none',
               }}
             />
           </Stack>
           <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '0.94rem', md: '1rem' } }}>
             {workout.muscles}
+          </Typography>
+          <Typography
+            sx={{
+              color: theme.palette.text.secondary,
+              fontSize: { xs: '0.84rem', md: '0.88rem' },
+              fontWeight: 600,
+            }}
+          >
+            {workout.done ? 'Completed on' : 'Scheduled for'}: {workout.workoutDate}
           </Typography>
         </Stack>
 
