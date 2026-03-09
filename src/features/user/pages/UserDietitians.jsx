@@ -360,20 +360,17 @@ function UserDietitians() {
         open={isBookingOpen}
         onClose={handleCloseBooking}
         fullWidth
-        maxWidth="md"
+        maxWidth="sm"
         PaperProps={{
           component: 'form',
           onSubmit: handleSubmitBooking,
-          sx: {
-            borderRadius: 4,
-            maxHeight: '88vh',
-          },
+          sx: { borderRadius: 3 },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '2rem' }}>
+        <DialogTitle sx={{ fontWeight: 800 }}>
           Book Appointment {selectedDietitian ? `with ${selectedDietitian.name}` : ''}
         </DialogTitle>
-        <DialogContent sx={{ pt: 1, pb: 0.5, overflowY: 'auto' }}>
+        <DialogContent sx={{ pt: 1, pb: 0.5 }}>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <TextField
               label="Coach"
