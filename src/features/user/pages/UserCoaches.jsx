@@ -549,7 +549,19 @@ function UserCoaches() {
                 <Stack spacing={1.2} mb={2.2}>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <StarRoundedIcon sx={{ color: '#f59e0b', fontSize: 18 }} />
-                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
+                    <Typography
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate(`${ROUTES.USER_COACH_FEEDBACKS}?coach=${encodeURIComponent(coach.name)}`);
+                      }}
+                      sx={{
+                        color: theme.palette.text.secondary,
+                        fontSize: '0.93rem',
+                        cursor: 'pointer',
+                        textDecoration: 'none',
+                        '&:hover': { textDecoration: 'underline', color: theme.palette.primary.main },
+                      }}
+                    >
                       Rating {coachStat.average.toFixed(1)}
                       {coachStat.count > 0 ? ` (${coachStat.count})` : ''}
                     </Typography>
