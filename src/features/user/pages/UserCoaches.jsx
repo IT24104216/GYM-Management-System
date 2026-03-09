@@ -88,7 +88,7 @@ const BOOKINGS = [
   {
     id: 'b1',
     coachName: 'Emma Carter',
-    date: '2026-03-15',
+    date: '2026-03-08',
     time: '07:30 AM',
     fromTime: '07:30',
     toTime: '08:30',
