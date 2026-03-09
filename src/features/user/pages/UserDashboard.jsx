@@ -63,7 +63,7 @@ const SERVICES = [
     image:
       'https://images.unsplash.com/photo-1758875569414-120ebc62ada3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwZXJzb25hbCUyMHRyYWluaW5nJTIwc2Vzc2lvbiUyMGd5bXxlbnwxfHx8fDE3NzI5MTkyNjl8MA&ixlib=rb-4.1.0&q=80&w=1080',
     icon: TrackChangesOutlinedIcon,
-    link: ROUTES.USER_DASHBOARD,
+    link: ROUTES.USER_WORKOUTS,
   },
   {
     title: 'Progress Tracking',
