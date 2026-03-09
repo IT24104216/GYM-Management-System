@@ -25,7 +25,6 @@ import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -608,28 +607,15 @@ function UserCoaches() {
                   </Stack>
                 </Stack>
 
-                <Stack direction="row" spacing={1.2}>
-                  <Button
-                    variant="contained"
-                    startIcon={<CalendarMonthRoundedIcon />}
-                    onClick={() => navigate(ROUTES.USER_WORKOUTS)}
-                    sx={{
-                      borderRadius: 2,
-                      px: 2.2,
-                      fontWeight: 700,
-                      background: 'linear-gradient(180deg, #2b91ff 0%, #0f79ed 100%)',
-                      '&:hover': { background: 'linear-gradient(180deg, #2386ef 0%, #0a6cd4 100%)' },
-                    }}
-                  >
-                    Book Session
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate(ROUTES.USER_PROFILE)}
-                    sx={{ borderRadius: 2, fontWeight: 700 }}
-                  >
-                    View Profile
-                  </Button>
+                <Stack spacing={0.8}>
+                  <Typography sx={{ color: theme.palette.text.primary, fontSize: '0.92rem' }}>
+                    <Box component="span" sx={{ fontWeight: 700 }}>Qualification:</Box>{' '}
+                    {coach.qualification}
+                  </Typography>
+                  <Typography sx={{ color: theme.palette.text.primary, fontSize: '0.92rem' }}>
+                    <Box component="span" sx={{ fontWeight: 700 }}>Certificates:</Box>{' '}
+                    {coach.certificates}
+                  </Typography>
                 </Stack>
               </CardContent>
             </MotionCard>
