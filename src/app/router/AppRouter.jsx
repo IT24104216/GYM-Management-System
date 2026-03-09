@@ -16,6 +16,7 @@ import UserDashboard from '@/features/user/pages/UserDashboard';
 import UserCoaches from '@/features/user/pages/UserCoaches';
 import UserDietitians from '@/features/user/pages/UserDietitians';
 import UserCoachFeedbacks from '@/features/user/pages/UserCoachFeedbacks';
+import UserDietitianFeedbacks from '@/features/user/pages/UserDietitianFeedbacks';
 import UserWorkouts from '@/features/user/pages/UserWorkouts';
 import UserProfile from '@/features/user/pages/UserProfile';
 
@@ -53,6 +54,7 @@ function AppRouter() {
           <Route path={ROUTES.USER_COACHES} element={<UserCoaches />} />
           <Route path={ROUTES.USER_DIETITIANS} element={<UserDietitians />} />
           <Route path={ROUTES.USER_COACH_FEEDBACKS} element={<UserCoachFeedbacks />} />
+          <Route path={ROUTES.USER_DIETITIAN_FEEDBACKS} element={<UserDietitianFeedbacks />} />
           <Route path={ROUTES.USER_WORKOUTS} element={<UserWorkouts />} />
           <Route path={ROUTES.USER_PROFILE} element={<UserProfile />} />
         </Route>
