@@ -55,7 +55,7 @@ const SERVICES = [
     image:
       'https://images.unsplash.com/photo-1740560052706-fd75ee856b44?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxudXRyaXRpb24lMjBkaWV0aWNpYW4lMjBjb25zdWx0YXRpb258ZW58MXx8fHwxNzcyOTE5MjY5fDA&ixlib=rb-4.1.0&q=80&w=1080',
     icon: RestaurantOutlinedIcon,
-    link: ROUTES.USER_PROFILE,
+    link: ROUTES.USER_DIETITIANS,
   },
   {
     title: 'Personal Training',
