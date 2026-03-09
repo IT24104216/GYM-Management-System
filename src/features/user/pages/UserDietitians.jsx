@@ -89,7 +89,7 @@ const BOOKINGS = [
     fromTime: '09:00',
     toTime: '10:00',
     appointmentType: 'In-person',
-    goal: 'Weight Reducing',
+    goal: 'Meal Planning',
     status: 'upcoming',
     progressStatus: 'confirmed',
   },
@@ -100,7 +100,7 @@ const BOOKINGS = [
     fromTime: '16:00',
     toTime: '17:00',
     appointmentType: 'Online',
-    goal: 'Weight Gaining',
+    goal: 'Health Consultation',
     status: 'upcoming',
     progressStatus: 'pending',
   },
@@ -111,7 +111,7 @@ const BOOKINGS = [
     fromTime: '10:00',
     toTime: '11:00',
     appointmentType: 'In-person',
-    goal: 'Weight Reducing',
+    goal: 'Meal Planning',
     status: 'past',
     progressStatus: 'completed',
   },
@@ -122,7 +122,7 @@ const BOOKINGS = [
     fromTime: '17:00',
     toTime: '18:00',
     appointmentType: 'Online',
-    goal: 'Weight Gaining',
+    goal: 'Health Consultation',
     status: 'past',
     progressStatus: 'cancelled',
   },
@@ -279,7 +279,7 @@ function UserDietitians() {
       fromTime: booking.fromTime || '',
       toTime: booking.toTime || '',
       appointmentType: booking.appointmentType?.toLowerCase() === 'in-person' ? 'inperson' : 'online',
-      goal: booking.goal?.toLowerCase().includes('reducing') ? 'weight-reducing' : 'weight-gaining',
+      goal: booking.goal?.toLowerCase().includes('health') ? 'health-consultation' : 'meal-planning',
       description: booking.description || '',
       medicalConditions: booking.medicalConditions || '',
     });
@@ -336,7 +336,7 @@ function UserDietitians() {
       fromTime: bookingForm.fromTime,
       toTime: bookingForm.toTime,
       appointmentType: bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online',
-      goal: bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing',
+      goal: bookingForm.goal === 'health-consultation' ? 'Health Consultation' : 'Meal Planning',
       description: bookingForm.description,
       medicalConditions: bookingForm.medicalConditions,
       status: 'upcoming',
@@ -844,8 +844,8 @@ function UserDietitians() {
                 value={bookingForm.goal}
                 onChange={handleFieldChange('goal')}
               >
-                <MenuItem value="weight-gaining">Weight Gaining</MenuItem>
-                <MenuItem value="weight-reducing">Weight Reducing</MenuItem>
+                <MenuItem value="meal-planning">Meal Planning</MenuItem>
+                <MenuItem value="health-consultation">Health Consultation</MenuItem>
               </Select>
             </FormControl>
 
