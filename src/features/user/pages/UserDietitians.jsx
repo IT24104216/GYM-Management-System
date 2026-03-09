@@ -26,7 +26,9 @@ import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import RestaurantMenuRoundedIcon from '@mui/icons-material/RestaurantMenuRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
 
@@ -128,7 +130,16 @@ const BOOKINGS = [
   },
 ];
 
+const buildInitialDietitianStats = () => {
+  const stats = {};
+  DIETITIANS.forEach((dietitian) => {
+    stats[dietitian.id] = { average: dietitian.rating, count: 0 };
+  });
+  return stats;
+};
+
 const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
+const DIETITIAN_FEEDBACK_STORAGE_KEY = 'gympro_dietitian_feedbacks';
 
 const BOOKING_PROGRESS_META = {
   pending: { label: 'Pending', step: 0 },
@@ -219,6 +230,7 @@ const isBookingCompletedByTime = (booking) => {
 };
 
 function UserDietitians() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -227,6 +239,7 @@ function UserDietitians() {
   const [selectedDietitian, setSelectedDietitian] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
   const [bookings, setBookings] = useState(BOOKINGS);
+  const [dietitianStats, setDietitianStats] = useState(buildInitialDietitianStats);
   const [editingBookingId, setEditingBookingId] = useState(null);
   const [availabilityError, setAvailabilityError] = useState('');
   const [toastState, setToastState] = useState({ open: false, message: '' });
@@ -385,6 +398,50 @@ function UserDietitians() {
       return;
     }
 
+    const newFeedback = {
+      id: `df-${Date.now()}`,
+      user: user?.name || 'Member',
+      authorEmail: user?.email || '',
+      rating: feedbackForm.rating,
+      comment: feedbackForm.comment,
+      date: getTodayDate(),
+    };
+
+    const rawFeedbacks = localStorage.getItem(DIETITIAN_FEEDBACK_STORAGE_KEY);
+    let storedFeedbacks = {};
+    try {
+      storedFeedbacks = rawFeedbacks ? JSON.parse(rawFeedbacks) : {};
+    } catch {
+      storedFeedbacks = {};
+    }
+
+    const dietitianKey = feedbackTarget?.dietitianName || 'Dietitian';
+    const dietitianFeedbacks = Array.isArray(storedFeedbacks[dietitianKey]) ? storedFeedbacks[dietitianKey] : [];
+    localStorage.setItem(
+      DIETITIAN_FEEDBACK_STORAGE_KEY,
+      JSON.stringify({
+        ...storedFeedbacks,
+        [dietitianKey]: [newFeedback, ...dietitianFeedbacks],
+      }),
+    );
+
+    const targetDietitian = DIETITIANS.find((item) => item.name === feedbackTarget?.dietitianName);
+    if (targetDietitian) {
+      setDietitianStats((prev) => {
+        const current = prev[targetDietitian.id] || { average: targetDietitian.rating, count: 0 };
+        const nextCount = current.count + 1;
+        const nextAverage = ((current.average * current.count) + feedbackForm.rating) / nextCount;
+
+        return {
+          ...prev,
+          [targetDietitian.id]: {
+            average: Number(nextAverage.toFixed(1)),
+            count: nextCount,
+          },
+        };
+      });
+    }
+
     handleCloseFeedback();
     setToastState({ open: true, message: 'Feedback submitted successfully' });
   };
@@ -428,7 +485,10 @@ function UserDietitians() {
             gap: 3,
           }}
         >
-          {DIETITIANS.map((dietitian, index) => (
+          {DIETITIANS.map((dietitian, index) => {
+            const dietitianStat = dietitianStats[dietitian.id] || { average: dietitian.rating, count: 0 };
+
+            return (
             <MotionCard
               key={dietitian.id}
               initial={{ opacity: 0, y: 22 }}
@@ -481,8 +541,21 @@ function UserDietitians() {
                 <Stack spacing={1.2} mb={2.2}>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <StarRoundedIcon sx={{ color: '#f59e0b', fontSize: 18 }} />
-                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
-                      Rating {dietitian.rating}
+                    <Typography
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate(`${ROUTES.USER_DIETITIAN_FEEDBACKS}?dietitian=${encodeURIComponent(dietitian.name)}`);
+                      }}
+                      sx={{
+                        color: theme.palette.text.secondary,
+                        fontSize: '0.93rem',
+                        cursor: 'pointer',
+                        textDecoration: 'none',
+                        '&:hover': { textDecoration: 'underline', color: theme.palette.primary.main },
+                      }}
+                    >
+                      Rating {dietitianStat.average.toFixed(1)}
+                      {dietitianStat.count > 0 ? ` (${dietitianStat.count})` : ''}
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -511,7 +584,8 @@ function UserDietitians() {
                 </Stack>
               </CardContent>
             </MotionCard>
-          ))}
+            );
+          })}
         </Box>
 
         <Box sx={{ mt: 5.5 }}>
