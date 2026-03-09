@@ -96,6 +96,8 @@ const BOOKINGS = [
     goal: 'Weight Reducing',
     status: 'upcoming',
     progressStatus: 'confirmed',
+    ratingAverage: 4.7,
+    feedbackCount: 1,
   },
   {
     id: 'b2',
@@ -108,6 +110,8 @@ const BOOKINGS = [
     goal: 'Weight Gaining',
     status: 'upcoming',
     progressStatus: 'pending',
+    ratingAverage: 4.8,
+    feedbackCount: 2,
   },
   {
     id: 'b3',
@@ -120,6 +124,8 @@ const BOOKINGS = [
     goal: 'Weight Reducing',
     status: 'past',
     progressStatus: 'completed',
+    ratingAverage: 4.6,
+    feedbackCount: 1,
   },
   {
     id: 'b4',
@@ -132,6 +138,8 @@ const BOOKINGS = [
     goal: 'Weight Gaining',
     status: 'past',
     progressStatus: 'cancelled',
+    ratingAverage: 4.9,
+    feedbackCount: 3,
   },
 ];
 
@@ -420,6 +428,21 @@ function UserCoaches() {
       comment: feedbackForm.comment,
     });
 
+    setBookings((prev) => prev.map((item) => {
+      if (item.id !== feedbackTarget?.id) return item;
+
+      const oldCount = item.feedbackCount || 0;
+      const oldAverage = item.ratingAverage || 0;
+      const nextCount = oldCount + 1;
+      const nextAverage = ((oldAverage * oldCount) + feedbackForm.rating) / nextCount;
+
+      return {
+        ...item,
+        feedbackCount: nextCount,
+        ratingAverage: Number(nextAverage.toFixed(1)),
+      };
+    }));
+
     handleCloseFeedback();
     setToastState({ open: true, message: 'Feedback submitted successfully' });
   };
@@ -643,6 +666,8 @@ function UserCoaches() {
                       <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
                         <Chip label={booking.appointmentType} size="small" />
                         <Chip label={booking.goal} size="small" />
+                        <Chip label={`Rating ${booking.ratingAverage?.toFixed(1) || '0.0'}`} size="small" />
+                        <Chip label={`Feedback ${booking.feedbackCount || 0}`} size="small" />
                       </Stack>
                     </Stack>
 
