@@ -26,6 +26,17 @@ const TODAY_PLAN = {
   xp: '500 XP',
 };
 
+const parseWorkoutDate = (dateValue) => {
+  const parsed = new Date(dateValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const sameDay = (leftDate, rightDate) => (
+  leftDate.getFullYear() === rightDate.getFullYear()
+  && leftDate.getMonth() === rightDate.getMonth()
+  && leftDate.getDate() === rightDate.getDate()
+);
+
 const EXERCISE_LIBRARY = [
   {
     id: 'w1',
@@ -73,7 +84,6 @@ const EXERCISE_LIBRARY = [
   },
 ];
 
-const upcomingExercises = EXERCISE_LIBRARY.filter((item) => !item.done);
 const previousExercises = EXERCISE_LIBRARY.filter((item) => item.done);
 
 function ExerciseCard({ workout, index }) {
@@ -183,6 +193,31 @@ function ExerciseCard({ workout, index }) {
 function UserWorkouts() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const today = new Date();
+
+  const upcomingExercises = EXERCISE_LIBRARY
+    .filter((item) => !item.done)
+    .map((item) => {
+      const parsed = parseWorkoutDate(item.workoutDate);
+      return {
+        ...item,
+        workoutDateObject: parsed,
+        workoutDateValue: parsed ? parsed.getTime() : Number.POSITIVE_INFINITY,
+      };
+    })
+    .sort((a, b) => a.workoutDateValue - b.workoutDateValue);
+
+  const todayWorkout = upcomingExercises.find((item) => (
+    item.workoutDateObject && sameDay(item.workoutDateObject, today)
+  ));
+
+  const fallbackWorkout = upcomingExercises[0] || null;
+  const activeTopWorkout = todayWorkout || fallbackWorkout;
+  const topDateLabel = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  const visibleUpcomingExercises = todayWorkout
+    ? upcomingExercises.filter((item) => item.id !== todayWorkout.id)
+    : upcomingExercises;
 
   return (
     <Box
@@ -223,44 +258,50 @@ function UserWorkouts() {
             <Stack direction="row" spacing={0.5} alignItems="center">
               <CalendarMonthRoundedIcon sx={{ color: theme.palette.text.secondary, fontSize: 17 }} />
               <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 500, fontSize: '0.92rem' }}>
-                {TODAY_PLAN.dateLabel}
+                {topDateLabel}
               </Typography>
             </Stack>
           </Stack>
 
           <Typography sx={{ fontSize: { xs: '1.55rem', md: '2rem' }, fontWeight: 850, color: theme.palette.text.primary, mb: 0.8 }}>
-            {TODAY_PLAN.title}
+            {todayWorkout ? todayWorkout.title : 'No Workouts for Today'}
           </Typography>
 
           <Typography sx={{ color: theme.palette.text.secondary, fontSize: { xs: '0.96rem', md: '1.03rem' }, maxWidth: 780, mb: 1.8, lineHeight: 1.6 }}>
-            {TODAY_PLAN.description}
+            {todayWorkout
+              ? `Your coach assigned this workout for today. Target muscles: ${todayWorkout.muscles}.`
+              : 'No workouts are scheduled for today. Please check upcoming exercises.'}
           </Typography>
 
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.8 }}>
-            <Chip icon={<AccessTimeRoundedIcon sx={{ fontSize: 17 }} />} label={TODAY_PLAN.duration} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
-            <Chip icon={<FitnessCenterRoundedIcon sx={{ fontSize: 16 }} />} label={TODAY_PLAN.intensity} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
-            <Chip icon={<EmojiEventsRoundedIcon sx={{ fontSize: 17 }} />} label={TODAY_PLAN.xp} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
-          </Stack>
+          {todayWorkout && (
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.8 }}>
+              <Chip icon={<AccessTimeRoundedIcon sx={{ fontSize: 17 }} />} label={todayWorkout.duration} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
+              <Chip icon={<FitnessCenterRoundedIcon sx={{ fontSize: 16 }} />} label={todayWorkout.level} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
+              <Chip icon={<EmojiEventsRoundedIcon sx={{ fontSize: 17 }} />} label={`Coach Assigned • ${todayWorkout.workoutDate}`} size="small" sx={{ borderRadius: 2, bgcolor: isDark ? '#1c2a3f' : '#f1f5f9', fontWeight: 600 }} />
+            </Stack>
+          )}
 
-          <Button
-            variant="contained"
-            startIcon={<PlayArrowRoundedIcon />}
-            sx={{
-              borderRadius: 2.2,
-              px: 2.4,
-              py: 0.8,
-              fontWeight: 800,
-              fontSize: '0.92rem',
-              textTransform: 'none',
-              background: 'linear-gradient(180deg, #0f1f3b 0%, #0b1730 100%)',
-              boxShadow: '0 8px 20px rgba(11, 23, 48, 0.4)',
-              '&:hover': {
-                background: 'linear-gradient(180deg, #0f2954 0%, #0b1f40 100%)',
-              },
-            }}
-          >
-            Start Workout
-          </Button>
+          {todayWorkout && (
+            <Button
+              variant="contained"
+              startIcon={<PlayArrowRoundedIcon />}
+              sx={{
+                borderRadius: 2.2,
+                px: 2.4,
+                py: 0.8,
+                fontWeight: 800,
+                fontSize: '0.92rem',
+                textTransform: 'none',
+                background: 'linear-gradient(180deg, #0f1f3b 0%, #0b1730 100%)',
+                boxShadow: '0 8px 20px rgba(11, 23, 48, 0.4)',
+                '&:hover': {
+                  background: 'linear-gradient(180deg, #0f2954 0%, #0b1f40 100%)',
+                },
+              }}
+            >
+              Start Workout
+            </Button>
+          )}
         </MotionBox>
 
         <Stack spacing={0.6} mb={1.4}>
@@ -280,7 +321,7 @@ function UserWorkouts() {
             mb: 2.6,
           }}
         >
-          {upcomingExercises.map((workout, index) => (
+          {visibleUpcomingExercises.map((workout, index) => (
             <ExerciseCard key={workout.id} workout={workout} index={index} />
           ))}
         </Box>
