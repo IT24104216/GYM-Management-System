@@ -25,6 +25,7 @@ import UserProfile from '@/features/user/pages/UserProfile';
 // Admin pages
 import AdminDashboard from '@/features/admin/pages/AdminDashboard';
 import AdminUsers from '@/features/admin/pages/AdminUsers';
+import AdminReports from '@/features/admin/pages/AdminReports';
 import AdminSettings from '@/features/admin/pages/AdminSettings';
 
 // Dietitian pages
@@ -67,6 +68,7 @@ function AppRouter() {
         <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN]} />}>
           <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboard />} />
           <Route path={ROUTES.ADMIN_USERS} element={<AdminUsers />} />
+          <Route path={ROUTES.ADMIN_REPORTS} element={<AdminReports />} />
           <Route path={ROUTES.ADMIN_SETTINGS} element={<AdminSettings />} />
         </Route>
 
