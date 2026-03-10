@@ -86,6 +86,68 @@ const buildSmoothPath = (points) => {
   return path;
 };
 
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const findNearestOnSegment = (cursor, start, end) => {
+  const segmentX = end.x - start.x;
+  const segmentY = end.y - start.y;
+  const segmentLengthSquared = (segmentX * segmentX) + (segmentY * segmentY);
+
+  if (segmentLengthSquared === 0) {
+    const dx = cursor.x - start.x;
+    const dy = cursor.y - start.y;
+    return {
+      x: start.x,
+      y: start.y,
+      t: 0,
+      distance: Math.hypot(dx, dy),
+    };
+  }
+
+  const t = clamp((((cursor.x - start.x) * segmentX) + ((cursor.y - start.y) * segmentY)) / segmentLengthSquared, 0, 1);
+  const x = start.x + (t * segmentX);
+  const y = start.y + (t * segmentY);
+  const distance = Math.hypot(cursor.x - x, cursor.y - y);
+
+  return { x, y, t, distance };
+};
+
+const findNearestChartHover = (cursor, points, threshold) => {
+  if (!points.length) return null;
+  if (points.length === 1) {
+    const onlyPoint = points[0];
+    const distance = Math.hypot(cursor.x - onlyPoint.x, cursor.y - onlyPoint.y);
+    return distance <= threshold
+      ? {
+        x: onlyPoint.x,
+        y: onlyPoint.y,
+        index: 0,
+        distance,
+      }
+      : null;
+  }
+
+  let best = null;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    const nearest = findNearestOnSegment(cursor, start, end);
+
+    if (!best || nearest.distance < best.distance) {
+      const snappedIndex = nearest.t < 0.5 ? index : index + 1;
+      best = {
+        x: nearest.x,
+        y: nearest.y,
+        index: snappedIndex,
+        distance: nearest.distance,
+      };
+    }
+  }
+
+  return best && best.distance <= threshold ? best : null;
+};
+
 const createMockWeightHistory = () => {
   const today = new Date();
   const offsets = [-8, -7, -6, -5, -4, -3, -2, -1, 0];
@@ -184,7 +246,7 @@ function UserProgress() {
   });
   const uploadInputRef = useRef(null);
   const chartSvgRef = useRef(null);
-  const [hoveredChartIndex, setHoveredChartIndex] = useState(null);
+  const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
   const [weightHistoryByDate, setWeightHistoryByDate] = useState(() => createMockWeightHistory());
   const [measurementsByDate, setMeasurementsByDate] = useState(() => ({
     [twoDaysAgoIso]: { chest: 41.8, waist: 33.5, arms: 15.2, thighs: 24.1 },
@@ -250,8 +312,8 @@ function UserProgress() {
     };
   }, [weightHistoryByDate]);
 
-  const hoveredPoint = hoveredChartIndex !== null ? chartData.points[hoveredChartIndex] : null;
-  const hoveredItem = hoveredChartIndex !== null ? chartData.weightHistory[hoveredChartIndex] : null;
+  const hoveredPoint = hoveredChartPoint;
+  const hoveredItem = hoveredChartPoint ? chartData.weightHistory[hoveredChartPoint.index] : null;
   const tooltipX = hoveredPoint ? Math.min(Math.max(hoveredPoint.x + 14, 86), 508) : 0;
   const tooltipY = hoveredPoint ? Math.min(Math.max(hoveredPoint.y - 80, 34), 176) : 0;
 
@@ -429,26 +491,25 @@ function UserProgress() {
   const handleChartMouseMove = (event) => {
     if (!chartData.points.length) return;
 
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (!rect.width) return;
+    const svgElement = chartSvgRef.current;
+    if (!svgElement || !svgElement.getScreenCTM()) return;
 
-    const pointerX = ((event.clientX - rect.left) / rect.width) * 680;
-    let nearestIndex = 0;
-    let nearestDistance = Infinity;
+    const svgPoint = svgElement.createSVGPoint();
+    svgPoint.x = event.clientX;
+    svgPoint.y = event.clientY;
 
-    chartData.points.forEach((point, index) => {
-      const distance = Math.abs(point.x - pointerX);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestIndex = index;
-      }
-    });
+    const localPoint = svgPoint.matrixTransform(svgElement.getScreenCTM().inverse());
+    const hoverHit = findNearestChartHover(
+      { x: localPoint.x, y: localPoint.y },
+      chartData.points,
+      26,
+    );
 
-    setHoveredChartIndex(nearestIndex);
+    setHoveredChartPoint(hoverHit);
   };
 
   const handleChartMouseLeave = () => {
-    setHoveredChartIndex(null);
+    setHoveredChartPoint(null);
   };
 
   return (
