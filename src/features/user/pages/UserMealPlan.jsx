@@ -134,6 +134,27 @@ function UserMealPlan() {
 
   const totalConsumed = useMemo(() => meals.reduce((sum, meal) => sum + meal.total, 0), []);
   const maxCals = useMemo(() => Math.max(...weeklyCals.map((item) => item.cals)), []);
+  const yAxisTicks = useMemo(() => [650, 1300, 1950, 2600], []);
+  const barChartData = useMemo(() => {
+    const chartTop = 28;
+    const chartBottom = 180;
+    const barWidth = 52;
+    const gap = 42;
+
+    return weeklyCals.map((item, index) => {
+      const x = 84 + (index * (barWidth + gap));
+      const barHeight = Math.max((item.cals / maxCals) * (chartBottom - chartTop), 8);
+      const y = chartBottom - barHeight;
+      return {
+        ...item,
+        index,
+        x,
+        y,
+        barWidth,
+        barHeight,
+      };
+    });
+  }, [maxCals]);
   const pieSegments = useMemo(() => {
     const total = macroData.reduce((sum, item) => sum + item.value, 0);
     let cumulativeAngle = 0;
@@ -296,25 +317,30 @@ function UserMealPlan() {
                   <line x1="56" y1="104" x2="736" y2="104" stroke="#e2e8f0" strokeDasharray="3 4" />
                   <line x1="56" y1="180" x2="736" y2="180" stroke="#e2e8f0" strokeDasharray="3 4" />
 
-                  {weeklyCals.map((item, index) => {
-                    const barWidth = 52;
-                    const gap = 42;
-                    const x = 84 + (index * (barWidth + gap));
-                    const h = Math.max((item.cals / maxCals) * 150, 8);
-                    const y = 180 - h;
+                  {yAxisTicks.map((tickValue) => {
+                    const y = 180 - ((tickValue / maxCals) * (180 - 28));
                     return (
-                      <g key={`${item.day}-${index}`}>
+                      <text key={tickValue} x="48" y={y + 5} textAnchor="end" fill="#94a3b8" fontSize="14">
+                        {tickValue}
+                      </text>
+                    );
+                  })}
+                  <text x="48" y="209" textAnchor="end" fill="#94a3b8" fontSize="14">0</text>
+
+                  {barChartData.map((item) => {
+                    return (
+                      <g key={`${item.day}-${item.index}`}>
                         <motion.rect
-                          x={x}
-                          y={y}
-                          width={barWidth}
-                          height={h}
+                          x={item.x}
+                          y={item.y}
+                          width={item.barWidth}
+                          height={item.barHeight}
                           rx="7"
-                          fill={hoveredBar === index ? '#65a30d' : '#84cc16'}
+                          fill={hoveredBar === item.index ? '#65a30d' : '#84cc16'}
                           initial={{ scaleY: 0 }}
                           animate={{ scaleY: 1 }}
-                          transition={{ duration: 0.55, delay: 0.08 + (index * 0.07), ease: 'easeOut' }}
-                          onHoverStart={() => setHoveredBar(index)}
+                          transition={{ duration: 0.55, delay: 0.08 + (item.index * 0.07), ease: 'easeOut' }}
+                          onHoverStart={() => setHoveredBar(item.index)}
                           onHoverEnd={() => setHoveredBar(null)}
                           style={{
                             cursor: 'pointer',
@@ -322,10 +348,43 @@ function UserMealPlan() {
                             transformOrigin: 'center bottom',
                           }}
                         />
-                        <text x={x + (barWidth / 2)} y="204" textAnchor="middle" fill="#94a3b8" fontSize="14">{item.day}</text>
+                        <text x={item.x + (item.barWidth / 2)} y="204" textAnchor="middle" fill="#94a3b8" fontSize="14">{item.day}</text>
                       </g>
                     );
                   })}
+
+                  {hoveredBar !== null && barChartData[hoveredBar] && (
+                    <g>
+                      <rect
+                        x={Math.min(Math.max(barChartData[hoveredBar].x + (barChartData[hoveredBar].barWidth / 2) - 74, 64), 612)}
+                        y={Math.max(barChartData[hoveredBar].y - 92, 34)}
+                        width="148"
+                        height="94"
+                        rx="16"
+                        fill="#ffffff"
+                        stroke="#e5e7eb"
+                        filter="drop-shadow(0px 8px 20px rgba(15, 23, 42, 0.10))"
+                      />
+                      <text
+                        x={Math.min(Math.max(barChartData[hoveredBar].x + (barChartData[hoveredBar].barWidth / 2) - 56, 82), 630)}
+                        y={Math.max(barChartData[hoveredBar].y - 58, 68)}
+                        fill="#0f172a"
+                        fontSize="36"
+                        fontWeight="700"
+                      >
+                        {barChartData[hoveredBar].day}
+                      </text>
+                      <text
+                        x={Math.min(Math.max(barChartData[hoveredBar].x + (barChartData[hoveredBar].barWidth / 2) - 56, 82), 630)}
+                        y={Math.max(barChartData[hoveredBar].y - 16, 110)}
+                        fill="#84cc16"
+                        fontSize="40"
+                        fontWeight="700"
+                      >
+                        cals : {barChartData[hoveredBar].cals}
+                      </text>
+                    </g>
+                  )}
                 </svg>
               </Box>
             </CardContent>
