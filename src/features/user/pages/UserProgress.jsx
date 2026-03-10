@@ -71,6 +71,34 @@ const buildCalendarDays = (visibleMonthDate) => {
   }
   return cells;
 };
+
+const buildSmoothPath = (points) => {
+  if (!points.length) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 1; index < points.length; index += 1) {
+    const prev = points[index - 1];
+    const current = points[index];
+    const midX = (prev.x + current.x) / 2;
+    path += ` Q ${midX} ${prev.y}, ${current.x} ${current.y}`;
+  }
+  return path;
+};
+
+const createMockWeightHistory = () => {
+  const today = new Date();
+  const offsets = [-8, -7, -6, -5, -4, -3, -2, -1, 0];
+  const weights = [191, 190.8, 189.9, 188.6, 187.2, 185.8, 184.6, 182.8, 179];
+
+  return offsets.reduce((accumulator, offset, index) => {
+    const dateObj = new Date(today);
+    dateObj.setDate(today.getDate() + offset);
+    accumulator[toIsoDate(dateObj)] = weights[index];
+    return accumulator;
+  }, {});
+};
+
 const createPhotoSlots = () => Array.from({ length: 4 }, (_, index) => ({
   id: `slot-${index + 1}`,
   imageUrl: '',
@@ -155,11 +183,9 @@ function UserProgress() {
     weight: '',
   });
   const uploadInputRef = useRef(null);
-  const [weightHistoryByDate, setWeightHistoryByDate] = useState(() => ({
-    [twoDaysAgoIso]: 189,
-    [previousIso]: 184,
-    [todayIso]: 179,
-  }));
+  const chartSvgRef = useRef(null);
+  const [hoveredChartIndex, setHoveredChartIndex] = useState(null);
+  const [weightHistoryByDate, setWeightHistoryByDate] = useState(() => createMockWeightHistory());
   const [measurementsByDate, setMeasurementsByDate] = useState(() => ({
     [twoDaysAgoIso]: { chest: 41.8, waist: 33.5, arms: 15.2, thighs: 24.1 },
     [previousIso]: { chest: 42.0, waist: 33.2, arms: 15.3, thighs: 24.0 },
@@ -178,12 +204,16 @@ function UserProgress() {
   const isCalendarOpen = Boolean(calendarAnchorEl);
 
   const chartData = useMemo(() => {
-    const entries = Object.entries(weightHistoryByDate)
-      .map(([isoDate, weight]) => ({ isoDate, weight }))
+    const weightHistory = Object.entries(weightHistoryByDate)
+      .map(([isoDate, weight]) => ({
+        isoDate,
+        date: formatIsoToShort(isoDate),
+        weight,
+      }))
       .sort((left, right) => new Date(`${left.isoDate}T00:00:00`) - new Date(`${right.isoDate}T00:00:00`));
 
-    const labels = entries.map((item) => formatIsoToShort(item.isoDate));
-    const values = entries.map((item) => item.weight);
+    const labels = weightHistory.map((item) => item.date);
+    const values = weightHistory.map((item) => item.weight);
     const maxValue = Math.max(...values);
     const minValue = Math.min(...values);
     const yTop = Math.ceil(maxValue + 2);
@@ -196,19 +226,34 @@ function UserProgress() {
       const x = values.length > 1 ? (index / (values.length - 1)) * width : width / 2;
       const normalized = (value - yBottom) / Math.max(1, yTop - yBottom);
       const y = height - (normalized * height);
-      return { x, y };
+      return {
+        x: 70 + x,
+        y: 24 + y,
+      };
     });
 
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    const areaPath = points.length
+      ? `${buildSmoothPath(points)} L ${lastPoint.x} 244 L ${firstPoint.x} 244 Z`
+      : '';
+
     return {
+      weightHistory,
       points,
       labels,
       yTop,
       yMiddle,
       yBottom,
-      polylinePoints: points.map((point) => `${70 + point.x},${24 + point.y}`).join(' '),
-      fillPoints: `70,244 ${points.map((point) => `${70 + point.x},${24 + point.y}`).join(' ')}`,
+      linePath: buildSmoothPath(points),
+      areaPath,
     };
   }, [weightHistoryByDate]);
+
+  const hoveredPoint = hoveredChartIndex !== null ? chartData.points[hoveredChartIndex] : null;
+  const hoveredItem = hoveredChartIndex !== null ? chartData.weightHistory[hoveredChartIndex] : null;
+  const tooltipX = hoveredPoint ? Math.min(Math.max(hoveredPoint.x + 14, 86), 508) : 0;
+  const tooltipY = hoveredPoint ? Math.min(Math.max(hoveredPoint.y - 80, 34), 176) : 0;
 
   const measurementRows = useMemo(() => {
     const sortedDates = Object.keys(measurementsByDate)
@@ -381,6 +426,31 @@ function UserProgress() {
     setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
+  const handleChartMouseMove = (event) => {
+    if (!chartData.points.length) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!rect.width) return;
+
+    const pointerX = ((event.clientX - rect.left) / rect.width) * 680;
+    let nearestIndex = 0;
+    let nearestDistance = Infinity;
+
+    chartData.points.forEach((point, index) => {
+      const distance = Math.abs(point.x - pointerX);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+
+    setHoveredChartIndex(nearestIndex);
+  };
+
+  const handleChartMouseLeave = () => {
+    setHoveredChartIndex(null);
+  };
+
   return (
     <Box
       sx={{
@@ -548,31 +618,70 @@ function UserProgress() {
             <CardContent>
               <Typography sx={{ fontWeight: 900, fontSize: '1.5rem', mb: 1.2 }}>Weight History</Typography>
               <Box sx={{ width: '100%', overflowX: 'auto' }}>
-                <svg viewBox="0 0 680 280" width="100%" height="280" role="img" aria-label="Weight history chart">
-                  <line x1="70" y1="24" x2="650" y2="24" stroke="#d7e0ec" strokeDasharray="3 5" />
-                  <line x1="70" y1="144" x2="650" y2="144" stroke="#d7e0ec" strokeDasharray="3 5" />
-                  <line x1="70" y1="244" x2="650" y2="244" stroke="#d7e0ec" strokeDasharray="3 5" />
+                <svg
+                  ref={chartSvgRef}
+                  viewBox="0 0 680 280"
+                  width="100%"
+                  height="280"
+                  role="img"
+                  aria-label="Weight history chart"
+                  onMouseMove={handleChartMouseMove}
+                  onMouseLeave={handleChartMouseLeave}
+                  style={{ cursor: 'crosshair' }}
+                >
+                  <defs>
+                    <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0D9488" stopOpacity="0.2" />
+                      <stop offset="95%" stopColor="#0D9488" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+
+                  <line x1="70" y1="24" x2="650" y2="24" stroke="#F1F5F9" strokeDasharray="3 3" />
+                  <line x1="70" y1="144" x2="650" y2="144" stroke="#F1F5F9" strokeDasharray="3 3" />
+                  <line x1="70" y1="244" x2="650" y2="244" stroke="#F1F5F9" strokeDasharray="3 3" />
 
                   <text x="34" y="30" fill="#94a3b8" fontSize="16">{chartData.yTop}</text>
                   <text x="34" y="150" fill="#94a3b8" fontSize="16">{chartData.yMiddle}</text>
                   <text x="34" y="250" fill="#94a3b8" fontSize="16">{chartData.yBottom}</text>
 
-                  <polyline
-                    points={chartData.fillPoints}
-                    fill="rgba(13, 148, 136, 0.16)"
+                  <path
+                    d={chartData.areaPath}
+                    fill="url(#colorWeight)"
                     stroke="none"
                   />
 
-                  <polyline
-                    points={chartData.polylinePoints}
+                  <path
+                    d={chartData.linePath}
                     fill="none"
                     stroke="#0d9488"
-                    strokeWidth="4"
+                    strokeWidth="3"
                     strokeLinecap="round"
                   />
 
+                  {hoveredPoint && hoveredItem && (
+                    <>
+                      <line
+                        x1={hoveredPoint.x}
+                        y1="24"
+                        x2={hoveredPoint.x}
+                        y2="244"
+                        stroke="#cbd5e1"
+                        strokeWidth="1"
+                      />
+
+                      <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="8" fill="rgba(13,148,136,0.22)" />
+                      <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="4.5" fill="#0d9488" stroke="#ffffff" strokeWidth="2" />
+
+                      <g transform={`translate(${tooltipX}, ${tooltipY})`}>
+                        <rect width="126" height="66" rx="12" fill="#ffffff" stroke="#e2e8f0" />
+                        <text x="14" y="25" fill="#111827" fontSize="12" fontWeight="700">{hoveredItem.date}</text>
+                        <text x="14" y="46" fill="#0d9488" fontSize="18" fontWeight="800">weight : {hoveredItem.weight}</text>
+                      </g>
+                    </>
+                  )}
+
                   {chartData.labels.map((label, index) => {
-                    const x = 70 + ((chartData.labels.length > 1 ? index / (chartData.labels.length - 1) : 0.5) * 620);
+                    const x = chartData.points[index]?.x ?? 380;
                     return <text key={label} x={x - 18} y="268" fill="#94a3b8" fontSize="14">{label}</text>;
                   })}
                 </svg>
