@@ -145,8 +145,6 @@ const EXERCISE_LIBRARY = MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({
   },
 }));
 
-const previousExercises = EXERCISE_LIBRARY.filter((item) => item.done);
-
 function ExerciseCard({ workout, index }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -262,11 +260,12 @@ function UserWorkouts() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [sessionStatus, setSessionStatus] = useState('idle');
   const [sessionToast, setSessionToast] = useState({ open: false, message: '' });
+  const [workouts, setWorkouts] = useState(EXERCISE_LIBRARY);
   const [sessionExercises, setSessionExercises] = useState(
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
   );
 
-  const upcomingExercises = EXERCISE_LIBRARY
+  const upcomingExercises = workouts
     .filter((item) => !item.done)
     .map((item) => {
       const parsed = parseWorkoutDate(item.workoutDate);
@@ -277,6 +276,17 @@ function UserWorkouts() {
       };
     })
     .sort((a, b) => a.workoutDateValue - b.workoutDateValue);
+
+  const previousExercises = workouts
+    .filter((item) => item.done)
+    .map((item) => {
+      const parsed = parseWorkoutDate(item.workoutDate);
+      return {
+        ...item,
+        completedDateValue: parsed ? parsed.getTime() : 0,
+      };
+    })
+    .sort((a, b) => b.completedDateValue - a.completedDateValue);
 
   const todayWorkout = upcomingExercises.find((item) => (
     item.workoutDateObject && sameDay(item.workoutDateObject, today)
@@ -338,6 +348,23 @@ function UserWorkouts() {
     const existingHistory = existingHistoryRaw ? JSON.parse(existingHistoryRaw) : [];
     const normalizedHistory = Array.isArray(existingHistory) ? existingHistory : [];
     const nextHistory = Array.from(new Set([...normalizedHistory, completionIsoDate])).sort();
+
+    const finishedWorkoutId = activeSessionWorkout?.id || todayWorkout?.id;
+    if (finishedWorkoutId) {
+      setWorkouts((prev) => prev.map((item) => (
+        item.id === finishedWorkoutId
+          ? {
+            ...item,
+            done: true,
+            workoutDate: completionDate,
+            sessionRuntime: {
+              ...item.sessionRuntime,
+              completed: true,
+            },
+          }
+          : item
+      )));
+    }
 
     localStorage.setItem(PROGRESS_COMPLETION_DATE_KEY, completionDate);
     localStorage.setItem(WORKOUT_COMPLETION_HISTORY_KEY, JSON.stringify(nextHistory));
