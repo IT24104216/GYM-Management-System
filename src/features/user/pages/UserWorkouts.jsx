@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -22,9 +23,11 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
 import FlipRoundedIcon from '@mui/icons-material/FlipRounded';
+import { ROUTES } from '@/shared/utils/constants';
 
 const MotionBox = motion(Box);
 const SESSION_LIMIT_SECONDS = 60 * 60;
+const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
 const TODAY_MOCK_DATE = new Date().toLocaleDateString('en-US', {
   month: 'short',
   day: 'numeric',
@@ -248,6 +251,7 @@ function ExerciseCard({ workout, index }) {
 }
 
 function UserWorkouts() {
+  const navigate = useNavigate();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const today = new Date();
@@ -323,7 +327,17 @@ function UserWorkouts() {
 
     setSessionStarted(false);
     setSessionStatus('finished');
-    setSessionToast({ open: true, message: 'Workout session marked as finished.' });
+    const completionDate = new Date().toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    localStorage.setItem(PROGRESS_COMPLETION_DATE_KEY, completionDate);
+    setSessionToast({ open: true, message: 'Workout session marked as finished. Redirecting to progress tracking...' });
+    setTimeout(() => {
+      handleCloseWorkoutSession();
+      navigate(ROUTES.USER_PROGRESS);
+    }, 700);
   };
 
   const handleCloseSessionToast = (_, reason) => {
