@@ -28,6 +28,7 @@ import { ROUTES } from '@/shared/utils/constants';
 const MotionBox = motion(Box);
 const SESSION_LIMIT_SECONDS = 60 * 60;
 const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
+const WORKOUT_COMPLETION_HISTORY_KEY = 'gympro_workout_completion_history';
 const TODAY_MOCK_DATE = new Date().toLocaleDateString('en-US', {
   month: 'short',
   day: 'numeric',
@@ -332,7 +333,14 @@ function UserWorkouts() {
       day: 'numeric',
       year: 'numeric',
     });
+    const completionIsoDate = new Date().toISOString().split('T')[0];
+    const existingHistoryRaw = localStorage.getItem(WORKOUT_COMPLETION_HISTORY_KEY);
+    const existingHistory = existingHistoryRaw ? JSON.parse(existingHistoryRaw) : [];
+    const normalizedHistory = Array.isArray(existingHistory) ? existingHistory : [];
+    const nextHistory = Array.from(new Set([...normalizedHistory, completionIsoDate])).sort();
+
     localStorage.setItem(PROGRESS_COMPLETION_DATE_KEY, completionDate);
+    localStorage.setItem(WORKOUT_COMPLETION_HISTORY_KEY, JSON.stringify(nextHistory));
     setSessionToast({ open: true, message: 'Workout session marked as finished. Redirecting to progress tracking...' });
     setTimeout(() => {
       handleCloseWorkoutSession();
