@@ -1,48 +1,274 @@
-import { Grid, Box } from '@mui/material';
-import GroupIcon from '@mui/icons-material/Group';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import PageHeader from '@/shared/components/ui/PageHeader';
-import StatCard from '@/shared/components/ui/StatCard';
+import { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import {
+  Avatar,
+  Box,
+  Card,
+  CardContent,
+  Chip,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material';
+import PeopleAltRoundedIcon from '@mui/icons-material/PeopleAltRounded';
+import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
+import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
+
+const MotionBox = motion(Box);
+const MotionCard = motion(Card);
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0 },
+};
+
+const stats = [
+  {
+    key: 'users',
+    label: 'Total Users',
+    value: '3,247',
+    change: '+127 this month',
+    trend: '+4.1%',
+    gradient: 'linear-gradient(135deg, #84CC16 0%, #0D9488 100%)',
+    icon: PeopleAltRoundedIcon,
+  },
+  {
+    key: 'coaches',
+    label: 'Active Coaches',
+    value: '48',
+    change: '+3 this month',
+    trend: '+6.7%',
+    gradient: 'linear-gradient(135deg, #0D9488 0%, #0284C7 100%)',
+    icon: FitnessCenterRoundedIcon,
+  },
+  {
+    key: 'mealPlans',
+    label: 'Meal Plans',
+    value: '892',
+    change: '+54 this month',
+    trend: '+6.4%',
+    gradient: 'linear-gradient(135deg, #10B981 0%, #0D9488 100%)',
+    icon: MenuBookRoundedIcon,
+  },
+  {
+    key: 'reviews',
+    label: 'Pending Reviews',
+    value: '12',
+    change: 'Needs attention',
+    trend: 'Urgent',
+    gradient: 'linear-gradient(135deg, #F97316 0%, #EF4444 100%)',
+    icon: WarningAmberRoundedIcon,
+    urgent: true,
+  },
+];
+
+const users = [
+  { id: 1, name: 'Alex Johnson', email: 'alex@example.com', role: 'Member', status: 'Active', joined: 'Jan 15, 2025', avatar: 'AJ' },
+  { id: 2, name: 'Coach Marcus', email: 'marcus@example.com', role: 'Coach', status: 'Active', joined: 'Mar 2, 2024', avatar: 'CM' },
+  { id: 3, name: 'Dr. Sarah Mitchell', email: 'sarah@example.com', role: 'Dietician', status: 'Active', joined: 'Feb 10, 2024', avatar: 'SM' },
+  { id: 4, name: 'Tom Bradley', email: 'tom@example.com', role: 'Member', status: 'Inactive', joined: 'Nov 5, 2024', avatar: 'TB' },
+  { id: 5, name: 'Lisa Chen', email: 'lisa@example.com', role: 'Coach', status: 'Active', joined: 'Apr 18, 2024', avatar: 'LC' },
+];
+
+const roleStyles = {
+  Member: { bg: 'rgba(132, 204, 22, 0.14)', color: '#65A30D' },
+  Coach: { bg: 'rgba(13, 148, 136, 0.14)', color: '#0F766E' },
+  Dietician: { bg: 'rgba(245, 158, 11, 0.14)', color: '#B45309' },
+  Admin: { bg: 'rgba(139, 92, 246, 0.14)', color: '#7C3AED' },
+};
+
+const statusStyles = {
+  Active: { color: '#10B981', dot: '#10B981' },
+  Inactive: { color: '#94A3B8', dot: '#94A3B8' },
+  Suspended: { color: '#EF4444', dot: '#EF4444' },
+};
 
 function AdminDashboard() {
-  return (
-    <Box>
-      <PageHeader title="Admin Dashboard" subtitle="Platform-wide statistics and overview." />
+  const [filter, setFilter] = useState('All');
+  const [search, setSearch] = useState('');
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} sm={6} md={4}>
-          <StatCard
-            icon={GroupIcon}
-            label="Total Users"
-            value="1,284"
-            trend="up"
-            trendLabel="+48 this month"
-            color="primary.main"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <StatCard
-            icon={TrendingUpIcon}
-            label="Active Subscriptions"
-            value="972"
-            trend="up"
-            trendLabel="+12% vs last month"
-            color="secondary.main"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={4}>
-          <StatCard
-            icon={AttachMoneyIcon}
-            label="Monthly Revenue"
-            value="$18,540"
-            trend="up"
-            trendLabel="+8% vs last month"
-            color="success.main"
-          />
-        </Grid>
-      </Grid>
-    </Box>
+  const filteredUsers = useMemo(() => users.filter((user) => {
+    const roleMatch = filter === 'All' ? true : user.role === filter.slice(0, -1);
+    const query = search.trim().toLowerCase();
+    const searchMatch = !query
+      || user.name.toLowerCase().includes(query)
+      || user.email.toLowerCase().includes(query);
+    return roleMatch && searchMatch;
+  }), [filter, search]);
+
+  const filters = ['All', 'Members', 'Coaches', 'Dieticians', 'Admins'];
+
+  return (
+    <MotionBox
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      sx={{ pb: 2 }}
+    >
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', xl: 'repeat(4, 1fr)' },
+          gap: 1.7,
+          mb: 2.1,
+        }}
+      >
+        {stats.map((item) => {
+          const Icon = item.icon;
+          return (
+            <MotionCard
+              key={item.key}
+              variants={itemVariants}
+              whileHover={{ y: -4, scale: 1.01 }}
+              sx={{
+                borderRadius: 2.6,
+                overflow: 'hidden',
+                position: 'relative',
+                color: '#fff',
+                background: item.gradient,
+                boxShadow: '0 16px 30px rgba(15, 23, 42, 0.16)',
+              }}
+            >
+              <CardContent sx={{ position: 'relative', zIndex: 1 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.2}>
+                  <Box sx={{ width: 40, height: 40, borderRadius: 2, display: 'grid', placeItems: 'center', bgcolor: 'rgba(255,255,255,0.22)' }}>
+                    <Icon sx={{ fontSize: 22 }} />
+                  </Box>
+                  {item.urgent ? (
+                    <Chip label="Urgent" size="small" sx={{ bgcolor: 'rgba(255,255,255,0.24)', color: '#fff', fontWeight: 700 }} />
+                  ) : (
+                    <Chip
+                      icon={<TrendingUpRoundedIcon sx={{ color: '#fff !important', fontSize: '15px !important' }} />}
+                      label={item.trend}
+                      size="small"
+                      sx={{ bgcolor: 'rgba(255,255,255,0.24)', color: '#fff', fontWeight: 700 }}
+                    />
+                  )}
+                </Stack>
+
+                <Typography sx={{ fontWeight: 900, fontSize: '2.15rem', lineHeight: 1.05 }}>{item.value}</Typography>
+                <Typography sx={{ fontSize: '1.05rem', color: 'rgba(255,255,255,0.9)', mt: 0.2 }}>{item.label}</Typography>
+                <Typography sx={{ fontSize: '0.88rem', color: 'rgba(255,255,255,0.82)', mt: 0.6 }}>{item.change}</Typography>
+              </CardContent>
+              <Box sx={{ position: 'absolute', right: -18, top: -18, width: 96, height: 96, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.1)' }} />
+              <Box sx={{ position: 'absolute', right: -10, bottom: -38, width: 80, height: 80, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.1)' }} />
+            </MotionCard>
+          );
+        })}
+      </Box>
+
+      <MotionCard variants={itemVariants} sx={{ borderRadius: 2.6, border: '1px solid #e5edf6', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)' }}>
+        <Box sx={{ p: { xs: 2, md: 2.4 }, borderBottom: '1px solid #edf2f7' }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.3}>
+            <Typography sx={{ fontWeight: 900, fontSize: { xs: '1.45rem', md: '1.65rem' } }}>
+              Recent Users
+            </Typography>
+
+            <Stack direction="row" spacing={1.1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+              <TextField
+                size="small"
+                placeholder="Search users..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                sx={{ minWidth: { xs: 1, sm: 220 }, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+              />
+              <Chip label="+ Add User" clickable sx={{ borderRadius: 2, fontWeight: 800, px: 0.8, bgcolor: '#22c55e', color: '#fff' }} />
+            </Stack>
+          </Stack>
+
+          <Stack direction="row" spacing={1} mt={1.6} useFlexGap flexWrap="wrap">
+            {filters.map((item) => (
+              <Chip
+                key={item}
+                label={item}
+                clickable
+                onClick={() => setFilter(item)}
+                sx={{
+                  borderRadius: 2,
+                  fontWeight: 700,
+                  bgcolor: filter === item ? '#22c55e' : '#f1f5f9',
+                  color: filter === item ? '#fff' : '#64748b',
+                }}
+              />
+            ))}
+          </Stack>
+        </Box>
+
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>USER</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>EMAIL</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>ROLE</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>STATUS</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>JOINED</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredUsers.map((user, index) => {
+                const role = roleStyles[user.role] || roleStyles.Member;
+                const status = statusStyles[user.status] || statusStyles.Inactive;
+
+                return (
+                  <TableRow
+                    key={user.id}
+                    component={motion.tr}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.045 }}
+                    sx={{ '&:last-child td': { borderBottom: 0 } }}
+                  >
+                    <TableCell>
+                      <Stack direction="row" spacing={1.2} alignItems="center">
+                        <Avatar sx={{ width: 36, height: 36, fontWeight: 800, fontSize: '0.9rem', bgcolor: '#22c55e' }}>{user.avatar}</Avatar>
+                        <Typography sx={{ fontWeight: 700 }}>{user.name}</Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ color: '#64748b' }}>{user.email}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={user.role}
+                        size="small"
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor: role.bg,
+                          color: role.color,
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={0.8} alignItems="center">
+                        <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: status.dot }} />
+                        <Typography sx={{ color: status.color, fontWeight: 700, fontSize: '0.9rem' }}>{user.status}</Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ color: '#94a3b8' }}>{user.joined}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Box>
+      </MotionCard>
+    </MotionBox>
   );
 }
 
