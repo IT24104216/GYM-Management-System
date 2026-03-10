@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -22,9 +23,12 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
 import FlipRoundedIcon from '@mui/icons-material/FlipRounded';
+import { ROUTES } from '@/shared/utils/constants';
 
 const MotionBox = motion(Box);
 const SESSION_LIMIT_SECONDS = 60 * 60;
+const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
+const WORKOUT_COMPLETION_HISTORY_KEY = 'gympro_workout_completion_history';
 const TODAY_MOCK_DATE = new Date().toLocaleDateString('en-US', {
   month: 'short',
   day: 'numeric',
@@ -141,8 +145,6 @@ const EXERCISE_LIBRARY = MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({
   },
 }));
 
-const previousExercises = EXERCISE_LIBRARY.filter((item) => item.done);
-
 function ExerciseCard({ workout, index }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -248,6 +250,7 @@ function ExerciseCard({ workout, index }) {
 }
 
 function UserWorkouts() {
+  const navigate = useNavigate();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const today = new Date();
@@ -257,11 +260,12 @@ function UserWorkouts() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [sessionStatus, setSessionStatus] = useState('idle');
   const [sessionToast, setSessionToast] = useState({ open: false, message: '' });
+  const [workouts, setWorkouts] = useState(EXERCISE_LIBRARY);
   const [sessionExercises, setSessionExercises] = useState(
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
   );
 
-  const upcomingExercises = EXERCISE_LIBRARY
+  const upcomingExercises = workouts
     .filter((item) => !item.done)
     .map((item) => {
       const parsed = parseWorkoutDate(item.workoutDate);
@@ -272,6 +276,17 @@ function UserWorkouts() {
       };
     })
     .sort((a, b) => a.workoutDateValue - b.workoutDateValue);
+
+  const previousExercises = workouts
+    .filter((item) => item.done)
+    .map((item) => {
+      const parsed = parseWorkoutDate(item.workoutDate);
+      return {
+        ...item,
+        completedDateValue: parsed ? parsed.getTime() : 0,
+      };
+    })
+    .sort((a, b) => b.completedDateValue - a.completedDateValue);
 
   const todayWorkout = upcomingExercises.find((item) => (
     item.workoutDateObject && sameDay(item.workoutDateObject, today)
@@ -323,7 +338,41 @@ function UserWorkouts() {
 
     setSessionStarted(false);
     setSessionStatus('finished');
-    setSessionToast({ open: true, message: 'Workout session marked as finished.' });
+    const completionDate = new Date().toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    const completionIsoDate = new Date().toISOString().split('T')[0];
+    const existingHistoryRaw = localStorage.getItem(WORKOUT_COMPLETION_HISTORY_KEY);
+    const existingHistory = existingHistoryRaw ? JSON.parse(existingHistoryRaw) : [];
+    const normalizedHistory = Array.isArray(existingHistory) ? existingHistory : [];
+    const nextHistory = Array.from(new Set([...normalizedHistory, completionIsoDate])).sort();
+
+    const finishedWorkoutId = activeSessionWorkout?.id || todayWorkout?.id;
+    if (finishedWorkoutId) {
+      setWorkouts((prev) => prev.map((item) => (
+        item.id === finishedWorkoutId
+          ? {
+            ...item,
+            done: true,
+            workoutDate: completionDate,
+            sessionRuntime: {
+              ...item.sessionRuntime,
+              completed: true,
+            },
+          }
+          : item
+      )));
+    }
+
+    localStorage.setItem(PROGRESS_COMPLETION_DATE_KEY, completionDate);
+    localStorage.setItem(WORKOUT_COMPLETION_HISTORY_KEY, JSON.stringify(nextHistory));
+    setSessionToast({ open: true, message: 'Workout session marked as finished. Redirecting to progress tracking...' });
+    setTimeout(() => {
+      handleCloseWorkoutSession();
+      navigate(ROUTES.USER_PROGRESS);
+    }, 700);
   };
 
   const handleCloseSessionToast = (_, reason) => {

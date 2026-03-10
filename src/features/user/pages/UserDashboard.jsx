@@ -71,7 +71,7 @@ const SERVICES = [
     image:
       'https://images.unsplash.com/photo-1764313521531-8308a2395333?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxib2R5JTIwY29tcG9zaXRpb24lMjBhbmFseXNpcyUyMGZpdG5lc3N8ZW58MXx8fHwxNzcyOTE5MjcwfDA&ixlib=rb-4.1.0&q=80&w=1080',
     icon: MonitorHeartOutlinedIcon,
-    link: ROUTES.USER_DASHBOARD,
+    link: ROUTES.USER_PROGRESS,
   },
   {
     title: 'Group Classes',
@@ -79,7 +79,7 @@ const SERVICES = [
     image:
       'https://images.unsplash.com/photo-1758274525887-d95d19269f76?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxncm91cCUyMGZpdG5lc3MlMjBjbGFzcyUyMHlvZ2F8ZW58MXx8fHwxNzcyODIxNjM4fDA&ixlib=rb-4.1.0&q=80&w=1080',
     icon: GroupsOutlinedIcon,
-    link: ROUTES.USER_WORKOUTS,
+    link: null,
   },
 ];
 
@@ -313,9 +313,13 @@ function UserDashboard() {
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.08, duration: 0.45 }}
                 whileHover={{ y: -8, scale: 1.01 }}
-                onClick={() => navigate(service.link)}
+                onClick={() => {
+                  if (service.link) {
+                    navigate(service.link);
+                  }
+                }}
                 sx={{
-                  cursor: 'pointer',
+                  cursor: service.link ? 'pointer' : 'default',
                   borderRadius: 4,
                   overflow: 'hidden',
                   boxShadow: colors.softShadow,
