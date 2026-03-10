@@ -306,17 +306,21 @@ function UserMealPlan() {
                       <g key={`${item.day}-${index}`}>
                         <motion.rect
                           x={x}
-                          y={180}
+                          y={y}
                           width={barWidth}
-                          height={0}
+                          height={h}
                           rx="7"
                           fill={hoveredBar === index ? '#65a30d' : '#84cc16'}
-                          initial={{ y: 180, height: 0 }}
-                          animate={{ y, height: h }}
+                          initial={{ scaleY: 0 }}
+                          animate={{ scaleY: 1 }}
                           transition={{ duration: 0.55, delay: 0.08 + (index * 0.07), ease: 'easeOut' }}
                           onHoverStart={() => setHoveredBar(index)}
                           onHoverEnd={() => setHoveredBar(null)}
-                          style={{ cursor: 'pointer' }}
+                          style={{
+                            cursor: 'pointer',
+                            transformBox: 'fill-box',
+                            transformOrigin: 'center bottom',
+                          }}
                         />
                         <text x={x + (barWidth / 2)} y="204" textAnchor="middle" fill="#94a3b8" fontSize="14">{item.day}</text>
                       </g>
