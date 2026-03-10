@@ -125,9 +125,9 @@ function AdminDashboard() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', xl: 'repeat(4, 1fr)' },
-          gap: 1.7,
-          mb: 2.1,
+          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' },
+          gap: 1.5,
+          mb: 1.8,
         }}
       >
         {stats.map((item) => {
@@ -138,34 +138,35 @@ function AdminDashboard() {
               variants={itemVariants}
               whileHover={{ y: -4, scale: 1.01 }}
               sx={{
-                borderRadius: 2.6,
+                borderRadius: 2.2,
                 overflow: 'hidden',
                 position: 'relative',
                 color: '#fff',
                 background: item.gradient,
                 boxShadow: '0 16px 30px rgba(15, 23, 42, 0.16)',
+                minHeight: 176,
               }}
             >
-              <CardContent sx={{ position: 'relative', zIndex: 1 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.2}>
-                  <Box sx={{ width: 40, height: 40, borderRadius: 2, display: 'grid', placeItems: 'center', bgcolor: 'rgba(255,255,255,0.22)' }}>
-                    <Icon sx={{ fontSize: 22 }} />
+              <CardContent sx={{ position: 'relative', zIndex: 1, p: 2.1, '&:last-child': { pb: 2.1 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.05}>
+                  <Box sx={{ width: 36, height: 36, borderRadius: 1.7, display: 'grid', placeItems: 'center', bgcolor: 'rgba(255,255,255,0.22)' }}>
+                    <Icon sx={{ fontSize: 20 }} />
                   </Box>
                   {item.urgent ? (
-                    <Chip label="Urgent" size="small" sx={{ bgcolor: 'rgba(255,255,255,0.24)', color: '#fff', fontWeight: 700 }} />
+                    <Chip label="Urgent" size="small" sx={{ bgcolor: 'rgba(255,255,255,0.24)', color: '#fff', fontWeight: 700, height: 24 }} />
                   ) : (
                     <Chip
                       icon={<TrendingUpRoundedIcon sx={{ color: '#fff !important', fontSize: '15px !important' }} />}
                       label={item.trend}
                       size="small"
-                      sx={{ bgcolor: 'rgba(255,255,255,0.24)', color: '#fff', fontWeight: 700 }}
+                      sx={{ bgcolor: 'rgba(255,255,255,0.24)', color: '#fff', fontWeight: 700, height: 24 }}
                     />
                   )}
                 </Stack>
 
-                <Typography sx={{ fontWeight: 900, fontSize: '2.15rem', lineHeight: 1.05 }}>{item.value}</Typography>
-                <Typography sx={{ fontSize: '1.05rem', color: 'rgba(255,255,255,0.9)', mt: 0.2 }}>{item.label}</Typography>
-                <Typography sx={{ fontSize: '0.88rem', color: 'rgba(255,255,255,0.82)', mt: 0.6 }}>{item.change}</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '2.05rem', lineHeight: 1.05 }}>{item.value}</Typography>
+                <Typography sx={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.9)', mt: 0.3 }}>{item.label}</Typography>
+                <Typography sx={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.82)', mt: 0.45 }}>{item.change}</Typography>
               </CardContent>
               <Box sx={{ position: 'absolute', right: -18, top: -18, width: 96, height: 96, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.1)' }} />
               <Box sx={{ position: 'absolute', right: -10, bottom: -38, width: 80, height: 80, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.1)' }} />
@@ -174,10 +175,10 @@ function AdminDashboard() {
         })}
       </Box>
 
-      <MotionCard variants={itemVariants} sx={{ borderRadius: 2.6, border: '1px solid #e5edf6', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)' }}>
-        <Box sx={{ p: { xs: 2, md: 2.4 }, borderBottom: '1px solid #edf2f7' }}>
+      <MotionCard variants={itemVariants} sx={{ borderRadius: 2.2, border: '1px solid #e5edf6', boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)' }}>
+        <Box sx={{ p: { xs: 1.7, md: 2.1 }, borderBottom: '1px solid #edf2f7' }}>
           <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.3}>
-            <Typography sx={{ fontWeight: 900, fontSize: { xs: '1.45rem', md: '1.65rem' } }}>
+            <Typography sx={{ fontWeight: 900, fontSize: { xs: '1.35rem', md: '1.52rem' } }}>
               Recent Users
             </Typography>
 
@@ -187,9 +188,9 @@ function AdminDashboard() {
                 placeholder="Search users..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                sx={{ minWidth: { xs: 1, sm: 220 }, '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                sx={{ minWidth: { xs: 1, sm: 250 }, '& .MuiOutlinedInput-root': { borderRadius: 2, height: 42 } }}
               />
-              <Chip label="+ Add User" clickable sx={{ borderRadius: 2, fontWeight: 800, px: 0.8, bgcolor: '#22c55e', color: '#fff' }} />
+              <Chip label="+ Add User" clickable sx={{ borderRadius: 2, fontWeight: 800, px: 0.9, height: 36, bgcolor: '#22c55e', color: '#fff' }} />
             </Stack>
           </Stack>
 
@@ -203,6 +204,7 @@ function AdminDashboard() {
                 sx={{
                   borderRadius: 2,
                   fontWeight: 700,
+                  fontSize: '0.82rem',
                   bgcolor: filter === item ? '#22c55e' : '#f1f5f9',
                   color: filter === item ? '#fff' : '#64748b',
                 }}
