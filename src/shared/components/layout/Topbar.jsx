@@ -20,7 +20,7 @@ import { ROUTES } from '@/shared/utils/constants';
 
 const DRAWER_WIDTH = 240;
 
-function Topbar({ onMenuClick }) {
+function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebarHidden = false }) {
   const { user, logout } = useAuth();
   const { mode, toggleTheme } = useAppTheme();
   const navigate = useNavigate();
@@ -42,8 +42,8 @@ function Topbar({ onMenuClick }) {
       position="fixed"
       color="inherit"
       sx={{
-        width: { sm: isUserRoute ? '100%' : `calc(100% - ${DRAWER_WIDTH}px)` },
-        ml: { sm: isUserRoute ? 0 : `${DRAWER_WIDTH}px` },
+        width: { sm: isUserRoute || sidebarHidden ? '100%' : `calc(100% - ${DRAWER_WIDTH}px)` },
+        ml: { sm: isUserRoute || sidebarHidden ? 0 : `${DRAWER_WIDTH}px` },
         borderBottom: '1px solid',
         borderColor: 'divider',
       }}
@@ -57,6 +57,17 @@ function Topbar({ onMenuClick }) {
         >
           <MenuIcon />
         </IconButton>
+
+        {!isUserRoute && showSidebarButton && (
+          <IconButton
+            edge="start"
+            onClick={onShowSidebar}
+            sx={{ mr: 1.5, display: { xs: 'none', sm: 'inline-flex' } }}
+            aria-label="reopen sidebar"
+          >
+            <MenuIcon />
+          </IconButton>
+        )}
 
         <Typography
           variant="h6"
