@@ -255,6 +255,7 @@ function UserWorkouts() {
   const [activeSessionWorkout, setActiveSessionWorkout] = useState(null);
   const [elapsedSessionSeconds, setElapsedSessionSeconds] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [sessionStatus, setSessionStatus] = useState('idle');
   const [sessionToast, setSessionToast] = useState({ open: false, message: '' });
   const [sessionExercises, setSessionExercises] = useState(
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
@@ -295,6 +296,7 @@ function UserWorkouts() {
     setActiveSessionWorkout(todayWorkout);
     setElapsedSessionSeconds(0);
     setSessionStarted(false);
+    setSessionStatus('idle');
     setSessionExercises(MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })));
     setIsWorkoutSessionOpen(true);
   };
@@ -304,10 +306,12 @@ function UserWorkouts() {
     setActiveSessionWorkout(null);
     setElapsedSessionSeconds(0);
     setSessionStarted(false);
+    setSessionStatus('idle');
   };
 
   const handleMarkSessionFinish = () => {
-    handleCloseWorkoutSession();
+    setSessionStarted(false);
+    setSessionStatus('finished');
     setSessionToast({ open: true, message: 'Workout session marked as finished.' });
   };
 
@@ -503,8 +507,11 @@ function UserWorkouts() {
 
             <Stack direction="row" alignItems="center" spacing={1}>
               <Button
-                onClick={() => setSessionStarted(true)}
-                disabled={sessionStarted}
+                onClick={() => {
+                  setSessionStarted(true);
+                  setSessionStatus('ongoing');
+                }}
+                disabled={sessionStarted || sessionStatus === 'finished'}
                 variant="contained"
                 sx={{
                   borderRadius: 2,
@@ -519,7 +526,7 @@ function UserWorkouts() {
                   },
                 }}
               >
-                {sessionStarted ? 'Started' : 'Start'}
+                {sessionStatus === 'finished' ? 'Finished' : (sessionStarted ? 'Started' : 'Start')}
               </Button>
               <Box
                 sx={{
@@ -536,14 +543,16 @@ function UserWorkouts() {
                   {formatCounter(elapsedSessionSeconds)} / {formatCounter(activeSessionLimitSeconds)}
                 </Typography>
               </Box>
-              <Chip
-                label="In Progress"
-                sx={{
-                  bgcolor: '#16a34a',
-                  color: '#fff',
-                  fontWeight: 800,
-                }}
-              />
+              {sessionStatus !== 'idle' && (
+                <Chip
+                  label={sessionStatus === 'ongoing' ? 'Ongoing' : 'Finished'}
+                  sx={{
+                    bgcolor: sessionStatus === 'ongoing' ? '#16a34a' : '#2563eb',
+                    color: '#fff',
+                    fontWeight: 800,
+                  }}
+                />
+              )}
               <IconButton onClick={handleCloseWorkoutSession} size="small">
                 <CloseRoundedIcon sx={{ color: theme.palette.text.secondary }} />
               </IconButton>
