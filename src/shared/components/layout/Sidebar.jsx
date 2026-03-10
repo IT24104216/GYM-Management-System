@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import {
   Box,
   Drawer,
+  IconButton,
   List,
   ListItem,
   ListItemButton,
@@ -12,6 +13,7 @@ import {
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { NAV_CONFIG } from '@/shared/config/navConfig';
@@ -19,7 +21,7 @@ import { ROLE_HOME } from '@/shared/utils/constants';
 
 const DRAWER_WIDTH = 240;
 
-function SidebarContent() {
+function SidebarContent({ onHide }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -43,9 +45,22 @@ function SidebarContent() {
         onClick={() => navigate(ROLE_HOME[user?.role])}
       >
         <FitnessCenterIcon sx={{ color: isDark ? '#ec4899' : 'secondary.main', mr: 1 }} />
-        <Typography variant="h6" fontWeight={700} sx={{ color: isDark ? '#93c5fd' : 'primary.main' }}>
+        <Typography variant="h6" fontWeight={700} sx={{ color: isDark ? '#93c5fd' : 'primary.main', flexGrow: 1 }}>
           GymPro
         </Typography>
+        {onHide && (
+          <IconButton
+            size="small"
+            sx={{ display: { xs: 'none', sm: 'inline-flex' }, color: isDark ? '#9fb5d8' : 'text.secondary' }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onHide();
+            }}
+            aria-label="hide sidebar"
+          >
+            <ChevronLeftRoundedIcon fontSize="small" />
+          </IconButton>
+        )}
       </Toolbar>
 
       {/* Nav links */}
@@ -87,7 +102,7 @@ function SidebarContent() {
   );
 }
 
-function Sidebar({ mobileOpen, onClose }) {
+function Sidebar({ mobileOpen, onClose, onHide }) {
   return (
     <Box component="nav" sx={{ width: { sm: DRAWER_WIDTH }, flexShrink: { sm: 0 } }}>
       {/* Mobile drawer */}
@@ -113,7 +128,7 @@ function Sidebar({ mobileOpen, onClose }) {
         }}
         open
       >
-        <SidebarContent />
+        <SidebarContent onHide={onHide} />
       </Drawer>
     </Box>
   );
