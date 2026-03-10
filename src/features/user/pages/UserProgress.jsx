@@ -10,6 +10,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
+  Popover,
   Snackbar,
   Stack,
   TextField,
@@ -22,6 +24,9 @@ import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import StraightenRoundedIcon from '@mui/icons-material/StraightenRounded';
 import AddAPhotoRoundedIcon from '@mui/icons-material/AddAPhotoRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
+import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 
 const MotionCard = motion(Card);
 const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
@@ -36,6 +41,36 @@ const formatIsoToShort = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDa
   month: 'short',
   day: 'numeric',
 });
+const toIsoDate = (dateValue) => {
+  const yyyy = dateValue.getFullYear();
+  const mm = String(dateValue.getMonth() + 1).padStart(2, '0');
+  const dd = String(dateValue.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const buildCalendarDays = (visibleMonthDate) => {
+  const year = visibleMonthDate.getFullYear();
+  const month = visibleMonthDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7;
+
+  const cells = [];
+  for (let index = 0; index < totalCells; index += 1) {
+    const dayNumber = index - startWeekday + 1;
+    if (dayNumber < 1 || dayNumber > daysInMonth) {
+      cells.push(null);
+    } else {
+      const dateObj = new Date(year, month, dayNumber);
+      cells.push({
+        dayNumber,
+        iso: toIsoDate(dateObj),
+      });
+    }
+  }
+  return cells;
+};
 const createPhotoSlots = () => Array.from({ length: 4 }, (_, index) => ({
   id: `slot-${index + 1}`,
   imageUrl: '',
@@ -86,6 +121,8 @@ function UserProgress() {
   const twoDaysAgoIso = new Date(Date.now() - (2 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
 
   const [selectedDate, setSelectedDate] = useState(todayIso);
+  const [calendarAnchorEl, setCalendarAnchorEl] = useState(null);
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(todayIso));
   const [photosByDate, setPhotosByDate] = useState(() => ({
     [todayIso]: createPhotoSlots(),
     [previousIso]: [
@@ -131,8 +168,14 @@ function UserProgress() {
   const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
   const selectedDateFull = formatIsoToFull(selectedDate);
   const selectedDateShort = formatIsoToShort(selectedDate);
+  const visibleMonthLabel = visibleMonth.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
   const canUploadSelectedDate = Boolean(completionDate) && completionDate === selectedDateFull;
   const selectedDatePhotos = photosByDate[selectedDate] || createPhotoSlots();
+  const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
+  const isCalendarOpen = Boolean(calendarAnchorEl);
 
   const chartData = useMemo(() => {
     const entries = Object.entries(weightHistoryByDate)
@@ -316,6 +359,28 @@ function UserProgress() {
     setPhotoToast((prev) => ({ ...prev, open: false }));
   };
 
+  const handleOpenCalendar = (event) => {
+    setCalendarAnchorEl(event.currentTarget);
+    setVisibleMonth(new Date(`${selectedDate}T00:00:00`));
+  };
+
+  const handleCloseCalendar = () => {
+    setCalendarAnchorEl(null);
+  };
+
+  const handlePickCalendarDate = (isoDate) => {
+    setSelectedDate(isoDate);
+    setCalendarAnchorEl(null);
+  };
+
+  const handlePrevMonth = () => {
+    setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setVisibleMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
   return (
     <Box
       sx={{
@@ -336,15 +401,82 @@ function UserProgress() {
             </Typography>
           </Stack>
 
-          <TextField
-            label="Select Date"
-            type="date"
-            value={selectedDate}
-            onChange={(event) => setSelectedDate(event.target.value)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ minWidth: { xs: '100%', md: 240 } }}
-          />
+          <Button
+            onClick={handleOpenCalendar}
+            variant="outlined"
+            startIcon={<CalendarMonthRoundedIcon />}
+            sx={{
+              minWidth: { xs: '100%', md: 260 },
+              justifyContent: 'flex-start',
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 700,
+              color: theme.palette.text.primary,
+              borderColor: isDark ? '#314561' : '#d4deeb',
+              bgcolor: isDark ? '#0f1b2f' : '#fff',
+            }}
+          >
+            {selectedDateFull}
+          </Button>
         </Stack>
+
+        <Popover
+          open={isCalendarOpen}
+          anchorEl={calendarAnchorEl}
+          onClose={handleCloseCalendar}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+          PaperProps={{ sx: { borderRadius: 2.2, p: 1.2, mt: 0.5, width: 290 } }}
+        >
+          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+            <IconButton size="small" onClick={handlePrevMonth}>
+              <ChevronLeftRoundedIcon />
+            </IconButton>
+            <Typography sx={{ fontWeight: 800 }}>{visibleMonthLabel}</Typography>
+            <IconButton size="small" onClick={handleNextMonth}>
+              <ChevronRightRoundedIcon />
+            </IconButton>
+          </Stack>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(7, 1fr)',
+              gap: 0.6,
+            }}
+          >
+            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((name) => (
+              <Typography key={name} sx={{ textAlign: 'center', fontSize: '0.76rem', color: theme.palette.text.secondary, fontWeight: 700 }}>
+                {name}
+              </Typography>
+            ))}
+
+            {calendarDays.map((cell, index) => (
+              cell ? (
+                <Button
+                  key={`${cell.iso}-${index}`}
+                  size="small"
+                  onClick={() => handlePickCalendarDate(cell.iso)}
+                  sx={{
+                    minWidth: 0,
+                    width: 34,
+                    height: 34,
+                    mx: 'auto',
+                    borderRadius: '50%',
+                    p: 0,
+                    fontWeight: 700,
+                    color: theme.palette.text.primary,
+                    bgcolor: selectedDate === cell.iso ? (isDark ? '#1e3a8a' : '#dbeafe') : 'transparent',
+                  }}
+                >
+                  {cell.dayNumber}
+                </Button>
+              ) : (
+                <Box key={`empty-${index}`} sx={{ width: 34, height: 34, mx: 'auto' }} />
+              )
+            ))}
+          </Box>
+        </Popover>
 
         <Box
           sx={{
