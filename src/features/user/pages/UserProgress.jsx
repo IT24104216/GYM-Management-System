@@ -8,6 +8,7 @@ import {
   Chip,
   Snackbar,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -19,6 +20,21 @@ import AddAPhotoRoundedIcon from '@mui/icons-material/AddAPhotoRounded';
 
 const MotionCard = motion(Card);
 const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
+
+const getTodayIso = () => new Date().toISOString().split('T')[0];
+const formatIsoToFull = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+const formatIsoToShort = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-US', {
+  month: 'short',
+  day: 'numeric',
+});
+const createPhotoSlots = () => Array.from({ length: 4 }, (_, index) => ({
+  id: `slot-${index + 1}`,
+  imageUrl: '',
+}));
 
 const METRIC_CARDS = [
   {
@@ -60,26 +76,42 @@ const BODY_MEASUREMENTS = [
   { id: 'thighs', area: 'Thighs', value: '24.0"', delta: '0.0"', trend: 'flat' },
 ];
 
-const INITIAL_PHOTOS = [
-  { id: 'p1', date: 'Oct 15', imageUrl: '' },
-  { id: 'p2', date: 'Oct 10', imageUrl: '' },
-  { id: 'p3', date: 'Oct 5', imageUrl: '' },
-  { id: 'p4', date: 'Oct 1', imageUrl: '' },
-];
-
 function UserProgress() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const [photos, setPhotos] = useState(INITIAL_PHOTOS);
+  const todayIso = getTodayIso();
+  const previousIso = new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+  const twoDaysAgoIso = new Date(Date.now() - (2 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+
+  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const [photosByDate, setPhotosByDate] = useState(() => ({
+    [todayIso]: createPhotoSlots(),
+    [previousIso]: [
+      {
+        id: `mock-${previousIso}-1`,
+        imageUrl: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?auto=format&fit=crop&w=900&q=80',
+      },
+      ...createPhotoSlots().slice(1),
+    ],
+    [twoDaysAgoIso]: [
+      {
+        id: `mock-${twoDaysAgoIso}-1`,
+        imageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=900&q=80',
+      },
+      {
+        id: `mock-${twoDaysAgoIso}-2`,
+        imageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=80',
+      },
+      ...createPhotoSlots().slice(2),
+    ],
+  }));
   const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
   const uploadInputRef = useRef(null);
   const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
-  const todayDate = new Date().toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-  const canUploadToday = Boolean(completionDate) && completionDate === todayDate;
+  const selectedDateFull = formatIsoToFull(selectedDate);
+  const selectedDateShort = formatIsoToShort(selectedDate);
+  const canUploadSelectedDate = Boolean(completionDate) && completionDate === selectedDateFull;
+  const selectedDatePhotos = photosByDate[selectedDate] || createPhotoSlots();
 
   const chartPoints = useMemo(() => {
     const max = Math.max(...WEIGHT_HISTORY);
@@ -99,7 +131,7 @@ function UserProgress() {
       setPhotoToast({ open: true, message: 'Complete a workout session first to upload progress photos.' });
       return;
     }
-    if (!canUploadToday) {
+    if (!canUploadSelectedDate) {
       setPhotoToast({ open: true, message: `Photo upload is available on completion day (${completionDate}).` });
       return;
     }
@@ -111,23 +143,27 @@ function UserProgress() {
     if (!file) return;
 
     const photoUrl = URL.createObjectURL(file);
-    const todayDateShort = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-    setPhotos((prev) => {
-      const available = prev.find((item) => !item.imageUrl);
-      if (!available) {
-        return [{ id: `p${Date.now()}`, date: todayDateShort, imageUrl: photoUrl }, ...prev.slice(0, 3)];
+    setPhotosByDate((prev) => {
+      const dayPhotos = prev[selectedDate] || createPhotoSlots();
+      const availableIndex = dayPhotos.findIndex((item) => !item.imageUrl);
+      if (availableIndex === -1) {
+        return prev;
       }
 
-      return prev.map((item) => (
-        item.id === available.id
-          ? { ...item, date: todayDateShort, imageUrl: photoUrl }
+      const nextDayPhotos = dayPhotos.map((item, index) => (
+        index === availableIndex
+          ? { id: `p-${Date.now()}`, imageUrl: photoUrl }
           : item
       ));
+
+      return {
+        ...prev,
+        [selectedDate]: nextDayPhotos,
+      };
     });
 
     event.target.value = '';
-    setPhotoToast({ open: true, message: 'Progress photo uploaded for today.' });
+    setPhotoToast({ open: true, message: `Progress photo uploaded for ${selectedDateShort}.` });
   };
 
   const handleClosePhotoToast = (_, reason) => {
@@ -145,13 +181,24 @@ function UserProgress() {
       }}
     >
       <Box sx={{ maxWidth: 1240, mx: 'auto' }}>
-        <Stack spacing={0.8} mb={2.3}>
-          <Typography sx={{ fontWeight: 900, fontSize: { xs: '1.6rem', md: '2rem' }, color: theme.palette.text.primary }}>
-            Progress Tracking
-          </Typography>
-          <Typography sx={{ color: theme.palette.text.secondary }}>
-            Track body changes, workout consistency, and visual transformation over time.
-          </Typography>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} alignItems={{ xs: 'flex-start', md: 'flex-end' }} justifyContent="space-between" mb={2.3}>
+          <Stack spacing={0.8}>
+            <Typography sx={{ fontWeight: 900, fontSize: { xs: '1.6rem', md: '2rem' }, color: theme.palette.text.primary }}>
+              Progress Tracking
+            </Typography>
+            <Typography sx={{ color: theme.palette.text.secondary }}>
+              Track body changes, workout consistency, and visual transformation over time.
+            </Typography>
+          </Stack>
+
+          <TextField
+            label="Select Date"
+            type="date"
+            value={selectedDate}
+            onChange={(event) => setSelectedDate(event.target.value)}
+            InputLabelProps={{ shrink: true }}
+            sx={{ minWidth: { xs: '100%', md: 240 } }}
+          />
         </Stack>
 
         <Box
@@ -330,7 +377,7 @@ function UserProgress() {
                   variant="contained"
                   startIcon={<AddAPhotoRoundedIcon />}
                   onClick={handleUploadClick}
-                  disabled={!canUploadToday}
+                  disabled={!canUploadSelectedDate}
                   sx={{
                     borderRadius: 2,
                     textTransform: 'none',
@@ -350,8 +397,12 @@ function UserProgress() {
                 sx={{ fontWeight: 700 }}
               />
               <Chip
-                label={canUploadToday ? 'Upload Window: Open today' : 'Upload Window: Closed'}
-                color={canUploadToday ? 'success' : 'default'}
+                label={`Viewing Date: ${selectedDateFull}`}
+                sx={{ fontWeight: 700 }}
+              />
+              <Chip
+                label={canUploadSelectedDate ? 'Upload Window: Open today' : 'Upload Window: Closed'}
+                color={canUploadSelectedDate ? 'success' : 'default'}
                 sx={{ fontWeight: 700 }}
               />
             </Stack>
@@ -363,9 +414,9 @@ function UserProgress() {
                 gap: 1.2,
               }}
             >
-              {photos.map((photo, index) => (
+              {selectedDatePhotos.map((photo, index) => (
                 <MotionCard
-                  key={photo.id}
+                  key={`${selectedDate}-${photo.id}-${index}`}
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25, delay: index * 0.04 }}
@@ -401,7 +452,7 @@ function UserProgress() {
                   )}
 
                   <Chip
-                    label={photo.date}
+                    label={selectedDateShort}
                     sx={{
                       position: 'absolute',
                       left: 10,
