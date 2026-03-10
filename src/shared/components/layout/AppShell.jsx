@@ -8,17 +8,25 @@ const DRAWER_WIDTH = 240;
 
 function AppShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarHidden, setSidebarHidden] = useState(false);
   const location = useLocation();
   const isUserRoute = location.pathname.startsWith('/user/');
 
   const handleMenuClick = () => setMobileOpen((prev) => !prev);
   const handleDrawerClose = () => setMobileOpen(false);
+  const handleHideSidebar = () => setSidebarHidden(true);
+  const handleShowSidebar = () => setSidebarHidden(false);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Topbar onMenuClick={handleMenuClick} />
-      {!isUserRoute && (
-        <Sidebar mobileOpen={mobileOpen} onClose={handleDrawerClose} />
+      <Topbar
+        onMenuClick={handleMenuClick}
+        showSidebarButton={!isUserRoute && sidebarHidden}
+        onShowSidebar={handleShowSidebar}
+        sidebarHidden={sidebarHidden}
+      />
+      {!isUserRoute && !sidebarHidden && (
+        <Sidebar mobileOpen={mobileOpen} onClose={handleDrawerClose} onHide={handleHideSidebar} />
       )}
 
       <Box
@@ -26,7 +34,7 @@ function AppShell() {
         sx={{
           flexGrow: 1,
           p: isUserRoute ? 0 : 3,
-          width: { sm: isUserRoute ? '100%' : `calc(100% - ${DRAWER_WIDTH}px)` },
+          width: { sm: isUserRoute || sidebarHidden ? '100%' : `calc(100% - ${DRAWER_WIDTH}px)` },
           bgcolor: 'background.default',
           minHeight: '100vh',
         }}
