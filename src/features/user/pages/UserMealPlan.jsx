@@ -19,6 +19,7 @@ import IcecreamRoundedIcon from '@mui/icons-material/IcecreamRounded';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
+const MotionTypography = motion(Typography);
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -109,13 +110,46 @@ const toConicGradient = (data) => {
   return `conic-gradient(${segments.join(', ')})`;
 };
 
+const polarToCartesian = (cx, cy, radius, angleInDegrees) => {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
+  return {
+    x: cx + (radius * Math.cos(angleInRadians)),
+    y: cy + (radius * Math.sin(angleInRadians)),
+  };
+};
+
+const describeArc = (cx, cy, radius, startAngle, endAngle) => {
+  const start = polarToCartesian(cx, cy, radius, endAngle);
+  const end = polarToCartesian(cx, cy, radius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? 0 : 1;
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+};
+
 function UserMealPlan() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [planMode, setPlanMode] = useState('dietitian');
+  const [hoveredMacro, setHoveredMacro] = useState(null);
+  const [hoveredBar, setHoveredBar] = useState(null);
 
   const totalConsumed = useMemo(() => meals.reduce((sum, meal) => sum + meal.total, 0), []);
   const maxCals = useMemo(() => Math.max(...weeklyCals.map((item) => item.cals)), []);
+  const pieSegments = useMemo(() => {
+    const total = macroData.reduce((sum, item) => sum + item.value, 0);
+    let cumulativeAngle = 0;
+
+    return macroData.map((item) => {
+      const sweep = (item.value / total) * 360;
+      const startAngle = cumulativeAngle;
+      const endAngle = cumulativeAngle + sweep;
+      cumulativeAngle = endAngle;
+
+      return {
+        ...item,
+        path: describeArc(100, 100, 72, startAngle, endAngle),
+      };
+    });
+  }, []);
 
   return (
     <MotionBox
@@ -172,7 +206,10 @@ function UserMealPlan() {
             <CardContent>
               <Typography sx={{ fontWeight: 900, fontSize: '1.2rem', mb: 2 }}>Daily Summary</Typography>
               <Stack alignItems="center" spacing={2}>
-                <Box
+                <MotionBox
+                  initial={{ opacity: 0, scale: 0.92, rotate: -10 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  transition={{ duration: 0.55, ease: 'easeOut' }}
                   sx={{
                     width: 200,
                     height: 200,
@@ -180,8 +217,28 @@ function UserMealPlan() {
                     background: toConicGradient(macroData),
                     display: 'grid',
                     placeItems: 'center',
+                    position: 'relative',
                   }}
                 >
+                  <svg viewBox="0 0 200 200" width="200" height="200" style={{ position: 'absolute', inset: 0 }}>
+                    {pieSegments.map((segment, index) => (
+                      <motion.path
+                        key={segment.name}
+                        d={segment.path}
+                        fill="none"
+                        stroke={segment.color}
+                        strokeWidth="28"
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0, opacity: 0.45 }}
+                        animate={{ pathLength: 1, opacity: hoveredMacro === segment.name ? 1 : 0.88 }}
+                        transition={{ duration: 0.7, delay: 0.1 + (index * 0.12), ease: 'easeOut' }}
+                        onHoverStart={() => setHoveredMacro(segment.name)}
+                        onHoverEnd={() => setHoveredMacro(null)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    ))}
+                  </svg>
+
                   <Box
                     sx={{
                       width: 128,
@@ -194,10 +251,24 @@ function UserMealPlan() {
                       flexDirection: 'column',
                     }}
                   >
-                    <Typography sx={{ fontWeight: 900, fontSize: '2.2rem', lineHeight: 1 }}>{totalConsumed.toLocaleString()}</Typography>
-                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.82rem' }}>kcal consumed</Typography>
+                    <MotionTypography
+                      initial={{ y: 6, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.45, duration: 0.35 }}
+                      sx={{ fontWeight: 900, fontSize: '2.2rem', lineHeight: 1 }}
+                    >
+                      {totalConsumed.toLocaleString()}
+                    </MotionTypography>
+                    <MotionTypography
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.58, duration: 0.3 }}
+                      sx={{ color: theme.palette.text.secondary, fontSize: '0.82rem' }}
+                    >
+                      kcal consumed
+                    </MotionTypography>
                   </Box>
-                </Box>
+                </MotionBox>
 
                 <Stack direction="row" spacing={2.2}>
                   {macroData.map((item) => (
@@ -233,7 +304,20 @@ function UserMealPlan() {
                     const y = 180 - h;
                     return (
                       <g key={`${item.day}-${index}`}>
-                        <rect x={x} y={y} width={barWidth} height={h} rx="7" fill="#84cc16" />
+                        <motion.rect
+                          x={x}
+                          y={180}
+                          width={barWidth}
+                          height={0}
+                          rx="7"
+                          fill={hoveredBar === index ? '#65a30d' : '#84cc16'}
+                          initial={{ y: 180, height: 0 }}
+                          animate={{ y, height: h }}
+                          transition={{ duration: 0.55, delay: 0.08 + (index * 0.07), ease: 'easeOut' }}
+                          onHoverStart={() => setHoveredBar(index)}
+                          onHoverEnd={() => setHoveredBar(null)}
+                          style={{ cursor: 'pointer' }}
+                        />
                         <text x={x + (barWidth / 2)} y="204" textAnchor="middle" fill="#94a3b8" fontSize="14">{item.day}</text>
                       </g>
                     );
