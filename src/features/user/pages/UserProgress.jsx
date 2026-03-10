@@ -106,6 +106,7 @@ function UserProgress() {
     ],
   }));
   const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
+  const [editingPhotoIndex, setEditingPhotoIndex] = useState(null);
   const uploadInputRef = useRef(null);
   const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
   const selectedDateFull = formatIsoToFull(selectedDate);
@@ -145,13 +146,14 @@ function UserProgress() {
     const photoUrl = URL.createObjectURL(file);
     setPhotosByDate((prev) => {
       const dayPhotos = prev[selectedDate] || createPhotoSlots();
-      const availableIndex = dayPhotos.findIndex((item) => !item.imageUrl);
-      if (availableIndex === -1) {
-        return prev;
-      }
+      const targetIndex = editingPhotoIndex !== null
+        ? editingPhotoIndex
+        : dayPhotos.findIndex((item) => !item.imageUrl);
+
+      if (targetIndex === -1) return prev;
 
       const nextDayPhotos = dayPhotos.map((item, index) => (
-        index === availableIndex
+        index === targetIndex
           ? { id: `p-${Date.now()}`, imageUrl: photoUrl }
           : item
       ));
@@ -163,7 +165,30 @@ function UserProgress() {
     });
 
     event.target.value = '';
+    setEditingPhotoIndex(null);
     setPhotoToast({ open: true, message: `Progress photo uploaded for ${selectedDateShort}.` });
+  };
+
+  const handleEditPhoto = (index) => {
+    setEditingPhotoIndex(index);
+    uploadInputRef.current?.click();
+  };
+
+  const handleDeletePhoto = (index) => {
+    setPhotosByDate((prev) => {
+      const dayPhotos = prev[selectedDate] || createPhotoSlots();
+      const nextDayPhotos = dayPhotos.map((item, itemIndex) => (
+        itemIndex === index
+          ? { id: `slot-${index + 1}`, imageUrl: '' }
+          : item
+      ));
+
+      return {
+        ...prev,
+        [selectedDate]: nextDayPhotos,
+      };
+    });
+    setPhotoToast({ open: true, message: 'Photo deleted from selected date.' });
   };
 
   const handleClosePhotoToast = (_, reason) => {
@@ -429,12 +454,49 @@ function UserProgress() {
                   }}
                 >
                   {photo.imageUrl ? (
-                    <Box
-                      component="img"
-                      src={photo.imageUrl}
-                      alt={`Progress ${index + 1}`}
-                      sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
+                    <>
+                      <Box
+                        component="img"
+                        src={photo.imageUrl}
+                        alt={`Progress ${index + 1}`}
+                        sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <Stack direction="row" spacing={0.8} sx={{ position: 'absolute', right: 10, bottom: 10 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => handleEditPhoto(index)}
+                          sx={{
+                            minWidth: 'auto',
+                            px: 1.2,
+                            py: 0.3,
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            bgcolor: 'rgba(15, 23, 42, 0.8)',
+                            '&:hover': { bgcolor: 'rgba(2, 6, 23, 0.9)' },
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="error"
+                          onClick={() => handleDeletePhoto(index)}
+                          sx={{
+                            minWidth: 'auto',
+                            px: 1.2,
+                            py: 0.3,
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            bgcolor: 'rgba(185, 28, 28, 0.85)',
+                            '&:hover': { bgcolor: 'rgba(127, 29, 29, 0.95)' },
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </Stack>
+                    </>
                   ) : (
                     <Box
                       sx={{
@@ -450,19 +512,6 @@ function UserProgress() {
                       </Typography>
                     </Box>
                   )}
-
-                  <Chip
-                    label={selectedDateShort}
-                    sx={{
-                      position: 'absolute',
-                      left: 10,
-                      bottom: 10,
-                      fontWeight: 700,
-                      bgcolor: 'rgba(17, 24, 39, 0.7)',
-                      color: '#fff',
-                      backdropFilter: 'blur(2px)',
-                    }}
-                  />
                 </MotionCard>
               ))}
             </Box>
