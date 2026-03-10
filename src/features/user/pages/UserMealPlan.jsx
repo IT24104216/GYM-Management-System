@@ -1,6 +1,18 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from 'recharts';
+import {
   Box,
   Button,
   Card,
@@ -19,7 +31,6 @@ import IcecreamRoundedIcon from '@mui/icons-material/IcecreamRounded';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
-const MotionTypography = motion(Typography);
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -98,79 +109,38 @@ const meals = [
   },
 ];
 
-const toConicGradient = (data) => {
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-  let current = 0;
-  const segments = data.map((item) => {
-    const start = (current / total) * 360;
-    current += item.value;
-    const end = (current / total) * 360;
-    return `${item.color} ${start}deg ${end}deg`;
-  });
-  return `conic-gradient(${segments.join(', ')})`;
-};
+const yAxisTicks = [650, 1300, 1950, 2600];
 
-const polarToCartesian = (cx, cy, radius, angleInDegrees) => {
-  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
-  return {
-    x: cx + (radius * Math.cos(angleInRadians)),
-    y: cy + (radius * Math.sin(angleInRadians)),
-  };
-};
+function CalorieTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
 
-const describeArc = (cx, cy, radius, startAngle, endAngle) => {
-  const start = polarToCartesian(cx, cy, radius, endAngle);
-  const end = polarToCartesian(cx, cy, radius, startAngle);
-  const largeArcFlag = endAngle - startAngle <= 180 ? 0 : 1;
-  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
-};
+  return (
+    <Box
+      sx={{
+        bgcolor: '#ffffff',
+        border: '1px solid #e5e7eb',
+        borderRadius: 2,
+        px: 1.5,
+        py: 1.1,
+        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.14)',
+      }}
+    >
+      <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ mt: 0.45, fontSize: '0.88rem', fontWeight: 800, color: '#84cc16', lineHeight: 1.2 }}>
+        cals : {payload[0].value}
+      </Typography>
+    </Box>
+  );
+}
 
 function UserMealPlan() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [planMode, setPlanMode] = useState('dietitian');
-  const [hoveredMacro, setHoveredMacro] = useState(null);
-  const [hoveredBar, setHoveredBar] = useState(null);
 
   const totalConsumed = useMemo(() => meals.reduce((sum, meal) => sum + meal.total, 0), []);
-  const maxCals = useMemo(() => Math.max(...weeklyCals.map((item) => item.cals)), []);
-  const yAxisTicks = useMemo(() => [650, 1300, 1950, 2600], []);
-  const barChartData = useMemo(() => {
-    const chartTop = 28;
-    const chartBottom = 180;
-    const barWidth = 52;
-    const gap = 42;
-
-    return weeklyCals.map((item, index) => {
-      const x = 84 + (index * (barWidth + gap));
-      const barHeight = Math.max((item.cals / maxCals) * (chartBottom - chartTop), 8);
-      const y = chartBottom - barHeight;
-      return {
-        ...item,
-        index,
-        x,
-        y,
-        barWidth,
-        barHeight,
-      };
-    });
-  }, [maxCals]);
-  const pieSegments = useMemo(() => {
-    const total = macroData.reduce((sum, item) => sum + item.value, 0);
-    let cumulativeAngle = 0;
-
-    return macroData.map((item) => {
-      const sweep = (item.value / total) * 360;
-      const startAngle = cumulativeAngle;
-      const endAngle = cumulativeAngle + sweep;
-      cumulativeAngle = endAngle;
-
-      return {
-        ...item,
-        path: describeArc(100, 100, 72, startAngle, endAngle),
-      };
-    });
-  }, []);
 
   return (
     <MotionBox
@@ -234,31 +204,28 @@ function UserMealPlan() {
                   sx={{
                     width: 200,
                     height: 200,
-                    borderRadius: '50%',
-                    background: toConicGradient(macroData),
-                    display: 'grid',
-                    placeItems: 'center',
                     position: 'relative',
                   }}
                 >
-                  <svg viewBox="0 0 200 200" width="200" height="200" style={{ position: 'absolute', inset: 0 }}>
-                    {pieSegments.map((segment, index) => (
-                      <motion.path
-                        key={segment.name}
-                        d={segment.path}
-                        fill="none"
-                        stroke={segment.color}
-                        strokeWidth="28"
-                        strokeLinecap="round"
-                        initial={{ pathLength: 0, opacity: 0.45 }}
-                        animate={{ pathLength: 1, opacity: hoveredMacro === segment.name ? 1 : 0.88 }}
-                        transition={{ duration: 0.7, delay: 0.1 + (index * 0.12), ease: 'easeOut' }}
-                        onHoverStart={() => setHoveredMacro(segment.name)}
-                        onHoverEnd={() => setHoveredMacro(null)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                    ))}
-                  </svg>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={macroData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={62}
+                        outerRadius={88}
+                        paddingAngle={4}
+                        stroke="none"
+                        isAnimationActive
+                        animationDuration={900}
+                      >
+                        {macroData.map((item) => (
+                          <Cell key={item.name} fill={item.color} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
 
                   <Box
                     sx={{
@@ -272,22 +239,16 @@ function UserMealPlan() {
                       flexDirection: 'column',
                     }}
                   >
-                    <MotionTypography
-                      initial={{ y: 6, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: 0.45, duration: 0.35 }}
+                    <Typography
                       sx={{ fontWeight: 900, fontSize: '2.2rem', lineHeight: 1 }}
                     >
                       {totalConsumed.toLocaleString()}
-                    </MotionTypography>
-                    <MotionTypography
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.58, duration: 0.3 }}
+                    </Typography>
+                    <Typography
                       sx={{ color: theme.palette.text.secondary, fontSize: '0.82rem' }}
                     >
                       kcal consumed
-                    </MotionTypography>
+                    </Typography>
                   </Box>
                 </MotionBox>
 
@@ -312,80 +273,40 @@ function UserMealPlan() {
               </Stack>
 
               <Box sx={{ width: '100%', overflowX: 'auto' }}>
-                <svg viewBox="0 0 760 240" width="100%" height="240" role="img" aria-label="Weekly calorie trend">
-                  <line x1="56" y1="28" x2="736" y2="28" stroke="#e2e8f0" strokeDasharray="3 4" />
-                  <line x1="56" y1="104" x2="736" y2="104" stroke="#e2e8f0" strokeDasharray="3 4" />
-                  <line x1="56" y1="180" x2="736" y2="180" stroke="#e2e8f0" strokeDasharray="3 4" />
-
-                  {yAxisTicks.map((tickValue) => {
-                    const y = 180 - ((tickValue / maxCals) * (180 - 28));
-                    return (
-                      <text key={tickValue} x="48" y={y + 5} textAnchor="end" fill="#94a3b8" fontSize="14">
-                        {tickValue}
-                      </text>
-                    );
-                  })}
-                  <text x="48" y="209" textAnchor="end" fill="#94a3b8" fontSize="14">0</text>
-
-                  {barChartData.map((item) => {
-                    return (
-                      <g key={`${item.day}-${item.index}`}>
-                        <motion.rect
-                          x={item.x}
-                          y={item.y}
-                          width={item.barWidth}
-                          height={item.barHeight}
-                          rx="7"
-                          fill={hoveredBar === item.index ? '#65a30d' : '#84cc16'}
-                          initial={{ scaleY: 0 }}
-                          animate={{ scaleY: 1 }}
-                          transition={{ duration: 0.55, delay: 0.08 + (item.index * 0.07), ease: 'easeOut' }}
-                          onHoverStart={() => setHoveredBar(item.index)}
-                          onHoverEnd={() => setHoveredBar(null)}
-                          style={{
-                            cursor: 'pointer',
-                            transformBox: 'fill-box',
-                            transformOrigin: 'center bottom',
-                          }}
-                        />
-                        <text x={item.x + (item.barWidth / 2)} y="204" textAnchor="middle" fill="#94a3b8" fontSize="14">{item.day}</text>
-                      </g>
-                    );
-                  })}
-
-                  {hoveredBar !== null && barChartData[hoveredBar] && (
-                    <g>
-                      <rect
-                        x={Math.min(Math.max(barChartData[hoveredBar].x + (barChartData[hoveredBar].barWidth / 2) - 74, 64), 612)}
-                        y={Math.max(barChartData[hoveredBar].y - 92, 34)}
-                        width="148"
-                        height="94"
-                        rx="16"
-                        fill="#ffffff"
-                        stroke="#e5e7eb"
-                        filter="drop-shadow(0px 8px 20px rgba(15, 23, 42, 0.10))"
+                <Box sx={{ width: '100%', height: 240 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={weeklyCals} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 4" stroke="#cbd5e1" />
+                      <XAxis
+                        dataKey="day"
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: '#94a3b8', fontSize: 14 }}
                       />
-                      <text
-                        x={Math.min(Math.max(barChartData[hoveredBar].x + (barChartData[hoveredBar].barWidth / 2) - 56, 82), 630)}
-                        y={Math.max(barChartData[hoveredBar].y - 58, 68)}
-                        fill="#0f172a"
-                        fontSize="36"
-                        fontWeight="700"
-                      >
-                        {barChartData[hoveredBar].day}
-                      </text>
-                      <text
-                        x={Math.min(Math.max(barChartData[hoveredBar].x + (barChartData[hoveredBar].barWidth / 2) - 56, 82), 630)}
-                        y={Math.max(barChartData[hoveredBar].y - 16, 110)}
+                      <YAxis
+                        domain={[0, 2600]}
+                        ticks={[0, ...yAxisTicks]}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: '#94a3b8', fontSize: 14 }}
+                        width={46}
+                      />
+                      <Tooltip
+                        cursor={{ fill: 'transparent' }}
+                        content={<CalorieTooltip />}
+                        wrapperStyle={{ outline: 'none' }}
+                      />
+                      <Bar
+                        dataKey="cals"
                         fill="#84cc16"
-                        fontSize="40"
-                        fontWeight="700"
-                      >
-                        cals : {barChartData[hoveredBar].cals}
-                      </text>
-                    </g>
-                  )}
-                </svg>
+                        radius={[8, 8, 0, 0]}
+                        barSize={52}
+                        isAnimationActive
+                        animationDuration={650}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Box>
               </Box>
             </CardContent>
           </MotionCard>
