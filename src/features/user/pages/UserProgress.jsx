@@ -30,6 +30,7 @@ import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 
 const MotionCard = motion(Card);
 const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
+const WORKOUT_COMPLETION_HISTORY_KEY = 'gympro_workout_completion_history';
 
 const getTodayIso = () => new Date().toISOString().split('T')[0];
 const formatIsoToFull = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-US', {
@@ -200,6 +201,22 @@ const getPreviousIsoDate = (isoDate) => {
   return toIsoDate(dateObj);
 };
 
+const getConsecutiveWorkoutStreak = (completionDates) => {
+  if (!completionDates.length) return 0;
+
+  const dateSet = new Set(completionDates);
+  const latestDate = completionDates[completionDates.length - 1];
+
+  let streak = 0;
+  let cursorDate = latestDate;
+  while (dateSet.has(cursorDate)) {
+    streak += 1;
+    cursorDate = getPreviousIsoDate(cursorDate);
+  }
+
+  return streak;
+};
+
 function UserProgress() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -270,6 +287,19 @@ function UserProgress() {
     },
   }));
   const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
+  const workoutCompletionDates = useMemo(() => {
+    const rawHistory = localStorage.getItem(WORKOUT_COMPLETION_HISTORY_KEY);
+    if (!rawHistory) return [];
+
+    try {
+      const parsedHistory = JSON.parse(rawHistory);
+      if (!Array.isArray(parsedHistory)) return [];
+
+      return [...new Set(parsedHistory.filter((value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)))].sort();
+    } catch {
+      return [];
+    }
+  }, [completionDate]);
   const selectedDateFull = formatIsoToFull(selectedDate);
   const selectedDateShort = formatIsoToShort(selectedDate);
   const visibleMonthLabel = visibleMonth.toLocaleDateString('en-US', {
@@ -360,13 +390,7 @@ function UserProgress() {
     const currentBodyFat = hasBodyFatData ? sortedBodyFatHistory[sortedBodyFatHistory.length - 1].bodyFat : null;
     const bodyFatDelta = hasBodyFatData ? Number((currentBodyFat - baselineBodyFat).toFixed(1)) : null;
 
-    const loggedDateSet = new Set(sortedWeightHistory.map((entry) => entry.isoDate));
-    let streak = 0;
-    let cursorDate = latest.isoDate;
-    while (loggedDateSet.has(cursorDate)) {
-      streak += 1;
-      cursorDate = getPreviousIsoDate(cursorDate);
-    }
+    const streak = getConsecutiveWorkoutStreak(workoutCompletionDates);
 
     return METRIC_CARD_META.map((item) => {
       if (item.id === 'weight') {
@@ -407,7 +431,7 @@ function UserProgress() {
         changeColor: '#f59e0b',
       };
     });
-  }, [measurementsByDate, weightHistoryByDate]);
+  }, [measurementsByDate, weightHistoryByDate, workoutCompletionDates]);
 
   const hoveredPoint = hoveredChartPoint;
   const hoveredItem = hoveredChartPoint ? chartData.weightHistory[hoveredChartPoint.index] : null;
