@@ -58,12 +58,12 @@ const SERVICES = [
     link: ROUTES.USER_DIETITIANS,
   },
   {
-    title: 'Personal Training',
-    description: 'One-on-one sessions with certified trainers',
+    title: 'Workout Planning',
+    description: 'Personalized training programs designed for your goals',
     image:
       'https://images.unsplash.com/photo-1758875569414-120ebc62ada3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwZXJzb25hbCUyMHRyYWluaW5nJTIwc2Vzc2lvbiUyMGd5bXxlbnwxfHx8fDE3NzI5MTkyNjl8MA&ixlib=rb-4.1.0&q=80&w=1080',
     icon: TrackChangesOutlinedIcon,
-    link: ROUTES.USER_DASHBOARD,
+    link: ROUTES.USER_WORKOUTS,
   },
   {
     title: 'Progress Tracking',
