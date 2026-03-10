@@ -66,9 +66,6 @@ const METRIC_CARDS = [
   },
 ];
 
-const WEIGHT_HISTORY = [189, 187, 186, 184, 183, 181, 180, 178];
-const WEIGHT_LABELS = ['Sep 1', 'Sep 8', 'Sep 15', 'Sep 22', 'Sep 29', 'Oct 6', 'Oct 13', 'Oct 20'];
-
 const BODY_MEASUREMENTS = [
   { id: 'chest', area: 'Chest', value: '42.5"', delta: '+0.5"', trend: 'up' },
   { id: 'waist', area: 'Waist', value: '32.0"', delta: '-1.2"', trend: 'down' },
@@ -108,24 +105,49 @@ function UserProgress() {
   const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
   const [editingPhotoIndex, setEditingPhotoIndex] = useState(null);
   const uploadInputRef = useRef(null);
+  const [weightHistoryByDate] = useState(() => ({
+    [twoDaysAgoIso]: 189,
+    [previousIso]: 184,
+    [todayIso]: 179,
+  }));
   const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
   const selectedDateFull = formatIsoToFull(selectedDate);
   const selectedDateShort = formatIsoToShort(selectedDate);
   const canUploadSelectedDate = Boolean(completionDate) && completionDate === selectedDateFull;
   const selectedDatePhotos = photosByDate[selectedDate] || createPhotoSlots();
 
-  const chartPoints = useMemo(() => {
-    const max = Math.max(...WEIGHT_HISTORY);
-    const min = Math.min(...WEIGHT_HISTORY);
+  const chartData = useMemo(() => {
+    const entries = Object.entries(weightHistoryByDate)
+      .map(([isoDate, weight]) => ({ isoDate, weight }))
+      .sort((left, right) => new Date(`${left.isoDate}T00:00:00`) - new Date(`${right.isoDate}T00:00:00`));
+
+    const labels = entries.map((item) => formatIsoToShort(item.isoDate));
+    const values = entries.map((item) => item.weight);
+    const maxValue = Math.max(...values);
+    const minValue = Math.min(...values);
+    const yTop = Math.ceil(maxValue + 2);
+    const yBottom = Math.floor(minValue - 2);
+    const yMiddle = Math.round((yTop + yBottom) / 2);
     const width = 620;
     const height = 220;
-    return WEIGHT_HISTORY.map((value, index) => {
-      const x = (index / (WEIGHT_HISTORY.length - 1)) * width;
-      const normalized = (value - min) / Math.max(1, max - min);
-      const y = height - normalized * height;
-      return `${x},${y}`;
-    }).join(' ');
-  }, []);
+
+    const points = values.map((value, index) => {
+      const x = values.length > 1 ? (index / (values.length - 1)) * width : width / 2;
+      const normalized = (value - yBottom) / Math.max(1, yTop - yBottom);
+      const y = height - (normalized * height);
+      return { x, y };
+    });
+
+    return {
+      points,
+      labels,
+      yTop,
+      yMiddle,
+      yBottom,
+      polylinePoints: points.map((point) => `${70 + point.x},${24 + point.y}`).join(' '),
+      fillPoints: `70,244 ${points.map((point) => `${70 + point.x},${24 + point.y}`).join(' ')}`,
+    };
+  }, [weightHistoryByDate]);
 
   const handleUploadClick = () => {
     if (!completionDate) {
@@ -301,32 +323,26 @@ function UserProgress() {
                   <line x1="70" y1="144" x2="650" y2="144" stroke="#d7e0ec" strokeDasharray="3 5" />
                   <line x1="70" y1="244" x2="650" y2="244" stroke="#d7e0ec" strokeDasharray="3 5" />
 
-                  <text x="34" y="30" fill="#94a3b8" fontSize="18">195</text>
-                  <text x="34" y="150" fill="#94a3b8" fontSize="18">186</text>
-                  <text x="34" y="250" fill="#94a3b8" fontSize="18">174</text>
+                  <text x="34" y="30" fill="#94a3b8" fontSize="18">{chartData.yTop}</text>
+                  <text x="34" y="150" fill="#94a3b8" fontSize="18">{chartData.yMiddle}</text>
+                  <text x="34" y="250" fill="#94a3b8" fontSize="18">{chartData.yBottom}</text>
 
                   <polyline
-                    points={`70,244 ${chartPoints.split(' ').map((point) => {
-                      const [x, y] = point.split(',').map(Number);
-                      return `${70 + x},${24 + y}`;
-                    }).join(' ')}`}
+                    points={chartData.fillPoints}
                     fill="rgba(13, 148, 136, 0.16)"
                     stroke="none"
                   />
 
                   <polyline
-                    points={chartPoints.split(' ').map((point) => {
-                      const [x, y] = point.split(',').map(Number);
-                      return `${70 + x},${24 + y}`;
-                    }).join(' ')}
+                    points={chartData.polylinePoints}
                     fill="none"
                     stroke="#0d9488"
                     strokeWidth="4"
                     strokeLinecap="round"
                   />
 
-                  {WEIGHT_LABELS.map((label, index) => {
-                    const x = 70 + (index / (WEIGHT_LABELS.length - 1)) * 620;
+                  {chartData.labels.map((label, index) => {
+                    const x = 70 + ((chartData.labels.length > 1 ? index / (chartData.labels.length - 1) : 0.5) * 620);
                     return <text key={label} x={x - 18} y="268" fill="#94a3b8" fontSize="16">{label}</text>;
                   })}
                 </svg>
