@@ -114,6 +114,13 @@ const formatCounter = (totalSeconds) => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
+const getDurationInMinutes = (durationText, fallbackMinutes) => {
+  const matched = String(durationText || '').match(/(\d+)/);
+  const parsed = matched ? Number(matched[1]) : NaN;
+  if (Number.isNaN(parsed) || parsed <= 0) return fallbackMinutes;
+  return parsed;
+};
+
 const EXERCISE_LIBRARY = MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({
   id: exercise.id,
   title: exercise.name,
@@ -247,6 +254,7 @@ function UserWorkouts() {
   const [isWorkoutSessionOpen, setIsWorkoutSessionOpen] = useState(false);
   const [activeSessionWorkout, setActiveSessionWorkout] = useState(null);
   const [elapsedSessionSeconds, setElapsedSessionSeconds] = useState(0);
+  const [sessionStarted, setSessionStarted] = useState(false);
   const [sessionToast, setSessionToast] = useState({ open: false, message: '' });
   const [sessionExercises, setSessionExercises] = useState(
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
@@ -276,10 +284,17 @@ function UserWorkouts() {
     ? upcomingExercises.filter((item) => item.id !== todayWorkout.id)
     : upcomingExercises;
 
+  const activeSessionDurationMinutes = getDurationInMinutes(
+    activeSessionWorkout?.duration,
+    MOCK_WORKOUT_SESSION.estimatedDurationMinutes,
+  );
+  const activeSessionLimitSeconds = activeSessionDurationMinutes * 60;
+
   const handleOpenWorkoutSession = () => {
     if (!todayWorkout) return;
     setActiveSessionWorkout(todayWorkout);
     setElapsedSessionSeconds(0);
+    setSessionStarted(false);
     setSessionExercises(MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })));
     setIsWorkoutSessionOpen(true);
   };
@@ -288,6 +303,7 @@ function UserWorkouts() {
     setIsWorkoutSessionOpen(false);
     setActiveSessionWorkout(null);
     setElapsedSessionSeconds(0);
+    setSessionStarted(false);
   };
 
   const handleMarkSessionFinish = () => {
@@ -318,17 +334,18 @@ function UserWorkouts() {
 
   useEffect(() => {
     if (!isWorkoutSessionOpen) return undefined;
-    if (elapsedSessionSeconds >= SESSION_LIMIT_SECONDS) return undefined;
+    if (!sessionStarted) return undefined;
+    if (elapsedSessionSeconds >= activeSessionLimitSeconds) return undefined;
 
     const timerId = setInterval(() => {
       setElapsedSessionSeconds((prev) => {
-        if (prev >= SESSION_LIMIT_SECONDS) return SESSION_LIMIT_SECONDS;
+        if (prev >= activeSessionLimitSeconds) return activeSessionLimitSeconds;
         return prev + 1;
       });
     }, 1000);
 
     return () => clearInterval(timerId);
-  }, [isWorkoutSessionOpen, elapsedSessionSeconds]);
+  }, [isWorkoutSessionOpen, elapsedSessionSeconds, sessionStarted, activeSessionLimitSeconds]);
 
   return (
     <Box
@@ -485,6 +502,25 @@ function UserWorkouts() {
             </Box>
 
             <Stack direction="row" alignItems="center" spacing={1}>
+              <Button
+                onClick={() => setSessionStarted(true)}
+                disabled={sessionStarted}
+                variant="contained"
+                sx={{
+                  borderRadius: 2,
+                  px: 1.4,
+                  py: 0.45,
+                  minWidth: 72,
+                  fontWeight: 800,
+                  textTransform: 'none',
+                  background: 'linear-gradient(180deg, #0f1f3b 0%, #0b1730 100%)',
+                  '&:hover': {
+                    background: 'linear-gradient(180deg, #0f2954 0%, #0b1f40 100%)',
+                  },
+                }}
+              >
+                {sessionStarted ? 'Started' : 'Start'}
+              </Button>
               <Box
                 sx={{
                   px: 1.4,
@@ -497,7 +533,7 @@ function UserWorkouts() {
                 }}
               >
                 <Typography sx={{ fontWeight: 800, letterSpacing: 0.4, color: theme.palette.text.primary }}>
-                  {formatCounter(elapsedSessionSeconds)} / {formatCounter(SESSION_LIMIT_SECONDS)}
+                  {formatCounter(elapsedSessionSeconds)} / {formatCounter(activeSessionLimitSeconds)}
                 </Typography>
               </Box>
               <Chip
