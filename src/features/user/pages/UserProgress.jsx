@@ -6,6 +6,10 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Snackbar,
   Stack,
   TextField,
@@ -17,6 +21,7 @@ import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import StraightenRoundedIcon from '@mui/icons-material/StraightenRounded';
 import AddAPhotoRoundedIcon from '@mui/icons-material/AddAPhotoRounded';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 
 const MotionCard = motion(Card);
 const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
@@ -66,12 +71,12 @@ const METRIC_CARDS = [
   },
 ];
 
-const BODY_MEASUREMENTS = [
-  { id: 'chest', area: 'Chest', value: '42.5"', delta: '+0.5"', trend: 'up' },
-  { id: 'waist', area: 'Waist', value: '32.0"', delta: '-1.2"', trend: 'down' },
-  { id: 'arms', area: 'Arms', value: '15.5"', delta: '+0.2"', trend: 'up' },
-  { id: 'thighs', area: 'Thighs', value: '24.0"', delta: '0.0"', trend: 'flat' },
-];
+const MEASUREMENT_LABELS = {
+  chest: 'Chest',
+  waist: 'Waist',
+  arms: 'Arms',
+  thighs: 'Thighs',
+};
 
 function UserProgress() {
   const theme = useTheme();
@@ -104,11 +109,24 @@ function UserProgress() {
   }));
   const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
   const [editingPhotoIndex, setEditingPhotoIndex] = useState(null);
+  const [isMeasurementDialogOpen, setIsMeasurementDialogOpen] = useState(false);
+  const [measurementForm, setMeasurementForm] = useState({
+    chest: '',
+    waist: '',
+    arms: '',
+    thighs: '',
+    weight: '',
+  });
   const uploadInputRef = useRef(null);
-  const [weightHistoryByDate] = useState(() => ({
+  const [weightHistoryByDate, setWeightHistoryByDate] = useState(() => ({
     [twoDaysAgoIso]: 189,
     [previousIso]: 184,
     [todayIso]: 179,
+  }));
+  const [measurementsByDate, setMeasurementsByDate] = useState(() => ({
+    [twoDaysAgoIso]: { chest: 41.8, waist: 33.5, arms: 15.2, thighs: 24.1 },
+    [previousIso]: { chest: 42.0, waist: 33.2, arms: 15.3, thighs: 24.0 },
+    [todayIso]: { chest: 42.5, waist: 32.0, arms: 15.5, thighs: 24.0 },
   }));
   const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
   const selectedDateFull = formatIsoToFull(selectedDate);
@@ -148,6 +166,86 @@ function UserProgress() {
       fillPoints: `70,244 ${points.map((point) => `${70 + point.x},${24 + point.y}`).join(' ')}`,
     };
   }, [weightHistoryByDate]);
+
+  const measurementRows = useMemo(() => {
+    const sortedDates = Object.keys(measurementsByDate)
+      .sort((left, right) => new Date(`${left}T00:00:00`) - new Date(`${right}T00:00:00`));
+
+    const selectedMeasurements = measurementsByDate[selectedDate] || { chest: 0, waist: 0, arms: 0, thighs: 0 };
+    const previousDate = [...sortedDates]
+      .reverse()
+      .find((dateValue) => new Date(`${dateValue}T00:00:00`) < new Date(`${selectedDate}T00:00:00`));
+    const previousMeasurements = previousDate ? measurementsByDate[previousDate] : null;
+
+    return Object.keys(MEASUREMENT_LABELS).map((key) => {
+      const currentValue = Number(selectedMeasurements[key] || 0);
+      const previousValue = Number(previousMeasurements?.[key] || currentValue);
+      const diff = currentValue - previousValue;
+      const trend = diff > 0 ? 'up' : (diff < 0 ? 'down' : 'flat');
+      const deltaText = `${diff > 0 ? '+' : ''}${diff.toFixed(1)}"`;
+
+      return {
+        id: key,
+        area: MEASUREMENT_LABELS[key],
+        value: `${currentValue.toFixed(1)}"`,
+        delta: deltaText,
+        trend,
+      };
+    });
+  }, [measurementsByDate, selectedDate]);
+
+  const handleOpenMeasurementDialog = () => {
+    const selectedMeasurements = measurementsByDate[selectedDate] || { chest: '', waist: '', arms: '', thighs: '' };
+    setMeasurementForm({
+      chest: selectedMeasurements.chest === '' ? '' : String(selectedMeasurements.chest),
+      waist: selectedMeasurements.waist === '' ? '' : String(selectedMeasurements.waist),
+      arms: selectedMeasurements.arms === '' ? '' : String(selectedMeasurements.arms),
+      thighs: selectedMeasurements.thighs === '' ? '' : String(selectedMeasurements.thighs),
+      weight: weightHistoryByDate[selectedDate] ? String(weightHistoryByDate[selectedDate]) : '',
+    });
+    setIsMeasurementDialogOpen(true);
+  };
+
+  const handleCloseMeasurementDialog = () => {
+    setIsMeasurementDialogOpen(false);
+  };
+
+  const handleMeasurementFieldChange = (field) => (event) => {
+    setMeasurementForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleSubmitMeasurements = (event) => {
+    event.preventDefault();
+
+    const chestValue = Number(measurementForm.chest);
+    const waistValue = Number(measurementForm.waist);
+    const armsValue = Number(measurementForm.arms);
+    const thighsValue = Number(measurementForm.thighs);
+    const weightValue = Number(measurementForm.weight);
+
+    if ([chestValue, waistValue, armsValue, thighsValue, weightValue].some((value) => Number.isNaN(value) || value <= 0)) {
+      setPhotoToast({ open: true, message: 'Please enter valid measurement and weight values.' });
+      return;
+    }
+
+    setMeasurementsByDate((prev) => ({
+      ...prev,
+      [selectedDate]: {
+        chest: chestValue,
+        waist: waistValue,
+        arms: armsValue,
+        thighs: thighsValue,
+      },
+    }));
+
+    setWeightHistoryByDate((prev) => ({
+      ...prev,
+      [selectedDate]: weightValue,
+    }));
+
+    setIsMeasurementDialogOpen(false);
+    setPhotoToast({ open: true, message: `Measurements and weight saved for ${selectedDateFull}.` });
+  };
 
   const handleUploadClick = () => {
     if (!completionDate) {
@@ -352,9 +450,25 @@ function UserProgress() {
 
           <Card sx={{ borderRadius: 2.4, border: `1px solid ${isDark ? '#263851' : '#e3eaf2'}` }}>
             <CardContent>
-              <Typography sx={{ fontWeight: 900, fontSize: '1.7rem', mb: 1.2 }}>Body Measurements</Typography>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.2}>
+                <Typography sx={{ fontWeight: 900, fontSize: '1.7rem' }}>Body Measurements</Typography>
+                <Button
+                  variant="contained"
+                  startIcon={<AddRoundedIcon />}
+                  onClick={handleOpenMeasurementDialog}
+                  sx={{
+                    borderRadius: 2,
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    bgcolor: '#0f172a',
+                    '&:hover': { bgcolor: '#111827' },
+                  }}
+                >
+                  Add
+                </Button>
+              </Stack>
               <Stack spacing={1.05}>
-                {BODY_MEASUREMENTS.map((item) => (
+                {measurementRows.map((item) => (
                   <Box
                     key={item.id}
                     sx={{
@@ -382,7 +496,9 @@ function UserProgress() {
                     </Box>
                     <Box>
                       <Typography sx={{ fontWeight: 800, fontSize: '1.5rem' }}>{item.area}</Typography>
-                      <Typography sx={{ color: theme.palette.text.secondary, fontSize: '1.1rem' }}>Last measured: Today</Typography>
+                      <Typography sx={{ color: theme.palette.text.secondary, fontSize: '1.1rem' }}>
+                        Last measured: {selectedDateFull}
+                      </Typography>
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
                       <Typography sx={{ fontWeight: 900, fontSize: '2rem', lineHeight: 1 }}>{item.value}</Typography>
@@ -542,6 +658,37 @@ function UserProgress() {
         message={photoToast.message}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       />
+
+      <Dialog
+        open={isMeasurementDialogOpen}
+        onClose={handleCloseMeasurementDialog}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{
+          component: 'form',
+          onSubmit: handleSubmitMeasurements,
+          sx: { borderRadius: 3 },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900 }}>Add Measurements</DialogTitle>
+        <DialogContent sx={{ pt: 1, pb: 0.5 }}>
+          <Stack spacing={1.5} sx={{ mt: 0.5 }}>
+            <TextField label="Chest" value={measurementForm.chest} onChange={handleMeasurementFieldChange('chest')} required />
+            <TextField label="Waist" value={measurementForm.waist} onChange={handleMeasurementFieldChange('waist')} required />
+            <TextField label="Arms" value={measurementForm.arms} onChange={handleMeasurementFieldChange('arms')} required />
+            <TextField label="Thighs" value={measurementForm.thighs} onChange={handleMeasurementFieldChange('thighs')} required />
+            <TextField label="Weight" value={measurementForm.weight} onChange={handleMeasurementFieldChange('weight')} required />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.2 }}>
+          <Button onClick={handleCloseMeasurementDialog} variant="outlined" sx={{ borderRadius: 2, fontWeight: 700 }}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="contained" sx={{ borderRadius: 2, fontWeight: 700 }}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
