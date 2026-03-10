@@ -15,6 +15,7 @@ export const ROUTES = {
   USER_COACH_FEEDBACKS: '/user/coach-feedbacks',
   USER_DIETITIAN_FEEDBACKS: '/user/dietitian-feedbacks',
   USER_WORKOUTS: '/user/workouts',
+  USER_MEAL_PLAN: '/user/meal-plan',
   USER_PROGRESS: '/user/progress',
   USER_PROFILE: '/user/profile',
   ADMIN_DASHBOARD: '/admin/dashboard',
