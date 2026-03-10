@@ -74,12 +74,12 @@ const SERVICES = [
     link: ROUTES.USER_PROGRESS,
   },
   {
-    title: 'Group Classes',
-    description: 'Join energizing group fitness sessions',
+    title: 'Meal Plans',
+    description: 'Access dietitian meal plans and build your own daily nutrition schedule',
     image:
-      'https://images.unsplash.com/photo-1758274525887-d95d19269f76?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxncm91cCUyMGZpdG5lc3MlMjBjbGFzcyUyMHlvZ2F8ZW58MXx8fHwxNzcyODIxNjM4fDA&ixlib=rb-4.1.0&q=80&w=1080',
-    icon: GroupsOutlinedIcon,
-    link: null,
+      'https://images.unsplash.com/photo-1498837167922-ddd27525d352?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    icon: RestaurantOutlinedIcon,
+    link: ROUTES.USER_MEAL_PLAN,
   },
 ];
 
