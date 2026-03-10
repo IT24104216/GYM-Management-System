@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Snackbar,
   Stack,
   Typography,
 } from '@mui/material';
@@ -17,6 +18,7 @@ import StraightenRoundedIcon from '@mui/icons-material/StraightenRounded';
 import AddAPhotoRoundedIcon from '@mui/icons-material/AddAPhotoRounded';
 
 const MotionCard = motion(Card);
+const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
 
 const METRIC_CARDS = [
   {
@@ -69,7 +71,15 @@ function UserProgress() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [photos, setPhotos] = useState(INITIAL_PHOTOS);
+  const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
   const uploadInputRef = useRef(null);
+  const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
+  const todayDate = new Date().toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const canUploadToday = Boolean(completionDate) && completionDate === todayDate;
 
   const chartPoints = useMemo(() => {
     const max = Math.max(...WEIGHT_HISTORY);
@@ -85,6 +95,14 @@ function UserProgress() {
   }, []);
 
   const handleUploadClick = () => {
+    if (!completionDate) {
+      setPhotoToast({ open: true, message: 'Complete a workout session first to upload progress photos.' });
+      return;
+    }
+    if (!canUploadToday) {
+      setPhotoToast({ open: true, message: `Photo upload is available on completion day (${completionDate}).` });
+      return;
+    }
     uploadInputRef.current?.click();
   };
 
@@ -93,22 +111,28 @@ function UserProgress() {
     if (!file) return;
 
     const photoUrl = URL.createObjectURL(file);
-    const todayDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const todayDateShort = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     setPhotos((prev) => {
       const available = prev.find((item) => !item.imageUrl);
       if (!available) {
-        return [{ id: `p${Date.now()}`, date: todayDate, imageUrl: photoUrl }, ...prev.slice(0, 3)];
+        return [{ id: `p${Date.now()}`, date: todayDateShort, imageUrl: photoUrl }, ...prev.slice(0, 3)];
       }
 
       return prev.map((item) => (
         item.id === available.id
-          ? { ...item, date: todayDate, imageUrl: photoUrl }
+          ? { ...item, date: todayDateShort, imageUrl: photoUrl }
           : item
       ));
     });
 
     event.target.value = '';
+    setPhotoToast({ open: true, message: 'Progress photo uploaded for today.' });
+  };
+
+  const handleClosePhotoToast = (_, reason) => {
+    if (reason === 'clickaway') return;
+    setPhotoToast((prev) => ({ ...prev, open: false }));
   };
 
   return (
@@ -306,6 +330,7 @@ function UserProgress() {
                   variant="contained"
                   startIcon={<AddAPhotoRoundedIcon />}
                   onClick={handleUploadClick}
+                  disabled={!canUploadToday}
                   sx={{
                     borderRadius: 2,
                     textTransform: 'none',
@@ -317,6 +342,18 @@ function UserProgress() {
                   Add Photo
                 </Button>
               </>
+            </Stack>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1.2}>
+              <Chip
+                label={completionDate ? `Workout Completion Date: ${completionDate}` : 'Workout Completion Date: Not available yet'}
+                sx={{ fontWeight: 700 }}
+              />
+              <Chip
+                label={canUploadToday ? 'Upload Window: Open today' : 'Upload Window: Closed'}
+                color={canUploadToday ? 'success' : 'default'}
+                sx={{ fontWeight: 700 }}
+              />
             </Stack>
 
             <Box
@@ -381,6 +418,14 @@ function UserProgress() {
           </CardContent>
         </Card>
       </Box>
+
+      <Snackbar
+        open={photoToast.open}
+        onClose={handleClosePhotoToast}
+        autoHideDuration={2600}
+        message={photoToast.message}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      />
     </Box>
   );
 }
