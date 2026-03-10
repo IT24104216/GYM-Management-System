@@ -1,8 +1,12 @@
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Button,
   Chip,
+  Dialog,
+  IconButton,
+  Snackbar,
   Stack,
   Typography,
 } from '@mui/material';
@@ -14,16 +18,83 @@ import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import GradeRoundedIcon from '@mui/icons-material/GradeRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
+import FlipRoundedIcon from '@mui/icons-material/FlipRounded';
 
 const MotionBox = motion(Box);
+const SESSION_LIMIT_SECONDS = 60 * 60;
+const TODAY_MOCK_DATE = new Date().toLocaleDateString('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
 
-const TODAY_PLAN = {
-  title: 'Upper Body Power',
-  dateLabel: 'Oct 24',
-  description: 'Focus on compound movements to build raw strength. Keep rest periods between 3-5 minutes for main lifts.',
-  duration: '60 min',
-  intensity: 'Heavy Load',
-  xp: '500 XP',
+const MOCK_WORKOUT_SESSION = {
+  id: 'session-push-day-1',
+  title: 'Push Day - Chest and Shoulders',
+  estimatedDurationMinutes: 60,
+  status: 'in-progress',
+  summary: 'Coach-assigned workout with progressive overload focus for upper body pressing strength.',
+  exercises: [
+    {
+      id: 'w1',
+      name: 'Upper Body Power',
+      setsReps: '4x8',
+      focusArea: 'Chest, Back, Shoulders',
+      instruction: 'Perform controlled reps with full range and keep your core braced throughout each set.',
+      duration: '60 min',
+      level: 'Advanced',
+      rating: 4.8,
+      gradient: 'linear-gradient(135deg, #65a30d 0%, #0ea5a5 100%)',
+      scheduledDate: TODAY_MOCK_DATE,
+      completedDate: null,
+      done: false,
+    },
+    {
+      id: 'w2',
+      name: 'Lower Body Hypertrophy',
+      setsReps: '3x10',
+      focusArea: 'Quads, Hamstrings, Glutes',
+      instruction: 'Use moderate tempo and consistent depth to maximize time under tension for each movement.',
+      duration: '75 min',
+      level: 'Intermediate',
+      rating: 4.9,
+      gradient: 'linear-gradient(135deg, #0f766e 0%, #0284c7 100%)',
+      scheduledDate: null,
+      completedDate: 'Mar 05, 2026',
+      done: true,
+    },
+    {
+      id: 'w3',
+      name: 'Core and Cardio Blast',
+      setsReps: '3x12',
+      focusArea: 'Abs, Obliques, Heart',
+      instruction: 'Keep transitions short and maintain steady breathing to sustain intensity across rounds.',
+      duration: '45 min',
+      level: 'Beginner',
+      rating: 4.6,
+      gradient: 'linear-gradient(135deg, #b45309 0%, #ea580c 100%)',
+      scheduledDate: null,
+      completedDate: 'Mar 03, 2026',
+      done: true,
+    },
+    {
+      id: 'w4',
+      name: 'Active Recovery Yoga',
+      setsReps: '3x15',
+      focusArea: 'Full Body',
+      instruction: 'Move slowly through each posture and prioritize breath control to improve recovery.',
+      duration: '30 min',
+      level: 'All Levels',
+      rating: 4.7,
+      gradient: 'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
+      scheduledDate: 'Mar 16, 2026',
+      completedDate: null,
+      done: false,
+    },
+  ],
 };
 
 const parseWorkoutDate = (dateValue) => {
@@ -37,52 +108,31 @@ const sameDay = (leftDate, rightDate) => (
   && leftDate.getDate() === rightDate.getDate()
 );
 
-const EXERCISE_LIBRARY = [
-  {
-    id: 'w1',
-    title: 'Upper Body Power',
-    muscles: 'Chest, Back, Shoulders',
-    workoutDate: 'Mar 14, 2026',
-    duration: '60 min',
-    level: 'Advanced',
-    rating: 4.8,
-    gradient: 'linear-gradient(135deg, #65a30d 0%, #0ea5a5 100%)',
-    done: false,
+const formatCounter = (totalSeconds) => {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+const EXERCISE_LIBRARY = MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({
+  id: exercise.id,
+  title: exercise.name,
+  muscles: exercise.focusArea,
+  workoutDate: exercise.done ? exercise.completedDate : exercise.scheduledDate,
+  duration: exercise.duration,
+  level: exercise.level,
+  rating: exercise.rating,
+  gradient: exercise.gradient,
+  done: exercise.done,
+  sessionRuntime: {
+    completed: exercise.done,
+    flipped: false,
   },
-  {
-    id: 'w2',
-    title: 'Lower Body Hypertrophy',
-    muscles: 'Quads, Hamstrings, Glutes',
-    workoutDate: 'Mar 05, 2026',
-    duration: '75 min',
-    level: 'Intermediate',
-    rating: 4.9,
-    gradient: 'linear-gradient(135deg, #0f766e 0%, #0284c7 100%)',
-    done: true,
+  sessionExerciseMeta: {
+    setsReps: exercise.setsReps,
+    instruction: exercise.instruction,
   },
-  {
-    id: 'w3',
-    title: 'Core and Cardio Blast',
-    muscles: 'Abs, Obliques, Heart',
-    workoutDate: 'Mar 03, 2026',
-    duration: '45 min',
-    level: 'Beginner',
-    rating: 4.6,
-    gradient: 'linear-gradient(135deg, #b45309 0%, #ea580c 100%)',
-    done: true,
-  },
-  {
-    id: 'w4',
-    title: 'Active Recovery Yoga',
-    muscles: 'Full Body',
-    workoutDate: 'Mar 16, 2026',
-    duration: '30 min',
-    level: 'All Levels',
-    rating: 4.7,
-    gradient: 'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
-    done: false,
-  },
-];
+}));
 
 const previousExercises = EXERCISE_LIBRARY.filter((item) => item.done);
 
@@ -194,6 +244,13 @@ function UserWorkouts() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const today = new Date();
+  const [isWorkoutSessionOpen, setIsWorkoutSessionOpen] = useState(false);
+  const [activeSessionWorkout, setActiveSessionWorkout] = useState(null);
+  const [elapsedSessionSeconds, setElapsedSessionSeconds] = useState(0);
+  const [sessionToast, setSessionToast] = useState({ open: false, message: '' });
+  const [sessionExercises, setSessionExercises] = useState(
+    MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
+  );
 
   const upcomingExercises = EXERCISE_LIBRARY
     .filter((item) => !item.done)
@@ -218,6 +275,60 @@ function UserWorkouts() {
   const visibleUpcomingExercises = todayWorkout
     ? upcomingExercises.filter((item) => item.id !== todayWorkout.id)
     : upcomingExercises;
+
+  const handleOpenWorkoutSession = () => {
+    if (!todayWorkout) return;
+    setActiveSessionWorkout(todayWorkout);
+    setElapsedSessionSeconds(0);
+    setSessionExercises(MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })));
+    setIsWorkoutSessionOpen(true);
+  };
+
+  const handleCloseWorkoutSession = () => {
+    setIsWorkoutSessionOpen(false);
+    setActiveSessionWorkout(null);
+    setElapsedSessionSeconds(0);
+  };
+
+  const handleMarkSessionFinish = () => {
+    handleCloseWorkoutSession();
+    setSessionToast({ open: true, message: 'Workout session marked as finished.' });
+  };
+
+  const handleCloseSessionToast = (_, reason) => {
+    if (reason === 'clickaway') return;
+    setSessionToast((prev) => ({ ...prev, open: false }));
+  };
+
+  const handleToggleExerciseDone = (exerciseId) => {
+    setSessionExercises((prev) => prev.map((exercise) => (
+      exercise.id === exerciseId
+        ? { ...exercise, done: !exercise.done }
+        : exercise
+    )));
+  };
+
+  const handleToggleExerciseFlip = (exerciseId) => {
+    setSessionExercises((prev) => prev.map((exercise) => (
+      exercise.id === exerciseId
+        ? { ...exercise, flipped: !exercise.flipped }
+        : exercise
+    )));
+  };
+
+  useEffect(() => {
+    if (!isWorkoutSessionOpen) return undefined;
+    if (elapsedSessionSeconds >= SESSION_LIMIT_SECONDS) return undefined;
+
+    const timerId = setInterval(() => {
+      setElapsedSessionSeconds((prev) => {
+        if (prev >= SESSION_LIMIT_SECONDS) return SESSION_LIMIT_SECONDS;
+        return prev + 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [isWorkoutSessionOpen, elapsedSessionSeconds]);
 
   return (
     <Box
@@ -285,6 +396,7 @@ function UserWorkouts() {
             <Button
               variant="contained"
               startIcon={<PlayArrowRoundedIcon />}
+              onClick={handleOpenWorkoutSession}
               sx={{
                 borderRadius: 2.2,
                 px: 2.4,
@@ -347,6 +459,189 @@ function UserWorkouts() {
           ))}
         </Box>
       </Box>
+
+      <Dialog
+        open={isWorkoutSessionOpen}
+        onClose={handleCloseWorkoutSession}
+        fullWidth
+        maxWidth="md"
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            bgcolor: theme.palette.background.paper,
+            border: `1px solid ${isDark ? '#263752' : '#e1e8f2'}`,
+          },
+        }}
+      >
+        <Box sx={{ p: { xs: 2, md: 2.6 } }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
+            <Box>
+              <Typography sx={{ fontWeight: 900, fontSize: { xs: '1.25rem', md: '1.65rem' }, color: theme.palette.text.primary }}>
+                {activeSessionWorkout?.title || MOCK_WORKOUT_SESSION.title}
+              </Typography>
+              <Typography sx={{ color: theme.palette.text.secondary, mt: 0.4, fontSize: '0.98rem' }}>
+                {MOCK_WORKOUT_SESSION.exercises.length} exercises • ~{MOCK_WORKOUT_SESSION.estimatedDurationMinutes} min
+              </Typography>
+            </Box>
+
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Box
+                sx={{
+                  px: 1.4,
+                  py: 0.55,
+                  borderRadius: 2,
+                  border: `1px solid ${isDark ? '#385277' : '#d9e4f2'}`,
+                  bgcolor: isDark ? '#111c31' : '#f8fbff',
+                  minWidth: 126,
+                  textAlign: 'center',
+                }}
+              >
+                <Typography sx={{ fontWeight: 800, letterSpacing: 0.4, color: theme.palette.text.primary }}>
+                  {formatCounter(elapsedSessionSeconds)} / {formatCounter(SESSION_LIMIT_SECONDS)}
+                </Typography>
+              </Box>
+              <Chip
+                label="In Progress"
+                sx={{
+                  bgcolor: '#16a34a',
+                  color: '#fff',
+                  fontWeight: 800,
+                }}
+              />
+              <IconButton onClick={handleCloseWorkoutSession} size="small">
+                <CloseRoundedIcon sx={{ color: theme.palette.text.secondary }} />
+              </IconButton>
+            </Stack>
+          </Stack>
+
+          <Stack spacing={1.2} sx={{ mt: 2.2 }}>
+            {sessionExercises.map((exercise, index) => (
+              <MotionBox
+                key={exercise.id}
+                initial={{ opacity: 0, x: -28 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.28, delay: index * 0.09 }}
+                sx={{
+                  borderRadius: 2.2,
+                  border: `1px solid ${isDark ? '#2a3d5b' : '#e3eaf2'}`,
+                  bgcolor: exercise.flipped
+                    ? (isDark ? '#0f2333' : '#eaf7f4')
+                    : theme.palette.background.default,
+                  px: { xs: 1.4, md: 2 },
+                  py: { xs: 1.2, md: 1.4 },
+                  display: 'grid',
+                  gridTemplateColumns: 'auto 1fr auto',
+                  alignItems: 'center',
+                  gap: 1.2,
+                }}
+              >
+                <IconButton
+                  onClick={() => handleToggleExerciseDone(exercise.id)}
+                  size="small"
+                  sx={{ p: 0.2 }}
+                >
+                  {exercise.done ? (
+                    <CheckCircleRoundedIcon sx={{ color: '#10b981', fontSize: 26 }} />
+                  ) : (
+                    <RadioButtonUncheckedRoundedIcon sx={{ color: isDark ? '#8ea1bf' : '#b6c1d1', fontSize: 26 }} />
+                  )}
+                </IconButton>
+
+                <Box>
+                  {exercise.flipped ? (
+                    <>
+                      <Typography
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: '1.02rem',
+                          color: isDark ? '#a7f3d0' : '#0f766e',
+                        }}
+                      >
+                        {exercise.name} - Instructions
+                      </Typography>
+                      <Typography
+                        sx={{
+                          color: theme.palette.text.secondary,
+                          fontSize: '0.95rem',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {exercise.instruction}
+                      </Typography>
+                    </>
+                  ) : (
+                    <>
+                      <Typography
+                        sx={{
+                          fontWeight: 800,
+                          fontSize: '1.02rem',
+                          color: theme.palette.text.primary,
+                          textDecoration: exercise.done ? 'line-through' : 'none',
+                          opacity: exercise.done ? 0.6 : 1,
+                        }}
+                      >
+                        {exercise.name}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          color: theme.palette.text.secondary,
+                          fontSize: '0.95rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {exercise.setsReps} - {exercise.focusArea}
+                      </Typography>
+                    </>
+                  )}
+                </Box>
+
+                <Button
+                  variant="text"
+                  startIcon={<FlipRoundedIcon sx={{ fontSize: 16 }} />}
+                  onClick={() => handleToggleExerciseFlip(exercise.id)}
+                  sx={{
+                    color: theme.palette.text.secondary,
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    minWidth: 'auto',
+                    px: 0.4,
+                  }}
+                >
+                  Flip
+                </Button>
+              </MotionBox>
+            ))}
+          </Stack>
+
+          <Button
+            variant="contained"
+            onClick={handleMarkSessionFinish}
+            sx={{
+              mt: 2.2,
+              width: '100%',
+              borderRadius: 2.2,
+              py: 1.05,
+              fontWeight: 800,
+              fontSize: '1rem',
+              textTransform: 'none',
+              background: 'linear-gradient(90deg, #65a30d 0%, #0d9488 100%)',
+              '&:hover': {
+                background: 'linear-gradient(90deg, #5b940d 0%, #0b8578 100%)',
+              },
+            }}
+          >
+            Mark as Finish
+          </Button>
+        </Box>
+      </Dialog>
+
+      <Snackbar
+        open={sessionToast.open}
+        onClose={handleCloseSessionToast}
+        autoHideDuration={2800}
+        message={sessionToast.message}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      />
     </Box>
   );
 }
