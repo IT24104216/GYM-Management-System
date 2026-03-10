@@ -166,31 +166,22 @@ const createPhotoSlots = () => Array.from({ length: 4 }, (_, index) => ({
   imageUrl: '',
 }));
 
-const METRIC_CARDS = [
+const METRIC_CARD_META = [
   {
     id: 'weight',
     label: 'Current Weight',
-    value: '179.0',
-    unit: 'lbs',
-    change: '-11 lbs',
     icon: MonitorWeightRoundedIcon,
     tone: '#2563eb',
   },
   {
     id: 'fat',
     label: 'Body Fat %',
-    value: '19.5%',
-    unit: '',
-    change: '-2.5%',
     icon: TrendingUpRoundedIcon,
     tone: '#9333ea',
   },
   {
     id: 'streak',
     label: 'Workout Streak',
-    value: '12 Days',
-    unit: '',
-    change: 'On Fire!',
     icon: EmojiEventsRoundedIcon,
     tone: '#d97706',
   },
@@ -201,6 +192,12 @@ const MEASUREMENT_LABELS = {
   waist: 'Waist',
   arms: 'Arms',
   thighs: 'Thighs',
+};
+
+const getPreviousIsoDate = (isoDate) => {
+  const dateObj = new Date(`${isoDate}T00:00:00`);
+  dateObj.setDate(dateObj.getDate() - 1);
+  return toIsoDate(dateObj);
 };
 
 function UserProgress() {
@@ -310,6 +307,69 @@ function UserProgress() {
       linePath: buildSmoothPath(points),
       areaPath,
     };
+  }, [weightHistoryByDate]);
+
+  const metricCards = useMemo(() => {
+    const sortedWeightHistory = Object.entries(weightHistoryByDate)
+      .map(([isoDate, weight]) => ({ isoDate, weight: Number(weight) }))
+      .sort((left, right) => new Date(`${left.isoDate}T00:00:00`) - new Date(`${right.isoDate}T00:00:00`));
+
+    if (!sortedWeightHistory.length) {
+      return METRIC_CARD_META.map((item) => ({
+        ...item,
+        value: '--',
+        unit: '',
+        change: 'No data',
+        changeColor: '#94a3b8',
+      }));
+    }
+
+    const baseline = sortedWeightHistory[0];
+    const latest = sortedWeightHistory[sortedWeightHistory.length - 1];
+    const weightDelta = latest.weight - baseline.weight;
+
+    const baselineBodyFat = 22.0;
+    const currentBodyFatRaw = baselineBodyFat + (weightDelta * 0.23);
+    const currentBodyFat = Math.max(8, Number(currentBodyFatRaw.toFixed(1)));
+    const bodyFatDelta = Number((currentBodyFat - baselineBodyFat).toFixed(1));
+
+    const loggedDateSet = new Set(sortedWeightHistory.map((entry) => entry.isoDate));
+    let streak = 0;
+    let cursorDate = latest.isoDate;
+    while (loggedDateSet.has(cursorDate)) {
+      streak += 1;
+      cursorDate = getPreviousIsoDate(cursorDate);
+    }
+
+    return METRIC_CARD_META.map((item) => {
+      if (item.id === 'weight') {
+        return {
+          ...item,
+          value: latest.weight.toFixed(1),
+          unit: 'lbs',
+          change: `${weightDelta > 0 ? '+' : ''}${weightDelta.toFixed(1)} lbs`,
+          changeColor: weightDelta <= 0 ? '#10b981' : '#ef4444',
+        };
+      }
+
+      if (item.id === 'fat') {
+        return {
+          ...item,
+          value: `${currentBodyFat.toFixed(1)}%`,
+          unit: '',
+          change: `${bodyFatDelta > 0 ? '+' : ''}${bodyFatDelta.toFixed(1)}%`,
+          changeColor: bodyFatDelta <= 0 ? '#10b981' : '#ef4444',
+        };
+      }
+
+      return {
+        ...item,
+        value: `${streak} Days`,
+        unit: '',
+        change: streak >= 7 ? 'On Fire!' : 'Keep Going!',
+        changeColor: '#f59e0b',
+      };
+    });
   }, [weightHistoryByDate]);
 
   const hoveredPoint = hoveredChartPoint;
@@ -617,7 +677,7 @@ function UserProgress() {
             mb: 2,
           }}
         >
-          {METRIC_CARDS.map((item, index) => {
+          {metricCards.map((item, index) => {
             const Icon = item.icon;
             return (
               <MotionCard
@@ -655,7 +715,7 @@ function UserProgress() {
                           {item.value}
                         </Typography>
                         {item.unit && <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 700 }}>{item.unit}</Typography>}
-                        <Typography sx={{ color: item.id === 'streak' ? '#f59e0b' : '#10b981', fontWeight: 800 }}>
+                        <Typography sx={{ color: item.changeColor, fontWeight: 800 }}>
                           {item.change}
                         </Typography>
                       </Stack>
