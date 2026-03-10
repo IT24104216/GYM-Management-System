@@ -10,6 +10,7 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -22,18 +23,27 @@ function SidebarContent() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
   const navItems = NAV_CONFIG[user?.role] || [];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        bgcolor: isDark ? '#0d1627' : '#ffffff',
+      }}
+    >
       {/* Brand */}
       <Toolbar
         sx={{ cursor: 'pointer' }}
         onClick={() => navigate(ROLE_HOME[user?.role])}
       >
-        <FitnessCenterIcon sx={{ color: 'secondary.main', mr: 1 }} />
-        <Typography variant="h6" fontWeight={700} color="primary">
+        <FitnessCenterIcon sx={{ color: isDark ? '#ec4899' : 'secondary.main', mr: 1 }} />
+        <Typography variant="h6" fontWeight={700} sx={{ color: isDark ? '#93c5fd' : 'primary.main' }}>
           GymPro
         </Typography>
       </Toolbar>
@@ -49,11 +59,18 @@ function SidebarContent() {
                 selected={isActive}
                 sx={{
                   borderRadius: 2,
+                  color: isDark ? '#dbe7ff' : 'text.primary',
+                  '& .MuiListItemIcon-root': {
+                    color: isDark ? '#9fb5d8' : 'text.secondary',
+                  },
+                  '&:hover': {
+                    bgcolor: isDark ? '#16243a' : '#f8fafc',
+                  },
                   '&.Mui-selected': {
-                    bgcolor: 'primary.main',
-                    color: 'primary.contrastText',
-                    '& .MuiListItemIcon-root': { color: 'primary.contrastText' },
-                    '&:hover': { bgcolor: 'primary.dark' },
+                    bgcolor: isDark ? '#7cbcf0' : 'primary.main',
+                    color: isDark ? '#0f172a' : 'primary.contrastText',
+                    '& .MuiListItemIcon-root': { color: isDark ? '#0f172a' : 'primary.contrastText' },
+                    '&:hover': { bgcolor: isDark ? '#6eb2e9' : 'primary.dark' },
                   },
                 }}
               >
