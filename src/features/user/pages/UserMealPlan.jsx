@@ -205,6 +205,7 @@ function UserMealPlan() {
                     width: 200,
                     height: 200,
                     position: 'relative',
+                    mb: 0.5,
                   }}
                 >
                   <ResponsiveContainer width="100%" height="100%">
@@ -231,6 +232,10 @@ function UserMealPlan() {
                     sx={{
                       width: 128,
                       height: 128,
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
                       borderRadius: '50%',
                       bgcolor: theme.palette.background.paper,
                       display: 'flex',
@@ -252,15 +257,22 @@ function UserMealPlan() {
                   </Box>
                 </MotionBox>
 
-                <Stack direction="row" spacing={2.2}>
+                <Box
+                  sx={{
+                    width: '100%',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                    gap: 1,
+                  }}
+                >
                   {macroData.map((item) => (
-                    <Stack key={item.name} alignItems="center" spacing={0.3}>
+                    <Stack key={item.name} alignItems="center" spacing={0.3} sx={{ minWidth: 0 }}>
                       <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: item.color }} />
                       <Typography sx={{ fontWeight: 800, fontSize: '0.9rem' }}>{item.name}</Typography>
                       <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.86rem' }}>{item.value}g</Typography>
                     </Stack>
                   ))}
-                </Stack>
+                </Box>
               </Stack>
             </CardContent>
           </MotionCard>
