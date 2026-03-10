@@ -20,6 +20,7 @@ export const ROUTES = {
   USER_PROFILE: '/user/profile',
   ADMIN_DASHBOARD: '/admin/dashboard',
   ADMIN_USERS: '/admin/users',
+  ADMIN_REPORTS: '/admin/reports',
   ADMIN_SETTINGS: '/admin/settings',
   DIETITIAN_DASHBOARD: '/dietitian/dashboard',
   DIETITIAN_CLIENTS: '/dietitian/clients',
