@@ -239,6 +239,7 @@ function UserProgress() {
     waist: '',
     arms: '',
     thighs: '',
+    bodyFat: '',
     weight: '',
   });
   const uploadInputRef = useRef(null);
@@ -246,9 +247,27 @@ function UserProgress() {
   const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
   const [weightHistoryByDate, setWeightHistoryByDate] = useState(() => createMockWeightHistory());
   const [measurementsByDate, setMeasurementsByDate] = useState(() => ({
-    [twoDaysAgoIso]: { chest: 41.8, waist: 33.5, arms: 15.2, thighs: 24.1 },
-    [previousIso]: { chest: 42.0, waist: 33.2, arms: 15.3, thighs: 24.0 },
-    [todayIso]: { chest: 42.5, waist: 32.0, arms: 15.5, thighs: 24.0 },
+    [twoDaysAgoIso]: {
+      chest: 41.8,
+      waist: 33.5,
+      arms: 15.2,
+      thighs: 24.1,
+      bodyFat: 22.0,
+    },
+    [previousIso]: {
+      chest: 42.0,
+      waist: 33.2,
+      arms: 15.3,
+      thighs: 24.0,
+      bodyFat: 21.1,
+    },
+    [todayIso]: {
+      chest: 42.5,
+      waist: 32.0,
+      arms: 15.5,
+      thighs: 24.0,
+      bodyFat: 19.5,
+    },
   }));
   const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
   const selectedDateFull = formatIsoToFull(selectedDate);
@@ -328,10 +347,18 @@ function UserProgress() {
     const latest = sortedWeightHistory[sortedWeightHistory.length - 1];
     const weightDelta = latest.weight - baseline.weight;
 
-    const baselineBodyFat = 22.0;
-    const currentBodyFatRaw = baselineBodyFat + (weightDelta * 0.23);
-    const currentBodyFat = Math.max(8, Number(currentBodyFatRaw.toFixed(1)));
-    const bodyFatDelta = Number((currentBodyFat - baselineBodyFat).toFixed(1));
+    const sortedBodyFatHistory = Object.entries(measurementsByDate)
+      .filter(([, values]) => Number.isFinite(Number(values?.bodyFat)))
+      .map(([isoDate, values]) => ({
+        isoDate,
+        bodyFat: Number(values.bodyFat),
+      }))
+      .sort((left, right) => new Date(`${left.isoDate}T00:00:00`) - new Date(`${right.isoDate}T00:00:00`));
+
+    const hasBodyFatData = sortedBodyFatHistory.length > 0;
+    const baselineBodyFat = hasBodyFatData ? sortedBodyFatHistory[0].bodyFat : null;
+    const currentBodyFat = hasBodyFatData ? sortedBodyFatHistory[sortedBodyFatHistory.length - 1].bodyFat : null;
+    const bodyFatDelta = hasBodyFatData ? Number((currentBodyFat - baselineBodyFat).toFixed(1)) : null;
 
     const loggedDateSet = new Set(sortedWeightHistory.map((entry) => entry.isoDate));
     let streak = 0;
@@ -353,6 +380,16 @@ function UserProgress() {
       }
 
       if (item.id === 'fat') {
+        if (!hasBodyFatData) {
+          return {
+            ...item,
+            value: '--',
+            unit: '',
+            change: 'No body-fat data',
+            changeColor: '#94a3b8',
+          };
+        }
+
         return {
           ...item,
           value: `${currentBodyFat.toFixed(1)}%`,
@@ -370,7 +407,7 @@ function UserProgress() {
         changeColor: '#f59e0b',
       };
     });
-  }, [weightHistoryByDate]);
+  }, [measurementsByDate, weightHistoryByDate]);
 
   const hoveredPoint = hoveredChartPoint;
   const hoveredItem = hoveredChartPoint ? chartData.weightHistory[hoveredChartPoint.index] : null;
@@ -405,12 +442,19 @@ function UserProgress() {
   }, [measurementsByDate, selectedDate]);
 
   const handleOpenMeasurementDialog = () => {
-    const selectedMeasurements = measurementsByDate[selectedDate] || { chest: '', waist: '', arms: '', thighs: '' };
+    const selectedMeasurements = measurementsByDate[selectedDate] || {
+      chest: '',
+      waist: '',
+      arms: '',
+      thighs: '',
+      bodyFat: '',
+    };
     setMeasurementForm({
       chest: selectedMeasurements.chest === '' ? '' : String(selectedMeasurements.chest),
       waist: selectedMeasurements.waist === '' ? '' : String(selectedMeasurements.waist),
       arms: selectedMeasurements.arms === '' ? '' : String(selectedMeasurements.arms),
       thighs: selectedMeasurements.thighs === '' ? '' : String(selectedMeasurements.thighs),
+      bodyFat: selectedMeasurements.bodyFat === '' ? '' : String(selectedMeasurements.bodyFat),
       weight: weightHistoryByDate[selectedDate] ? String(weightHistoryByDate[selectedDate]) : '',
     });
     setIsMeasurementDialogOpen(true);
@@ -431,9 +475,10 @@ function UserProgress() {
     const waistValue = Number(measurementForm.waist);
     const armsValue = Number(measurementForm.arms);
     const thighsValue = Number(measurementForm.thighs);
+    const bodyFatValue = Number(measurementForm.bodyFat);
     const weightValue = Number(measurementForm.weight);
 
-    if ([chestValue, waistValue, armsValue, thighsValue, weightValue].some((value) => Number.isNaN(value) || value <= 0)) {
+    if ([chestValue, waistValue, armsValue, thighsValue, bodyFatValue, weightValue].some((value) => Number.isNaN(value) || value <= 0)) {
       setPhotoToast({ open: true, message: 'Please enter valid measurement and weight values.' });
       return;
     }
@@ -445,6 +490,7 @@ function UserProgress() {
         waist: waistValue,
         arms: armsValue,
         thighs: thighsValue,
+        bodyFat: bodyFatValue,
       },
     }));
 
@@ -454,7 +500,7 @@ function UserProgress() {
     }));
 
     setIsMeasurementDialogOpen(false);
-    setPhotoToast({ open: true, message: `Measurements and weight saved for ${selectedDateFull}.` });
+    setPhotoToast({ open: true, message: `Measurements, body fat, and weight saved for ${selectedDateFull}.` });
   };
 
   const handleUploadClick = () => {
@@ -1039,6 +1085,7 @@ function UserProgress() {
             <TextField size="small" label="Waist" value={measurementForm.waist} onChange={handleMeasurementFieldChange('waist')} required />
             <TextField size="small" label="Arms" value={measurementForm.arms} onChange={handleMeasurementFieldChange('arms')} required />
             <TextField size="small" label="Thighs" value={measurementForm.thighs} onChange={handleMeasurementFieldChange('thighs')} required />
+            <TextField size="small" label="Body Fat %" value={measurementForm.bodyFat} onChange={handleMeasurementFieldChange('bodyFat')} required />
             <TextField size="small" label="Weight" value={measurementForm.weight} onChange={handleMeasurementFieldChange('weight')} required />
           </Stack>
         </DialogContent>
