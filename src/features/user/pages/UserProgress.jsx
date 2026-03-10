@@ -328,10 +328,10 @@ function UserProgress() {
       <Box sx={{ maxWidth: 1240, mx: 'auto' }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} alignItems={{ xs: 'flex-start', md: 'flex-end' }} justifyContent="space-between" mb={2.3}>
           <Stack spacing={0.8}>
-            <Typography sx={{ fontWeight: 900, fontSize: { xs: '1.6rem', md: '2rem' }, color: theme.palette.text.primary }}>
+            <Typography sx={{ fontWeight: 900, fontSize: { xs: '1.45rem', md: '1.78rem' }, color: theme.palette.text.primary }}>
               Progress Tracking
             </Typography>
-            <Typography sx={{ color: theme.palette.text.secondary }}>
+            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.94rem' }}>
               Track body changes, workout consistency, and visual transformation over time.
             </Typography>
           </Stack>
@@ -388,7 +388,7 @@ function UserProgress() {
                         {item.label}
                       </Typography>
                       <Stack direction="row" spacing={1} alignItems="baseline">
-                        <Typography sx={{ fontSize: '1.95rem', fontWeight: 900, lineHeight: 1.1 }}>
+                        <Typography sx={{ fontSize: '1.7rem', fontWeight: 900, lineHeight: 1.1 }}>
                           {item.value}
                         </Typography>
                         {item.unit && <Typography sx={{ color: theme.palette.text.secondary, fontWeight: 700 }}>{item.unit}</Typography>}
@@ -414,16 +414,16 @@ function UserProgress() {
         >
           <Card sx={{ borderRadius: 2.4, border: `1px solid ${isDark ? '#263851' : '#e3eaf2'}` }}>
             <CardContent>
-              <Typography sx={{ fontWeight: 900, fontSize: '1.7rem', mb: 1.2 }}>Weight History</Typography>
+              <Typography sx={{ fontWeight: 900, fontSize: '1.5rem', mb: 1.2 }}>Weight History</Typography>
               <Box sx={{ width: '100%', overflowX: 'auto' }}>
                 <svg viewBox="0 0 680 280" width="100%" height="280" role="img" aria-label="Weight history chart">
                   <line x1="70" y1="24" x2="650" y2="24" stroke="#d7e0ec" strokeDasharray="3 5" />
                   <line x1="70" y1="144" x2="650" y2="144" stroke="#d7e0ec" strokeDasharray="3 5" />
                   <line x1="70" y1="244" x2="650" y2="244" stroke="#d7e0ec" strokeDasharray="3 5" />
 
-                  <text x="34" y="30" fill="#94a3b8" fontSize="18">{chartData.yTop}</text>
-                  <text x="34" y="150" fill="#94a3b8" fontSize="18">{chartData.yMiddle}</text>
-                  <text x="34" y="250" fill="#94a3b8" fontSize="18">{chartData.yBottom}</text>
+                  <text x="34" y="30" fill="#94a3b8" fontSize="16">{chartData.yTop}</text>
+                  <text x="34" y="150" fill="#94a3b8" fontSize="16">{chartData.yMiddle}</text>
+                  <text x="34" y="250" fill="#94a3b8" fontSize="16">{chartData.yBottom}</text>
 
                   <polyline
                     points={chartData.fillPoints}
@@ -441,7 +441,7 @@ function UserProgress() {
 
                   {chartData.labels.map((label, index) => {
                     const x = 70 + ((chartData.labels.length > 1 ? index / (chartData.labels.length - 1) : 0.5) * 620);
-                    return <text key={label} x={x - 18} y="268" fill="#94a3b8" fontSize="16">{label}</text>;
+                    return <text key={label} x={x - 18} y="268" fill="#94a3b8" fontSize="14">{label}</text>;
                   })}
                 </svg>
               </Box>
@@ -451,7 +451,7 @@ function UserProgress() {
           <Card sx={{ borderRadius: 2.4, border: `1px solid ${isDark ? '#263851' : '#e3eaf2'}` }}>
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.2}>
-                <Typography sx={{ fontWeight: 900, fontSize: '1.7rem' }}>Body Measurements</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '1.5rem' }}>Body Measurements</Typography>
                 <Button
                   variant="contained"
                   startIcon={<AddRoundedIcon />}
@@ -495,13 +495,13 @@ function UserProgress() {
                       <StraightenRoundedIcon sx={{ color: '#9aa7bd' }} />
                     </Box>
                     <Box>
-                      <Typography sx={{ fontWeight: 800, fontSize: '1.5rem' }}>{item.area}</Typography>
-                      <Typography sx={{ color: theme.palette.text.secondary, fontSize: '1.1rem' }}>
+                      <Typography sx={{ fontWeight: 800, fontSize: '1.25rem' }}>{item.area}</Typography>
+                      <Typography sx={{ color: theme.palette.text.secondary, fontSize: '1rem' }}>
                         Last measured: {selectedDateFull}
                       </Typography>
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
-                      <Typography sx={{ fontWeight: 900, fontSize: '2rem', lineHeight: 1 }}>{item.value}</Typography>
+                      <Typography sx={{ fontWeight: 900, fontSize: '1.75rem', lineHeight: 1 }}>{item.value}</Typography>
                       <Typography
                         sx={{
                           fontWeight: 800,
@@ -521,7 +521,7 @@ function UserProgress() {
         <Card sx={{ borderRadius: 2.4, border: `1px solid ${isDark ? '#263851' : '#e3eaf2'}` }}>
           <CardContent>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.3}>
-              <Typography sx={{ fontWeight: 900, fontSize: '1.75rem' }}>Progress Photos</Typography>
+              <Typography sx={{ fontWeight: 900, fontSize: '1.55rem' }}>Progress Photos</Typography>
               <>
                 <input
                   ref={uploadInputRef}
@@ -670,14 +670,14 @@ function UserProgress() {
           sx: { borderRadius: 3 },
         }}
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>Add Measurements</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900, fontSize: '1.1rem' }}>Add Measurements</DialogTitle>
         <DialogContent sx={{ pt: 1, pb: 0.5 }}>
           <Stack spacing={1.5} sx={{ mt: 0.5 }}>
-            <TextField label="Chest" value={measurementForm.chest} onChange={handleMeasurementFieldChange('chest')} required />
-            <TextField label="Waist" value={measurementForm.waist} onChange={handleMeasurementFieldChange('waist')} required />
-            <TextField label="Arms" value={measurementForm.arms} onChange={handleMeasurementFieldChange('arms')} required />
-            <TextField label="Thighs" value={measurementForm.thighs} onChange={handleMeasurementFieldChange('thighs')} required />
-            <TextField label="Weight" value={measurementForm.weight} onChange={handleMeasurementFieldChange('weight')} required />
+            <TextField size="small" label="Chest" value={measurementForm.chest} onChange={handleMeasurementFieldChange('chest')} required />
+            <TextField size="small" label="Waist" value={measurementForm.waist} onChange={handleMeasurementFieldChange('waist')} required />
+            <TextField size="small" label="Arms" value={measurementForm.arms} onChange={handleMeasurementFieldChange('arms')} required />
+            <TextField size="small" label="Thighs" value={measurementForm.thighs} onChange={handleMeasurementFieldChange('thighs')} required />
+            <TextField size="small" label="Weight" value={measurementForm.weight} onChange={handleMeasurementFieldChange('weight')} required />
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.2 }}>
