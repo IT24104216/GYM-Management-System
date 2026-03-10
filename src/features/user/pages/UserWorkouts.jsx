@@ -310,6 +310,17 @@ function UserWorkouts() {
   };
 
   const handleMarkSessionFinish = () => {
+    if (!sessionStarted) {
+      setSessionToast({ open: true, message: 'Please start the workout timer first.' });
+      return;
+    }
+
+    const allCompleted = sessionExercises.every((exercise) => exercise.done);
+    if (!allCompleted) {
+      setSessionToast({ open: true, message: 'Complete all exercises before marking as finished.' });
+      return;
+    }
+
     setSessionStarted(false);
     setSessionStatus('finished');
     setSessionToast({ open: true, message: 'Workout session marked as finished.' });
@@ -661,6 +672,7 @@ function UserWorkouts() {
           <Button
             variant="contained"
             onClick={handleMarkSessionFinish}
+            disabled={sessionStatus === 'finished'}
             sx={{
               mt: 2.2,
               width: '100%',
