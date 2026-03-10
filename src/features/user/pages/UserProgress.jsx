@@ -201,11 +201,17 @@ const getPreviousIsoDate = (isoDate) => {
   return toIsoDate(dateObj);
 };
 
-const getConsecutiveWorkoutStreak = (completionDates) => {
+const getConsecutiveWorkoutStreak = (completionDates, todayIso) => {
   if (!completionDates.length) return 0;
 
   const dateSet = new Set(completionDates);
   const latestDate = completionDates[completionDates.length - 1];
+  const yesterdayIso = getPreviousIsoDate(todayIso);
+
+  // Strict streak: only active when the chain reaches today or yesterday.
+  if (latestDate !== todayIso && latestDate !== yesterdayIso) {
+    return 0;
+  }
 
   let streak = 0;
   let cursorDate = latestDate;
@@ -390,7 +396,7 @@ function UserProgress() {
     const currentBodyFat = hasBodyFatData ? sortedBodyFatHistory[sortedBodyFatHistory.length - 1].bodyFat : null;
     const bodyFatDelta = hasBodyFatData ? Number((currentBodyFat - baselineBodyFat).toFixed(1)) : null;
 
-    const streak = getConsecutiveWorkoutStreak(workoutCompletionDates);
+    const streak = getConsecutiveWorkoutStreak(workoutCompletionDates, todayIso);
 
     return METRIC_CARD_META.map((item) => {
       if (item.id === 'weight') {
@@ -431,7 +437,7 @@ function UserProgress() {
         changeColor: '#f59e0b',
       };
     });
-  }, [measurementsByDate, weightHistoryByDate, workoutCompletionDates]);
+  }, [measurementsByDate, todayIso, weightHistoryByDate, workoutCompletionDates]);
 
   const hoveredPoint = hoveredChartPoint;
   const hoveredItem = hoveredChartPoint ? chartData.weightHistory[hoveredChartPoint.index] : null;
