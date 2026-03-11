@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import {
+  alpha,
   Box,
   Button,
   Paper,
@@ -7,6 +8,7 @@ import {
   Switch,
   TextField,
   Typography,
+  useTheme,
 } from '@mui/material';
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
@@ -37,6 +39,18 @@ const itemVariants = {
 };
 
 function AdminSettings() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
+  const cardBg = isDark ? alpha(theme.palette.background.paper, 0.9) : '#ffffff';
+  const cardBorder = isDark ? alpha(theme.palette.common.white, 0.14) : '#e6e9ee';
+  const labelColor = isDark ? alpha(theme.palette.common.white, 0.72) : '#64748b';
+  const inputBg = isDark ? alpha(theme.palette.common.white, 0.06) : '#f8fafc';
+  const inputBorder = isDark ? alpha(theme.palette.common.white, 0.18) : '#e2e8f0';
+  const inputBorderHover = isDark ? alpha(theme.palette.common.white, 0.34) : '#cbd5e1';
+  const sectionTitleColor = isDark ? theme.palette.common.white : '#111827';
+  const headingColor = isDark ? theme.palette.common.white : '#0f172a';
+
   return (
     <MotionBox
       variants={containerVariants}
@@ -56,7 +70,7 @@ function AdminSettings() {
         sx={{
           fontSize: '1.25rem',
           fontWeight: 800,
-          color: '#0f172a',
+          color: headingColor,
         }}
       >
         Settings
@@ -68,13 +82,13 @@ function AdminSettings() {
           sx={{
             p: { xs: 2.5, md: 3.5 },
             borderRadius: 3,
-            border: '1px solid #e6e9ee',
-            backgroundColor: '#ffffff',
+            border: `1px solid ${cardBorder}`,
+            backgroundColor: cardBg,
           }}
         >
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2.5 }}>
             <PersonOutlineRoundedIcon sx={{ color: '#17a398', fontSize: 20 }} />
-            <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: sectionTitleColor }}>
               Profile Information
             </Typography>
           </Stack>
@@ -87,7 +101,7 @@ function AdminSettings() {
             }}
           >
             <Box>
-              <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', mb: 0.75 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: labelColor, mb: 0.75 }}>
                 Full Name
               </Typography>
               <TextField
@@ -99,13 +113,14 @@ function AdminSettings() {
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2.5,
-                    backgroundColor: '#f8fafc',
+                    backgroundColor: inputBg,
                     fontSize: '0.875rem',
+                    color: isDark ? alpha(theme.palette.common.white, 0.82) : 'inherit',
                     '& fieldset': {
-                      borderColor: '#e2e8f0',
+                      borderColor: inputBorder,
                     },
                     '&:hover fieldset': {
-                      borderColor: '#cbd5e1',
+                      borderColor: inputBorderHover,
                     },
                   },
                 }}
@@ -113,7 +128,7 @@ function AdminSettings() {
             </Box>
 
             <Box>
-              <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', mb: 0.75 }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: labelColor, mb: 0.75 }}>
                 Email Address
               </Typography>
               <TextField
@@ -125,13 +140,14 @@ function AdminSettings() {
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2.5,
-                    backgroundColor: '#f8fafc',
+                    backgroundColor: inputBg,
                     fontSize: '0.875rem',
+                    color: isDark ? alpha(theme.palette.common.white, 0.82) : 'inherit',
                     '& fieldset': {
-                      borderColor: '#e2e8f0',
+                      borderColor: inputBorder,
                     },
                     '&:hover fieldset': {
-                      borderColor: '#cbd5e1',
+                      borderColor: inputBorderHover,
                     },
                   },
                 }}
@@ -147,13 +163,13 @@ function AdminSettings() {
           sx={{
             p: { xs: 2.5, md: 3.5 },
             borderRadius: 3,
-            border: '1px solid #e6e9ee',
-            backgroundColor: '#ffffff',
+            border: `1px solid ${cardBorder}`,
+            backgroundColor: cardBg,
           }}
         >
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2.5 }}>
             <NotificationsNoneRoundedIcon sx={{ color: '#17a398', fontSize: 20 }} />
-            <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: sectionTitleColor }}>
               Notifications
             </Typography>
           </Stack>
@@ -161,10 +177,10 @@ function AdminSettings() {
           <Stack spacing={2}>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
               <Box>
-                <Typography sx={{ fontWeight: 600, color: '#111827', fontSize: '0.875rem' }}>
+                <Typography sx={{ fontWeight: 600, color: sectionTitleColor, fontSize: '0.875rem' }}>
                   Email Notifications
                 </Typography>
-                <Typography sx={{ color: '#64748b', fontSize: '0.75rem' }}>
+                <Typography sx={{ color: labelColor, fontSize: '0.75rem' }}>
                   Receive daily summaries and alerts
                 </Typography>
               </Box>
@@ -179,7 +195,7 @@ function AdminSettings() {
                     opacity: 1,
                   },
                   '& .MuiSwitch-track': {
-                    backgroundColor: '#cbd5e1',
+                    backgroundColor: isDark ? alpha(theme.palette.common.white, 0.25) : '#cbd5e1',
                     opacity: 1,
                   },
                 }}
@@ -188,10 +204,10 @@ function AdminSettings() {
 
             <Stack direction="row" alignItems="center" justifyContent="space-between">
               <Box>
-                <Typography sx={{ fontWeight: 600, color: '#111827', fontSize: '0.875rem' }}>
+                <Typography sx={{ fontWeight: 600, color: sectionTitleColor, fontSize: '0.875rem' }}>
                   Push Notifications
                 </Typography>
-                <Typography sx={{ color: '#64748b', fontSize: '0.75rem' }}>
+                <Typography sx={{ color: labelColor, fontSize: '0.75rem' }}>
                   Receive real-time updates on your device
                 </Typography>
               </Box>
@@ -206,7 +222,7 @@ function AdminSettings() {
                     opacity: 1,
                   },
                   '& .MuiSwitch-track': {
-                    backgroundColor: '#cbd5e1',
+                    backgroundColor: isDark ? alpha(theme.palette.common.white, 0.25) : '#cbd5e1',
                     opacity: 1,
                   },
                 }}
@@ -222,13 +238,13 @@ function AdminSettings() {
           sx={{
             p: { xs: 2.5, md: 3.5 },
             borderRadius: 3,
-            border: '1px solid #e6e9ee',
-            backgroundColor: '#ffffff',
+            border: `1px solid ${cardBorder}`,
+            backgroundColor: cardBg,
           }}
         >
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2.5 }}>
             <ShieldOutlinedIcon sx={{ color: '#17a398', fontSize: 20 }} />
-            <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: sectionTitleColor }}>
               Security
             </Typography>
           </Stack>
@@ -264,10 +280,13 @@ function AdminSettings() {
             textTransform: 'none',
             fontSize: '0.875rem',
             fontWeight: 800,
-            backgroundColor: '#0f172a',
-            boxShadow: '0 10px 22px rgba(15, 23, 42, 0.18)',
+            backgroundColor: isDark ? '#e5e7eb' : '#0f172a',
+            color: isDark ? '#111827' : '#ffffff',
+            boxShadow: isDark
+              ? '0 10px 22px rgba(0, 0, 0, 0.32)'
+              : '0 10px 22px rgba(15, 23, 42, 0.18)',
             '&:hover': {
-              backgroundColor: '#111827',
+              backgroundColor: isDark ? '#f3f4f6' : '#111827',
             },
           }}
         >
