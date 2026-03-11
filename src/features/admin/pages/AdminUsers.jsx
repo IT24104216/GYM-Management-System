@@ -3,9 +3,19 @@ import { motion } from 'framer-motion';
 import {
   Avatar,
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -78,7 +88,7 @@ const summaryCards = [
   },
 ];
 
-const users = [
+const initialUsers = [
   { id: 1, name: 'Alex Johnson', email: 'alex@example.com', role: 'Member', status: 'Active', joined: 'Jan 15, 2025', avatar: 'AJ' },
   { id: 2, name: 'Coach Marcus', email: 'marcus@example.com', role: 'Coach', status: 'Active', joined: 'Mar 2, 2024', avatar: 'CM' },
   { id: 3, name: 'Dr. Sarah Mitchell', email: 'sarah@example.com', role: 'Dietician', status: 'Active', joined: 'Feb 10, 2024', avatar: 'SM' },
@@ -103,9 +113,13 @@ const statusStyles = {
 };
 
 function AdminUsers() {
+  const [users, setUsers] = useState(initialUsers);
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [editingUser, setEditingUser] = useState(null);
+  const [nextRole, setNextRole] = useState('Member');
+  const [toast, setToast] = useState({ open: false, message: '' });
 
   const filters = ['All', 'Members', 'Coaches', 'Dieticians', 'Admins'];
 
@@ -122,6 +136,48 @@ function AdminUsers() {
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pagedUsers = filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const roleOptions = ['Member', 'Coach', 'Dietician', 'Admin'];
+
+  const handleOpenEditRole = (user) => {
+    setEditingUser(user);
+    setNextRole(user.role);
+  };
+
+  const handleCloseEditRole = () => {
+    setEditingUser(null);
+  };
+
+  const handleSaveRole = () => {
+    if (!editingUser) return;
+    setUsers((prev) => prev.map((item) => (
+      item.id === editingUser.id ? { ...item, role: nextRole } : item
+    )));
+    setToast({ open: true, message: `${editingUser.name} promoted to ${nextRole}.` });
+    setEditingUser(null);
+  };
+
+  const handleToggleStatus = (user) => {
+    const nextStatus = user.status === 'Active' ? 'Inactive' : 'Active';
+    setUsers((prev) => prev.map((item) => (
+      item.id === user.id ? { ...item, status: nextStatus } : item
+    )));
+    setToast({ open: true, message: `${user.name} marked as ${nextStatus}.` });
+  };
+
+  const handleDeleteUser = (user) => {
+    if (user.status !== 'Inactive') {
+      setToast({ open: true, message: 'Only inactive users can be deleted.' });
+      return;
+    }
+
+    setUsers((prev) => prev.filter((item) => item.id !== user.id));
+    setToast({ open: true, message: `${user.name} deleted.` });
+  };
+
+  const handleCloseToast = (_, reason) => {
+    if (reason === 'clickaway') return;
+    setToast((prev) => ({ ...prev, open: false }));
+  };
 
   return (
     <MotionBox variants={containerVariants} initial="hidden" animate="visible" sx={{ pb: 2.5 }}>
@@ -228,6 +284,7 @@ function AdminUsers() {
                 <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>ROLE</TableCell>
                 <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>STATUS</TableCell>
                 <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>JOINED</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: '#94a3b8', textAlign: 'right' }}>ACTIONS</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -259,6 +316,49 @@ function AdminUsers() {
                       </Stack>
                     </TableCell>
                     <TableCell sx={{ color: '#94a3b8' }}>{user.joined}</TableCell>
+                    <TableCell align="right">
+                      <Stack direction="row" spacing={0.8} justifyContent="flex-end" useFlexGap flexWrap="wrap">
+                        <Button
+                          size="small"
+                          onClick={() => handleOpenEditRole(user)}
+                          sx={{
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            minWidth: 'auto',
+                            px: 1.1,
+                          }}
+                        >
+                          Edit Role
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={() => handleToggleStatus(user)}
+                          sx={{
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            minWidth: 'auto',
+                            px: 1.1,
+                            color: user.status === 'Active' ? '#f59e0b' : '#10b981',
+                          }}
+                        >
+                          {user.status === 'Active' ? 'Mark Inactive' : 'Mark Active'}
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={() => handleDeleteUser(user)}
+                          disabled={user.status !== 'Inactive'}
+                          color="error"
+                          sx={{
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            minWidth: 'auto',
+                            px: 1.1,
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </Stack>
+                    </TableCell>
                   </TableRow>
                 );
               })}
@@ -287,6 +387,44 @@ function AdminUsers() {
           </Stack>
         </Stack>
       </MotionCard>
+
+      <Dialog open={Boolean(editingUser)} onClose={handleCloseEditRole} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 900 }}>Edit User Role</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: '#64748b', mb: 1.2 }}>
+            Select new role for {editingUser?.name}.
+          </Typography>
+          <FormControl fullWidth size="small">
+            <InputLabel id="admin-user-role-label">Role</InputLabel>
+            <Select
+              labelId="admin-user-role-label"
+              label="Role"
+              value={nextRole}
+              onChange={(event) => setNextRole(event.target.value)}
+            >
+              {roleOptions.map((role) => (
+                <MenuItem key={role} value={role}>{role}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.2 }}>
+          <Button onClick={handleCloseEditRole} variant="outlined" sx={{ textTransform: 'none', fontWeight: 700 }}>
+            Cancel
+          </Button>
+          <Button onClick={handleSaveRole} variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }}>
+            Save Role
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={toast.open}
+        onClose={handleCloseToast}
+        autoHideDuration={2200}
+        message={toast.message}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      />
     </MotionBox>
   );
 }
