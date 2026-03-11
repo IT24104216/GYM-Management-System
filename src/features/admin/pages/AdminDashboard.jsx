@@ -190,7 +190,6 @@ function AdminDashboard() {
                 onChange={(event) => setSearch(event.target.value)}
                 sx={{ minWidth: { xs: 1, sm: 250 }, '& .MuiOutlinedInput-root': { borderRadius: 2, height: 42 } }}
               />
-              <Chip label="+ Add User" clickable sx={{ borderRadius: 2, fontWeight: 800, px: 0.9, height: 36, bgcolor: '#22c55e', color: '#fff' }} />
             </Stack>
           </Stack>
 
