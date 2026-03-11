@@ -1,8 +1,14 @@
 import { motion } from 'framer-motion';
+import { useMemo, useState } from 'react';
 import {
   alpha,
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  InputAdornment,
   Paper,
   Stack,
   Switch,
@@ -14,6 +20,7 @@ import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneR
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import KeyRoundedIcon from '@mui/icons-material/KeyRounded';
 
 const MotionBox = motion.create(Box);
 
@@ -39,6 +46,14 @@ const itemVariants = {
 };
 
 function AdminSettings() {
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [passwordError, setPasswordError] = useState('');
+
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -50,6 +65,43 @@ function AdminSettings() {
   const inputBorderHover = isDark ? alpha(theme.palette.common.white, 0.34) : '#cbd5e1';
   const sectionTitleColor = isDark ? theme.palette.common.white : '#111827';
   const headingColor = isDark ? theme.palette.common.white : '#0f172a';
+
+  const isSubmitDisabled = useMemo(() => {
+    return (
+      !passwordForm.currentPassword.trim() ||
+      !passwordForm.newPassword.trim() ||
+      !passwordForm.confirmPassword.trim()
+    );
+  }, [passwordForm]);
+
+  const handleOpenPasswordDialog = () => {
+    setPasswordError('');
+    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setIsPasswordDialogOpen(true);
+  };
+
+  const handleClosePasswordDialog = () => {
+    setIsPasswordDialogOpen(false);
+  };
+
+  const handlePasswordFieldChange = (field) => (event) => {
+    setPasswordError('');
+    setPasswordForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleSubmitPasswordChange = () => {
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('New password and confirm password do not match.');
+      return;
+    }
+
+    setIsPasswordDialogOpen(false);
+  };
 
   return (
     <MotionBox
@@ -252,6 +304,7 @@ function AdminSettings() {
           <Button
             variant="text"
             startIcon={<LockOutlinedIcon sx={{ fontSize: 16 }} />}
+            onClick={handleOpenPasswordDialog}
             sx={{
               p: 0,
               minWidth: 0,
@@ -293,6 +346,94 @@ function AdminSettings() {
           Save Changes
         </Button>
       </Box>
+
+      <Dialog
+        open={isPasswordDialogOpen}
+        onClose={handleClosePasswordDialog}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            backgroundColor: isDark
+              ? alpha(theme.palette.background.paper, 0.95)
+              : theme.palette.background.paper,
+            border: `1px solid ${isDark ? alpha(theme.palette.common.white, 0.14) : '#e6e9ee'}`,
+          },
+        }}
+      >
+        <DialogTitle sx={{ pb: 1.25, fontWeight: 800, color: sectionTitleColor }}>
+          Change Password
+        </DialogTitle>
+
+        <DialogContent sx={{ pt: '12px !important' }}>
+          <Stack spacing={1.5}>
+            <TextField
+              type="password"
+              label="Current Password"
+              value={passwordForm.currentPassword}
+              onChange={handlePasswordFieldChange('currentPassword')}
+              fullWidth
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <KeyRoundedIcon sx={{ color: labelColor, fontSize: 18 }} />
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <TextField
+              type="password"
+              label="New Password"
+              value={passwordForm.newPassword}
+              onChange={handlePasswordFieldChange('newPassword')}
+              fullWidth
+              size="small"
+              helperText="Minimum 8 characters"
+            />
+
+            <TextField
+              type="password"
+              label="Confirm New Password"
+              value={passwordForm.confirmPassword}
+              onChange={handlePasswordFieldChange('confirmPassword')}
+              fullWidth
+              size="small"
+              error={Boolean(passwordError)}
+              helperText={passwordError || ' '}
+            />
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button
+            onClick={handleClosePasswordDialog}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={isSubmitDisabled}
+            onClick={handleSubmitPasswordChange}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 700,
+              backgroundColor: '#17a398',
+              '&:hover': {
+                backgroundColor: '#129185',
+              },
+            }}
+          >
+            Update Password
+          </Button>
+        </DialogActions>
+      </Dialog>
     </MotionBox>
   );
 }
