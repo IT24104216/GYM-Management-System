@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Avatar,
@@ -33,6 +33,7 @@ import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
+const MOCK_USERS_KEY = 'gympro_mock_users';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -112,8 +113,90 @@ const statusStyles = {
   Suspended: { color: '#EF4444', dot: '#EF4444' },
 };
 
+const displayToAuthRole = {
+  Member: 'user',
+  Coach: 'coach',
+  Dietician: 'dietitian',
+  Admin: 'admin',
+};
+
+const authToDisplayRole = {
+  user: 'Member',
+  coach: 'Coach',
+  dietitian: 'Dietician',
+  admin: 'Admin',
+};
+
+const normalizeDisplayStatus = (status) => {
+  if (!status) return 'Active';
+  const normalized = String(status).trim().toLowerCase();
+  if (normalized === 'inactive') return 'Inactive';
+  if (normalized === 'suspended') return 'Suspended';
+  return 'Active';
+};
+
+const getAvatar = (name = '') => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'U';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+};
+
+const readMockUsers = () => {
+  try {
+    const raw = localStorage.getItem(MOCK_USERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const getInitialUsers = () => {
+  const stored = readMockUsers();
+  if (!stored.length) return initialUsers;
+
+  return stored
+    .filter((item) => item?.email)
+    .map((item, index) => {
+      const fallback = initialUsers.find((entry) => entry.email === item.email);
+      return {
+        id: item.id || fallback?.id || (10000 + index),
+        name: item.name || fallback?.name || 'Member',
+        email: item.email,
+        role: authToDisplayRole[item.role] || fallback?.role || 'Member',
+        status: normalizeDisplayStatus(item.status),
+        joined: fallback?.joined || 'Jan 1, 2025',
+        avatar: fallback?.avatar || getAvatar(item.name || fallback?.name || 'Member'),
+      };
+    });
+};
+
+const persistUsersToMockStore = (uiUsers) => {
+  const existing = readMockUsers();
+  const existingByEmail = new Map(existing.map((item) => [item.email, item]));
+
+  const nextMapped = uiUsers.map((user) => {
+    const current = existingByEmail.get(user.email) || {};
+    return {
+      ...current,
+      id: current.id || user.id,
+      name: user.name,
+      email: user.email,
+      role: displayToAuthRole[user.role] || 'user',
+      status: user.status.toLowerCase(),
+      password: current.password || 'User@123',
+    };
+  });
+
+  const visibleEmails = new Set(uiUsers.map((item) => item.email));
+  const untouched = existing.filter((item) => !visibleEmails.has(item.email));
+  localStorage.setItem(MOCK_USERS_KEY, JSON.stringify([...nextMapped, ...untouched]));
+};
+
 function AdminUsers() {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState(() => getInitialUsers());
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -137,6 +220,10 @@ function AdminUsers() {
   const safePage = Math.min(page, totalPages);
   const pagedUsers = filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
   const roleOptions = ['Member', 'Coach', 'Dietician', 'Admin'];
+
+  useEffect(() => {
+    persistUsersToMockStore(users);
+  }, [users]);
 
   const handleOpenEditRole = (user) => {
     setEditingUser(user);
