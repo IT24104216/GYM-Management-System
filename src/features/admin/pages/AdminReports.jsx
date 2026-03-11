@@ -134,9 +134,9 @@ function ChartTooltip({ active, payload, label }) {
 
 function AdminReports() {
   return (
-    <MotionBox variants={containerVariants} initial="hidden" animate="visible" sx={{ pb: 2 }}>
-      <MotionBox variants={itemVariants} mb={1.5}>
-        <Typography sx={{ fontSize: { xs: '1.45rem', md: '1.72rem' }, fontWeight: 900 }}>
+    <MotionBox variants={containerVariants} initial="hidden" animate="visible" sx={{ pb: 2.4 }}>
+      <MotionBox variants={itemVariants} mb={2}>
+        <Typography sx={{ fontSize: { xs: '1.62rem', md: '1.92rem' }, fontWeight: 900, lineHeight: 1.1 }}>
           Analytics Overview
         </Typography>
       </MotionBox>
@@ -145,18 +145,27 @@ function AdminReports() {
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: 'repeat(4, 1fr)' },
-          gap: 1.5,
-          mb: 1.9,
+          gap: 1.6,
+          mb: 2.05,
         }}
       >
         {kpiCards.map((item) => {
           const Icon = item.icon;
           return (
-            <MotionCard key={item.id} variants={itemVariants} sx={{ borderRadius: 2.2, border: '1px solid #e5edf6' }}>
-              <CardContent sx={{ p: 2.1, '&:last-child': { pb: 2.1 } }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.2}>
-                  <Box sx={{ width: 40, height: 40, borderRadius: 1.7, display: 'grid', placeItems: 'center', bgcolor: item.iconBg, color: item.iconColor }}>
-                    <Icon sx={{ fontSize: 22 }} />
+            <MotionCard
+              key={item.id}
+              variants={itemVariants}
+              sx={{
+                borderRadius: 2.4,
+                border: '1px solid #e5edf6',
+                boxShadow: '0 4px 14px rgba(15, 23, 42, 0.04)',
+                minHeight: 172,
+              }}
+            >
+              <CardContent sx={{ p: 2.4, '&:last-child': { pb: 2.4 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                  <Box sx={{ width: 50, height: 50, borderRadius: 2, display: 'grid', placeItems: 'center', bgcolor: item.iconBg, color: item.iconColor }}>
+                    <Icon sx={{ fontSize: 26 }} />
                   </Box>
                   <Chip
                     label={item.trend}
@@ -164,13 +173,14 @@ function AdminReports() {
                     sx={{
                       bgcolor: item.trendBg,
                       color: item.trendColor,
-                      fontWeight: 700,
-                      height: 24,
+                      fontWeight: 800,
+                      height: 30,
+                      fontSize: '0.88rem',
                     }}
                   />
                 </Stack>
-                <Typography sx={{ fontWeight: 900, fontSize: '2rem', lineHeight: 1.05 }}>{item.value}</Typography>
-                <Typography sx={{ color: '#64748b', mt: 0.35, fontWeight: 600 }}>{item.label}</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '2.6rem', lineHeight: 1 }}>{item.value}</Typography>
+                <Typography sx={{ color: '#64748b', mt: 0.55, fontWeight: 600, fontSize: '1.06rem' }}>{item.label}</Typography>
               </CardContent>
             </MotionCard>
           );
@@ -181,43 +191,43 @@ function AdminReports() {
         sx={{
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' },
-          gap: 1.8,
+          gap: 1.6,
         }}
       >
-        <MotionCard variants={itemVariants} sx={{ borderRadius: 2.2, border: '1px solid #e5edf6' }}>
-          <CardContent sx={{ p: 2.2 }}>
-            <Typography sx={{ fontWeight: 900, fontSize: '1.24rem', mb: 1.6 }}>Revenue Trend</Typography>
-            <Box sx={{ width: '100%', height: 320 }}>
+        <MotionCard variants={itemVariants} sx={{ borderRadius: 2.4, border: '1px solid #e5edf6', boxShadow: '0 4px 14px rgba(15, 23, 42, 0.04)' }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontWeight: 900, fontSize: '2rem', mb: 1.8 }}>Revenue Trend</Typography>
+            <Box sx={{ width: '100%', height: 335 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={revenueData}>
+                <BarChart data={revenueData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 14 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 14 }} />
                   <Tooltip cursor={{ fill: '#F8FAFC' }} content={<ChartTooltip />} />
-                  <Bar dataKey="value" fill="#0D9488" radius={[6, 6, 0, 0]} barSize={40} />
+                  <Bar dataKey="value" fill="#0D9488" radius={[6, 6, 0, 0]} barSize={42} />
                 </BarChart>
               </ResponsiveContainer>
             </Box>
           </CardContent>
         </MotionCard>
 
-        <MotionCard variants={itemVariants} sx={{ borderRadius: 2.2, border: '1px solid #e5edf6' }}>
-          <CardContent sx={{ p: 2.2 }}>
-            <Typography sx={{ fontWeight: 900, fontSize: '1.24rem', mb: 1.6 }}>User Growth</Typography>
-            <Box sx={{ width: '100%', height: 320 }}>
+        <MotionCard variants={itemVariants} sx={{ borderRadius: 2.4, border: '1px solid #e5edf6', boxShadow: '0 4px 14px rgba(15, 23, 42, 0.04)' }}>
+          <CardContent sx={{ p: 2.5 }}>
+            <Typography sx={{ fontWeight: 900, fontSize: '2rem', mb: 1.8 }}>User Growth</Typography>
+            <Box sx={{ width: '100%', height: 335 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={activeUsersData}>
+                <LineChart data={activeUsersData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 14 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 14 }} />
                   <Tooltip content={<ChartTooltip />} />
                   <Line
                     type="monotone"
                     dataKey="value"
                     stroke="#8B5CF6"
-                    strokeWidth={3}
-                    dot={{ r: 4, fill: '#8B5CF6', strokeWidth: 0 }}
-                    activeDot={{ r: 6 }}
+                    strokeWidth={4}
+                    dot={{ r: 5, fill: '#8B5CF6', strokeWidth: 0 }}
+                    activeDot={{ r: 7 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
