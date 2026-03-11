@@ -15,6 +15,7 @@ const DEFAULT_MOCK_USERS = [
     name: 'Admin User',
     email: 'admin@gympro.com',
     role: ROLES.ADMIN,
+    status: 'active',
     password: 'Admin@123',
   },
   {
@@ -22,6 +23,7 @@ const DEFAULT_MOCK_USERS = [
     name: 'Coach Marcus',
     email: 'coach@gympro.com',
     role: ROLES.COACH,
+    status: 'active',
     password: 'Coach@123',
   },
   {
@@ -29,6 +31,7 @@ const DEFAULT_MOCK_USERS = [
     name: 'Dietitian Sarah',
     email: 'dietitian@gympro.com',
     role: ROLES.DIETITIAN,
+    status: 'active',
     password: 'Diet@123',
   },
   {
@@ -36,6 +39,7 @@ const DEFAULT_MOCK_USERS = [
     name: 'Member Alex',
     email: 'user@gympro.com',
     role: ROLES.USER,
+    status: 'active',
     password: 'User@123',
   },
 ];
@@ -114,11 +118,16 @@ export function AuthProvider({ children }) {
         throw new Error('Invalid email or password.');
       }
 
+      if (savedUser?.status === 'inactive' || savedUser?.status === 'suspended') {
+        throw new Error('Your account is inactive. Please contact admin.');
+      }
+
       const userData = {
         id: savedUser?.id || Date.now(),
         name: savedUser?.name || email.split('@')[0] || 'Member',
         email,
         role: savedUser?.role || inferRoleFromEmail(email),
+        status: savedUser?.status || 'active',
       };
       const tokenData = `mock-token-${Date.now()}`;
 
@@ -163,6 +172,7 @@ export function AuthProvider({ children }) {
         name: (formData?.name || '').trim() || email.split('@')[0] || 'Member',
         email,
         role: formData?.role || inferRoleFromEmail(email),
+        status: 'active',
       };
       const tokenData = `mock-token-${Date.now()}`;
 
