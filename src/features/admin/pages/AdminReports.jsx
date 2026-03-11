@@ -117,15 +117,15 @@ function ChartTooltip({ active, payload, label }) {
         bgcolor: '#ffffff',
         border: '1px solid #e5e7eb',
         borderRadius: 2,
-        px: 1.3,
-        py: 1,
+        px: 1.1,
+        py: 0.8,
         boxShadow: '0 6px 18px rgba(15, 23, 42, 0.1)',
       }}
     >
-      <Typography sx={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 700 }}>
+      <Typography sx={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 700 }}>
         {label}
       </Typography>
-      <Typography sx={{ fontSize: '0.9rem', color: '#0f172a', fontWeight: 800, mt: 0.2 }}>
+      <Typography sx={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 800, mt: 0.15 }}>
         {payload[0].value}
       </Typography>
     </Box>
@@ -135,8 +135,8 @@ function ChartTooltip({ active, payload, label }) {
 function AdminReports() {
   return (
     <MotionBox variants={containerVariants} initial="hidden" animate="visible" sx={{ pb: 2.4 }}>
-      <MotionBox variants={itemVariants} mb={2}>
-        <Typography sx={{ fontSize: { xs: '1.62rem', md: '1.92rem' }, fontWeight: 900, lineHeight: 1.1 }}>
+      <MotionBox variants={itemVariants} mb={1.8}>
+        <Typography sx={{ fontSize: { xs: '1.4rem', md: '1.65rem' }, fontWeight: 900, lineHeight: 1.1 }}>
           Analytics Overview
         </Typography>
       </MotionBox>
@@ -163,7 +163,7 @@ function AdminReports() {
               }}
             >
               <CardContent sx={{ p: 2.4, '&:last-child': { pb: 2.4 } }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.6}>
                   <Box sx={{ width: 50, height: 50, borderRadius: 2, display: 'grid', placeItems: 'center', bgcolor: item.iconBg, color: item.iconColor }}>
                     <Icon sx={{ fontSize: 26 }} />
                   </Box>
@@ -174,13 +174,13 @@ function AdminReports() {
                       bgcolor: item.trendBg,
                       color: item.trendColor,
                       fontWeight: 800,
-                      height: 30,
-                      fontSize: '0.88rem',
+                      height: 28,
+                      fontSize: '0.78rem',
                     }}
                   />
                 </Stack>
-                <Typography sx={{ fontWeight: 900, fontSize: '2.6rem', lineHeight: 1 }}>{item.value}</Typography>
-                <Typography sx={{ color: '#64748b', mt: 0.55, fontWeight: 600, fontSize: '1.06rem' }}>{item.label}</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '2.2rem', lineHeight: 1 }}>{item.value}</Typography>
+                <Typography sx={{ color: '#64748b', mt: 0.45, fontWeight: 600, fontSize: '0.95rem' }}>{item.label}</Typography>
               </CardContent>
             </MotionCard>
           );
@@ -196,13 +196,13 @@ function AdminReports() {
       >
         <MotionCard variants={itemVariants} sx={{ borderRadius: 2.4, border: '1px solid #e5edf6', boxShadow: '0 4px 14px rgba(15, 23, 42, 0.04)' }}>
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontWeight: 900, fontSize: '2rem', mb: 1.8 }}>Revenue Trend</Typography>
+            <Typography sx={{ fontWeight: 900, fontSize: '1.72rem', mb: 1.6 }}>Revenue Trend</Typography>
             <Box sx={{ width: '100%', height: 335 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={revenueData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 14 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 14 }} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
                   <Tooltip cursor={{ fill: '#F8FAFC' }} content={<ChartTooltip />} />
                   <Bar dataKey="value" fill="#0D9488" radius={[6, 6, 0, 0]} barSize={42} />
                 </BarChart>
@@ -213,13 +213,13 @@ function AdminReports() {
 
         <MotionCard variants={itemVariants} sx={{ borderRadius: 2.4, border: '1px solid #e5edf6', boxShadow: '0 4px 14px rgba(15, 23, 42, 0.04)' }}>
           <CardContent sx={{ p: 2.5 }}>
-            <Typography sx={{ fontWeight: 900, fontSize: '2rem', mb: 1.8 }}>User Growth</Typography>
+            <Typography sx={{ fontWeight: 900, fontSize: '1.72rem', mb: 1.6 }}>User Growth</Typography>
             <Box sx={{ width: '100%', height: 335 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={activeUsersData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 14 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 14 }} />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
                   <Tooltip content={<ChartTooltip />} />
                   <Line
                     type="monotone"
