@@ -144,7 +144,7 @@ function AdminReports() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: 'repeat(4, 1fr)' },
+          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' },
           gap: 1.6,
           mb: 2.05,
         }}
@@ -190,7 +190,7 @@ function AdminReports() {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' },
+          gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' },
           gap: 1.6,
         }}
       >
