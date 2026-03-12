@@ -3,6 +3,8 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import PersonIcon from '@mui/icons-material/Person';
 import GroupIcon from '@mui/icons-material/Group';
 import SettingsIcon from '@mui/icons-material/Settings';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import CampaignIcon from '@mui/icons-material/Campaign';
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu';
 import SportsIcon from '@mui/icons-material/Sports';
 import { ROLES, ROUTES } from '@/shared/utils/constants';
@@ -10,12 +12,15 @@ import { ROLES, ROUTES } from '@/shared/utils/constants';
 export const NAV_CONFIG = {
   [ROLES.USER]: [
     { label: 'Dashboard', path: ROUTES.USER_DASHBOARD, icon: DashboardIcon },
+    { label: 'Ads & Promotions', path: ROUTES.USER_ADS_PROMOTIONS, icon: CampaignIcon },
     { label: 'Workouts', path: ROUTES.USER_WORKOUTS, icon: FitnessCenterIcon },
     { label: 'Profile', path: ROUTES.USER_PROFILE, icon: PersonIcon },
   ],
   [ROLES.ADMIN]: [
-    { label: 'Dashboard', path: ROUTES.ADMIN_DASHBOARD, icon: DashboardIcon },
+    { label: 'Overview', path: ROUTES.ADMIN_DASHBOARD, icon: DashboardIcon },
     { label: 'Users', path: ROUTES.ADMIN_USERS, icon: GroupIcon },
+    { label: 'Reports', path: ROUTES.ADMIN_REPORTS, icon: AssessmentIcon },
+    { label: 'Promotions', path: ROUTES.ADMIN_PROMOTIONS, icon: CampaignIcon },
     { label: 'Settings', path: ROUTES.ADMIN_SETTINGS, icon: SettingsIcon },
   ],
   [ROLES.DIETITIAN]: [

@@ -20,11 +20,14 @@ import UserDietitianFeedbacks from '@/features/user/pages/UserDietitianFeedbacks
 import UserWorkouts from '@/features/user/pages/UserWorkouts';
 import UserMealPlan from '@/features/user/pages/UserMealPlan';
 import UserProgress from '@/features/user/pages/UserProgress';
+import UserAdsPromotions from '@/features/user/pages/UserAdsPromotions';
 import UserProfile from '@/features/user/pages/UserProfile';
 
 // Admin pages
 import AdminDashboard from '@/features/admin/pages/AdminDashboard';
 import AdminUsers from '@/features/admin/pages/AdminUsers';
+import AdminReports from '@/features/admin/pages/AdminReports';
+import AdminPromotions from '@/features/admin/pages/AdminPromotions';
 import AdminSettings from '@/features/admin/pages/AdminSettings';
 
 // Dietitian pages
@@ -60,6 +63,7 @@ function AppRouter() {
           <Route path={ROUTES.USER_WORKOUTS} element={<UserWorkouts />} />
           <Route path={ROUTES.USER_MEAL_PLAN} element={<UserMealPlan />} />
           <Route path={ROUTES.USER_PROGRESS} element={<UserProgress />} />
+          <Route path={ROUTES.USER_ADS_PROMOTIONS} element={<UserAdsPromotions />} />
           <Route path={ROUTES.USER_PROFILE} element={<UserProfile />} />
         </Route>
 
@@ -67,6 +71,8 @@ function AppRouter() {
         <Route element={<ProtectedRoute allowedRoles={[ROLES.ADMIN]} />}>
           <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboard />} />
           <Route path={ROUTES.ADMIN_USERS} element={<AdminUsers />} />
+          <Route path={ROUTES.ADMIN_REPORTS} element={<AdminReports />} />
+          <Route path={ROUTES.ADMIN_PROMOTIONS} element={<AdminPromotions />} />
           <Route path={ROUTES.ADMIN_SETTINGS} element={<AdminSettings />} />
         </Route>
 

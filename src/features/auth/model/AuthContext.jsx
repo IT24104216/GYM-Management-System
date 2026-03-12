@@ -9,6 +9,40 @@ const AuthContext = createContext(null);
 const USE_MOCK_AUTH = import.meta.env.VITE_USE_MOCK_AUTH !== 'false';
 const STRICT_MOCK_PASSWORD = import.meta.env.VITE_MOCK_AUTH_STRICT_PASSWORD === 'true';
 const MOCK_USERS_KEY = 'gympro_mock_users';
+const DEFAULT_MOCK_USERS = [
+  {
+    id: 1001,
+    name: 'Admin User',
+    email: 'admin@gympro.com',
+    role: ROLES.ADMIN,
+    status: 'active',
+    password: 'Admin@123',
+  },
+  {
+    id: 1002,
+    name: 'Coach Marcus',
+    email: 'coach@gympro.com',
+    role: ROLES.COACH,
+    status: 'active',
+    password: 'Coach@123',
+  },
+  {
+    id: 1003,
+    name: 'Dietitian Sarah',
+    email: 'dietitian@gympro.com',
+    role: ROLES.DIETITIAN,
+    status: 'active',
+    password: 'Diet@123',
+  },
+  {
+    id: 1004,
+    name: 'Member Alex',
+    email: 'user@gympro.com',
+    role: ROLES.USER,
+    status: 'active',
+    password: 'User@123',
+  },
+];
 
 const wait = (ms) => new Promise((resolve) => {
   setTimeout(resolve, ms);
@@ -45,6 +79,13 @@ export function AuthProvider({ children }) {
 
   // Rehydrate auth state from localStorage on mount
   useEffect(() => {
+    if (USE_MOCK_AUTH) {
+      const users = readMockUsers();
+      if (!users.length) {
+        saveMockUsers(DEFAULT_MOCK_USERS);
+      }
+    }
+
     const storedToken = getToken();
     const storedUser = getUser();
     if (storedToken && storedUser) {
@@ -77,11 +118,16 @@ export function AuthProvider({ children }) {
         throw new Error('Invalid email or password.');
       }
 
+      if (savedUser?.status === 'inactive' || savedUser?.status === 'suspended') {
+        throw new Error('Your account is inactive. Please contact admin.');
+      }
+
       const userData = {
         id: savedUser?.id || Date.now(),
         name: savedUser?.name || email.split('@')[0] || 'Member',
         email,
         role: savedUser?.role || inferRoleFromEmail(email),
+        status: savedUser?.status || 'active',
       };
       const tokenData = `mock-token-${Date.now()}`;
 
@@ -126,6 +172,7 @@ export function AuthProvider({ children }) {
         name: (formData?.name || '').trim() || email.split('@')[0] || 'Member',
         email,
         role: formData?.role || inferRoleFromEmail(email),
+        status: 'active',
       };
       const tokenData = `mock-token-${Date.now()}`;
 

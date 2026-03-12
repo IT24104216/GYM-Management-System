@@ -17,6 +17,7 @@ import RestaurantOutlinedIcon from '@mui/icons-material/RestaurantOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import TrackChangesOutlinedIcon from '@mui/icons-material/TrackChangesOutlined';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
+import CampaignRoundedIcon from '@mui/icons-material/CampaignRounded';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
@@ -29,6 +30,7 @@ import KeyboardArrowLeftRoundedIcon from '@mui/icons-material/KeyboardArrowLeftR
 import KeyboardArrowRightRoundedIcon from '@mui/icons-material/KeyboardArrowRightRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { ROUTES } from '@/shared/utils/constants';
+import UserPromotionsPopup from '@/features/user/components/UserPromotionsPopup';
 
 const MotionBox = motion(Box);
 
@@ -81,6 +83,14 @@ const SERVICES = [
     icon: RestaurantOutlinedIcon,
     link: ROUTES.USER_MEAL_PLAN,
   },
+  {
+    title: 'Ads & Promotions',
+    description: 'Explore limited-time gym discounts, personal training offers, and class deals',
+    image:
+      'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    icon: CampaignRoundedIcon,
+    link: ROUTES.USER_ADS_PROMOTIONS,
+  },
 ];
 
 const STATS = [
@@ -90,12 +100,15 @@ const STATS = [
   { icon: TrackChangesOutlinedIcon, value: '1000+', label: 'Success Stories', tone: '#14b8a6' },
 ];
 
+const PROMO_POPUP_SESSION_KEY = 'gympro_user_promotions_popup_seen_v1';
+
 function UserDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isPromotionsPopupOpen, setIsPromotionsPopupOpen] = useState(false);
 
   const colors = {
     pageBg: theme.palette.background.default,
@@ -123,6 +136,18 @@ function UserDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (user?.role !== 'user') return undefined;
+    const seen = sessionStorage.getItem(PROMO_POPUP_SESSION_KEY);
+    if (seen === '1') return undefined;
+
+    const timeout = setTimeout(() => {
+      setIsPromotionsPopupOpen(true);
+    }, 3000);
+
+    return () => clearTimeout(timeout);
+  }, [user?.role]);
+
   const handlePrevImage = () => {
     setCurrentImageIndex((prevIndex) => (
       prevIndex === 0 ? HERO_IMAGES.length - 1 : prevIndex - 1
@@ -131,6 +156,11 @@ function UserDashboard() {
 
   const handleNextImage = () => {
     setCurrentImageIndex((prevIndex) => (prevIndex + 1) % HERO_IMAGES.length);
+  };
+
+  const closePromotionsPopup = () => {
+    setIsPromotionsPopupOpen(false);
+    sessionStorage.setItem(PROMO_POPUP_SESSION_KEY, '1');
   };
 
   return (
@@ -623,6 +653,8 @@ function UserDashboard() {
           </Box>
         </Box>
       </Box>
+
+      <UserPromotionsPopup open={isPromotionsPopupOpen} onClose={closePromotionsPopup} />
     </Box>
   );
 }
