@@ -36,8 +36,21 @@ const INITIAL_FORM = {
   image: '',
 };
 
-const PLACEMENTS = ['Dashboard Hero', 'Sidebar Widget', 'Mobile App Banner', 'Email Footer'];
-const TARGETS = ['All Members', 'New Members', 'Premium Members', 'PT Clients', 'Nutrition Clients'];
+const PLACEMENTS = [
+  'Dashboard Hero',
+  'Member App Banner',
+  'PT Booking Page',
+  'Class Schedule Page',
+  'Email Footer',
+];
+const TARGETS = [
+  'All Members',
+  'New Signups (0-30 days)',
+  'Inactive Members',
+  'PT Clients',
+  'Weight Loss Program',
+  'Strength Program',
+];
 const STATUSES = ['ACTIVE', 'DRAFT', 'PAUSED'];
 
 function formatDateRange(startDate, endDate) {
@@ -192,7 +205,7 @@ export default function AdminPromotions() {
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.6 }}>
               <CampaignRoundedIcon sx={{ color: '#12306d' }} />
               <Typography sx={{ fontSize: { xs: '1.4rem', md: '2rem' }, fontWeight: 900, color: '#0f1d4a' }}>
-                Campaign Composer
+                Ads & Promotions
               </Typography>
             </Stack>
 
@@ -203,7 +216,14 @@ export default function AdminPromotions() {
                 gap: 1.2,
               }}
             >
-              <TextField label="Campaign Title *" value={form.title} onChange={updateField('title')} fullWidth size="small" />
+              <TextField
+                label="Promotion Title *"
+                value={form.title}
+                onChange={updateField('title')}
+                placeholder="e.g., Summer PT Starter Offer"
+                fullWidth
+                size="small"
+              />
 
               <FormControl size="small" fullWidth>
                 <InputLabel>Placement</InputLabel>
@@ -232,15 +252,23 @@ export default function AdminPromotions() {
                 </Select>
               </FormControl>
 
-              <TextField label="Budget ($)" type="number" value={form.budget} onChange={updateField('budget')} fullWidth size="small" />
+              <TextField
+                label="Budget ($)"
+                type="number"
+                value={form.budget}
+                onChange={updateField('budget')}
+                placeholder="e.g., 1200"
+                fullWidth
+                size="small"
+              />
 
               <TextField
-                label="Campaign URL"
+                label="Offer URL"
                 value={form.link}
                 onChange={updateField('link')}
                 fullWidth
                 size="small"
-                placeholder="https://gympro.com/offers/summer"
+                placeholder="https://gympro.com/offers/pt-starter"
               />
 
               <TextField
@@ -264,13 +292,14 @@ export default function AdminPromotions() {
               />
 
               <TextField
-                label="Campaign Description"
+                label="Promotion Description"
                 value={form.description}
                 onChange={updateField('description')}
                 multiline
                 minRows={4}
                 fullWidth
                 size="small"
+                placeholder="Highlight the membership, PT, class, or nutrition offer details."
                 sx={{ gridColumn: { xs: '1 / -1', md: '1 / span 2' } }}
               />
             </Box>
@@ -370,7 +399,7 @@ export default function AdminPromotions() {
             <CardContent sx={{ p: { xs: 1.2, md: 1.5 } }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.1 }}>
                 <Typography sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, fontWeight: 800, color: '#0f1d4a' }}>
-                  Live Campaigns
+                  Live Ads & Promotions
                 </Typography>
                 <Chip label={`${campaigns.length} items`} size="small" sx={{ fontWeight: 700 }} />
               </Stack>
