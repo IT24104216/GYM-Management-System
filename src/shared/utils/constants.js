@@ -17,6 +17,7 @@ export const ROUTES = {
   USER_WORKOUTS: '/user/workouts',
   USER_MEAL_PLAN: '/user/meal-plan',
   USER_PROGRESS: '/user/progress',
+  USER_ADS_PROMOTIONS: '/user/ads-promotions',
   USER_PROFILE: '/user/profile',
   ADMIN_DASHBOARD: '/admin/dashboard',
   ADMIN_USERS: '/admin/users',
