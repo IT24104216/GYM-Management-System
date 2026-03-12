@@ -82,6 +82,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
             background: 'transparent',
             textAlign: 'left',
             fontWeight: 700,
+            color: 'text.primary',
             cursor: 'pointer',
           }}
         >
