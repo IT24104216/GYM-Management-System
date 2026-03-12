@@ -7,6 +7,7 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu';
 import SportsIcon from '@mui/icons-material/Sports';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import { ROLES, ROUTES } from '@/shared/utils/constants';
 
 export const NAV_CONFIG = {
@@ -31,6 +32,7 @@ export const NAV_CONFIG = {
   [ROLES.COACH]: [
     { label: 'Dashboard', path: ROUTES.COACH_DASHBOARD, icon: DashboardIcon },
     { label: 'Clients', path: ROUTES.COACH_CLIENTS, icon: GroupIcon },
+    { label: 'Scheduling', path: ROUTES.COACH_SCHEDULING, icon: ScheduleIcon },
     { label: 'Workout Plans', path: ROUTES.COACH_WORKOUT_PLANS, icon: SportsIcon },
   ],
 };
