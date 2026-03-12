@@ -8,6 +8,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import LocalOfferRoundedIcon from '@mui/icons-material/LocalOfferRounded';
 import BoltRoundedIcon from '@mui/icons-material/BoltRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
@@ -16,6 +17,9 @@ import { MOCK_PROMOTIONS } from '@/features/user/data/promotions.mock';
 const MotionBox = motion(Box);
 
 function UserAdsPromotions() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
   return (
     <Box sx={{ px: { xs: 1.5, md: 2.2 }, py: { xs: 1.4, md: 2.2 } }}>
       <MotionBox
@@ -89,7 +93,9 @@ function UserAdsPromotions() {
                     top: 14,
                     left: 14,
                     fontWeight: 700,
-                    bgcolor: 'rgba(255,255,255,0.86)',
+                    bgcolor: isDark ? 'rgba(248, 250, 252, 0.94)' : 'rgba(255,255,255,0.86)',
+                    color: isDark ? '#0f172a' : '#111827',
+                    border: isDark ? '1px solid rgba(148, 163, 184, 0.65)' : '1px solid rgba(17, 24, 39, 0.08)',
                   }}
                 />
               </Box>
