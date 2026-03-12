@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Alert,
@@ -39,6 +39,16 @@ const initialForm = {
 };
 
 const toDateTime = (date, time) => new Date(`${date}T${time}:00`);
+const parseIsoDate = (isoDate) => {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+const formatIso = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 const stripToDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 const startOfWeek = (date) => {
   const day = date.getDay();
@@ -58,6 +68,10 @@ const formatWeekRange = (start, end) => {
 function CoachScheduling() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const formIconColor = isDark ? '#cbd5e1' : theme.palette.action.active;
+  const formBorderDefault = isDark ? 'rgba(148, 163, 184, 0.38)' : theme.palette.divider;
+  const formBorderHover = isDark ? 'rgba(148, 163, 184, 0.62)' : theme.palette.text.secondary;
+  const formBorderFocus = isDark ? '#93c5fd' : theme.palette.primary.main;
   const { user } = useAuth();
   const storageKey = `coach_scheduling_slots_v1_${user?.id || 'guest'}`;
 
@@ -93,16 +107,16 @@ function CoachScheduling() {
     const weekEnd = endOfWeek(dayRef);
 
     if (viewMode === 'daily') {
-      return orderedSlots.filter((slot) => stripToDay(new Date(`${slot.date}T00:00:00`)).getTime() === dayRef.getTime());
+      return orderedSlots.filter((slot) => stripToDay(parseIsoDate(slot.date)).getTime() === dayRef.getTime());
     }
     if (viewMode === 'weekly') {
       return orderedSlots.filter((slot) => {
-        const day = new Date(`${slot.date}T00:00:00`);
+        const day = parseIsoDate(slot.date);
         return day >= weekStart && day <= weekEnd;
       });
     }
     return orderedSlots.filter((slot) => {
-      const day = new Date(`${slot.date}T00:00:00`);
+      const day = parseIsoDate(slot.date);
       return day.getFullYear() === dayRef.getFullYear() && day.getMonth() === dayRef.getMonth();
     });
   }, [orderedSlots, viewMode, selectedDate]);
@@ -113,6 +127,40 @@ function CoachScheduling() {
     () => selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
     [selectedDate]
   );
+
+  const slotGroups = useMemo(() => {
+    if (viewMode === 'daily') {
+      return [{
+        key: formatIso(selectedDate),
+        label: selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }),
+        items: filteredSlots,
+      }];
+    }
+
+    if (viewMode === 'weekly') {
+      return Array.from({ length: 7 }).map((_, index) => {
+        const day = new Date(selectedWeekStart);
+        day.setDate(selectedWeekStart.getDate() + index);
+        const dayKey = formatIso(day);
+        return {
+          key: dayKey,
+          label: day.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
+          items: filteredSlots.filter((slot) => slot.date === dayKey),
+        };
+      });
+    }
+
+    const groupsMap = filteredSlots.reduce((acc, slot) => {
+      if (!acc[slot.date]) acc[slot.date] = [];
+      acc[slot.date].push(slot);
+      return acc;
+    }, {});
+    return Object.keys(groupsMap).sort().map((dateKey) => ({
+      key: dateKey,
+      label: parseIsoDate(dateKey).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
+      items: groupsMap[dateKey],
+    }));
+  }, [viewMode, filteredSlots, selectedDate, selectedWeekStart]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -183,12 +231,13 @@ function CoachScheduling() {
       saveSlots([...slots, payload]);
     }
 
+    setSelectedDate(parseIsoDate(payload.date));
     resetForm();
   };
 
   const onEdit = (slot) => {
     setEditingId(slot.id);
-    setSelectedDate(new Date(`${slot.date}T00:00:00`));
+    setSelectedDate(parseIsoDate(slot.date));
     setForm({
       date: slot.date,
       startTime: slot.startTime,
@@ -226,6 +275,8 @@ function CoachScheduling() {
     if (start <= now && end >= now) return { label: 'Ongoing', color: '#0d9488' };
     return { label: 'Upcoming', color: '#16a34a' };
   };
+
+  const isSlotReadOnly = (slot) => toDateTime(slot.date, slot.endTime) < new Date();
 
   return (
     <MotionBox
@@ -286,17 +337,121 @@ function CoachScheduling() {
               </Typography>
 
               <Stack spacing={1.2}>
-                <TextField label="Date" type="date" value={form.date} onChange={onChange('date')} InputLabelProps={{ shrink: true }} size="small" fullWidth />
+                <TextField
+                  label="Date"
+                  type="date"
+                  value={form.date}
+                  onChange={onChange('date')}
+                  InputLabelProps={{ shrink: true }}
+                  size="small"
+                  fullWidth
+                  sx={{
+                    '& .MuiInputLabel-root': { color: 'text.secondary' },
+                    '& .MuiInputLabel-root.Mui-focused': { color: 'text.primary' },
+                    '& .MuiOutlinedInput-root': {
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: formBorderDefault },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: formBorderHover },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: formBorderFocus, borderWidth: 1.4 },
+                    },
+                    '& .MuiSvgIcon-root': { color: formIconColor },
+                    '& input[type="date"]::-webkit-calendar-picker-indicator': {
+                      opacity: isDark ? 1 : 0.74,
+                      filter: isDark ? 'invert(0.92) saturate(0) brightness(1.15)' : 'none',
+                      cursor: 'pointer',
+                    },
+                  }}
+                />
                 <Stack direction="row" spacing={1.2}>
-                  <TextField label="Start" type="time" value={form.startTime} onChange={onChange('startTime')} InputLabelProps={{ shrink: true }} size="small" fullWidth />
-                  <TextField label="End" type="time" value={form.endTime} onChange={onChange('endTime')} InputLabelProps={{ shrink: true }} size="small" fullWidth />
+                  <TextField
+                    label="Start"
+                    type="time"
+                    value={form.startTime}
+                    onChange={onChange('startTime')}
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                    fullWidth
+                    sx={{
+                      '& .MuiInputLabel-root': { color: 'text.secondary' },
+                      '& .MuiInputLabel-root.Mui-focused': { color: 'text.primary' },
+                      '& .MuiOutlinedInput-root': {
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: formBorderDefault },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: formBorderHover },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: formBorderFocus, borderWidth: 1.4 },
+                      },
+                      '& .MuiSvgIcon-root': { color: formIconColor },
+                      '& input[type="time"]::-webkit-calendar-picker-indicator': {
+                        opacity: isDark ? 1 : 0.74,
+                        filter: isDark ? 'invert(0.92) saturate(0) brightness(1.15)' : 'none',
+                        cursor: 'pointer',
+                      },
+                    }}
+                  />
+                  <TextField
+                    label="End"
+                    type="time"
+                    value={form.endTime}
+                    onChange={onChange('endTime')}
+                    InputLabelProps={{ shrink: true }}
+                    size="small"
+                    fullWidth
+                    sx={{
+                      '& .MuiInputLabel-root': { color: 'text.secondary' },
+                      '& .MuiInputLabel-root.Mui-focused': { color: 'text.primary' },
+                      '& .MuiOutlinedInput-root': {
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: formBorderDefault },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: formBorderHover },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: formBorderFocus, borderWidth: 1.4 },
+                      },
+                      '& .MuiSvgIcon-root': { color: formIconColor },
+                      '& input[type="time"]::-webkit-calendar-picker-indicator': {
+                        opacity: isDark ? 1 : 0.74,
+                        filter: isDark ? 'invert(0.92) saturate(0) brightness(1.15)' : 'none',
+                        cursor: 'pointer',
+                      },
+                    }}
+                  />
                 </Stack>
-                <TextField select label="Session Type" value={form.type} onChange={onChange('type')} size="small" fullWidth>
+                <TextField
+                  select
+                  label="Session Type"
+                  value={form.type}
+                  onChange={onChange('type')}
+                  size="small"
+                  fullWidth
+                  sx={{
+                    '& .MuiInputLabel-root': { color: 'text.secondary' },
+                    '& .MuiInputLabel-root.Mui-focused': { color: 'text.primary' },
+                    '& .MuiOutlinedInput-root': {
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: formBorderDefault },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: formBorderHover },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: formBorderFocus, borderWidth: 1.4 },
+                    },
+                    '& .MuiSelect-icon': { color: formIconColor, opacity: 1 },
+                    '& .MuiSvgIcon-root': { color: formIconColor },
+                  }}
+                >
                   {SLOT_TYPES.map((option) => (
                     <MenuItem key={option} value={option}>{option}</MenuItem>
                   ))}
                 </TextField>
-                <TextField label="Notes (optional)" value={form.notes} onChange={onChange('notes')} multiline minRows={4} size="small" fullWidth />
+                <TextField
+                  label="Notes (optional)"
+                  value={form.notes}
+                  onChange={onChange('notes')}
+                  multiline
+                  minRows={4}
+                  size="small"
+                  fullWidth
+                  sx={{
+                    '& .MuiInputLabel-root': { color: 'text.secondary' },
+                    '& .MuiInputLabel-root.Mui-focused': { color: 'text.primary' },
+                    '& .MuiOutlinedInput-root': {
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: formBorderDefault },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: formBorderHover },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: formBorderFocus, borderWidth: 1.4 },
+                    },
+                  }}
+                />
 
                 {error && <Alert severity="error">{error}</Alert>}
 
@@ -386,50 +541,70 @@ function CoachScheduling() {
                 </Box>
               )}
 
-              <Stack spacing={1.1}>
-                {filteredSlots.map((slot) => {
-                  const status = slotStatus(slot);
-                  return (
-                    <Box key={slot.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.8, px: 1.5, py: 1.2, bgcolor: 'background.paper' }}>
-                      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
-                        <Box>
-                          <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
-                            {slot.date} | {slot.startTime} - {slot.endTime}
-                          </Typography>
-                          <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.5 }}>
-                            <Chip label={slot.type} size="small" sx={{ height: 24, fontSize: '0.72rem', fontWeight: 700 }} />
-                            <Chip label={status.label} size="small" sx={{ height: 24, fontSize: '0.72rem', fontWeight: 700, bgcolor: `${status.color}20`, color: status.color }} />
-                          </Stack>
-                          {!!slot.notes && (
-                            <Typography sx={{ color: 'text.secondary', fontSize: '0.84rem', mt: 0.6 }}>{slot.notes}</Typography>
-                          )}
-                        </Box>
+              <Stack spacing={1.4}>
+                {slotGroups.map((group) => (
+                  <Box key={group.key}>
+                    <Typography sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.88rem', mb: 0.8 }}>
+                      {group.label}
+                    </Typography>
+                    {!group.items.length && (
+                      <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1.6, px: 1.2, py: 1.1 }}>
+                        <Typography sx={{ color: 'text.secondary', fontSize: '0.82rem' }}>No slots for this day.</Typography>
+                      </Box>
+                    )}
+                    <Stack spacing={1.1}>
+                      {group.items.map((slot) => {
+                        const status = slotStatus(slot);
+                        const readOnly = isSlotReadOnly(slot);
+                        return (
+                          <Box key={slot.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.8, px: 1.5, py: 1.2, bgcolor: 'background.paper' }}>
+                            <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
+                              <Box>
+                                <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
+                                  {slot.date} | {slot.startTime} - {slot.endTime}
+                                </Typography>
+                                <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
+                                  <Chip label={slot.type} size="small" sx={{ height: 24, fontSize: '0.72rem', fontWeight: 700 }} />
+                                  <Chip label={status.label} size="small" sx={{ height: 24, fontSize: '0.72rem', fontWeight: 700, bgcolor: `${status.color}20`, color: status.color }} />
+                                  {readOnly && (
+                                    <Chip label="Read-only" size="small" sx={{ height: 24, fontSize: '0.72rem', fontWeight: 700, bgcolor: '#64748b20', color: '#64748b' }} />
+                                  )}
+                                </Stack>
+                                {!!slot.notes && (
+                                  <Typography sx={{ color: 'text.secondary', fontSize: '0.84rem', mt: 0.6 }}>{slot.notes}</Typography>
+                                )}
+                              </Box>
 
-                        <Stack direction="row" spacing={0.8}>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            startIcon={<EditRoundedIcon />}
-                            onClick={() => onEdit(slot)}
-                            sx={{ textTransform: 'none', borderRadius: 1.4 }}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size="small"
-                            color="error"
-                            variant="outlined"
-                            startIcon={<DeleteOutlineRoundedIcon />}
-                            onClick={() => setDeleteId(slot.id)}
-                            sx={{ textTransform: 'none', borderRadius: 1.4 }}
-                          >
-                            Delete
-                          </Button>
-                        </Stack>
-                      </Stack>
-                    </Box>
-                  );
-                })}
+                              <Stack direction="row" spacing={0.8}>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<EditRoundedIcon />}
+                                  onClick={() => onEdit(slot)}
+                                  disabled={readOnly}
+                                  sx={{ textTransform: 'none', borderRadius: 1.4 }}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  size="small"
+                                  color="error"
+                                  variant="outlined"
+                                  startIcon={<DeleteOutlineRoundedIcon />}
+                                  onClick={() => setDeleteId(slot.id)}
+                                  disabled={readOnly}
+                                  sx={{ textTransform: 'none', borderRadius: 1.4 }}
+                                >
+                                  Delete
+                                </Button>
+                              </Stack>
+                            </Stack>
+                          </Box>
+                        );
+                      })}
+                    </Stack>
+                  </Box>
+                ))}
               </Stack>
             </CardContent>
           </Card>
@@ -451,3 +626,4 @@ function CoachScheduling() {
 }
 
 export default CoachScheduling;
+
