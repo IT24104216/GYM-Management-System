@@ -12,6 +12,7 @@ import { ROLES, ROUTES } from '@/shared/utils/constants';
 export const NAV_CONFIG = {
   [ROLES.USER]: [
     { label: 'Dashboard', path: ROUTES.USER_DASHBOARD, icon: DashboardIcon },
+    { label: 'Ads & Promotions', path: ROUTES.USER_ADS_PROMOTIONS, icon: CampaignIcon },
     { label: 'Workouts', path: ROUTES.USER_WORKOUTS, icon: FitnessCenterIcon },
     { label: 'Profile', path: ROUTES.USER_PROFILE, icon: PersonIcon },
   ],
