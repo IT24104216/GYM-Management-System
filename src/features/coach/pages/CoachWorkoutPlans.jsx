@@ -4,11 +4,13 @@ import {
   Box,
   Button,
   Chip,
+  Pagination,
   Dialog,
   DialogContent,
   DialogTitle,
   Divider,
   IconButton,
+  InputAdornment,
   Stack,
   TextField,
   Typography,
@@ -19,6 +21,7 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
+import FormatListNumberedRoundedIcon from '@mui/icons-material/FormatListNumberedRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
 
 const PRIORITY_ORDER = {
@@ -87,9 +90,11 @@ function CoachWorkoutPlans() {
   const panelBorder = isDark ? '#24344f' : '#e5e7eb';
   const mutedText = isDark ? '#94a3b8' : '#6b7280';
 
+  const pageSize = 9;
   const [users] = useState(REQUESTED_USERS);
   const [plansByUser, setPlansByUser] = useState({});
   const [openUser, setOpenUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [planForm, setPlanForm] = useState({
     planTitle: '',
     planNote: '',
@@ -100,6 +105,12 @@ function CoachWorkoutPlans() {
     () => [...users].sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]),
     [users],
   );
+  const totalPages = Math.max(1, Math.ceil(sortedUsers.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const paginatedUsers = sortedUsers.slice(startIndex, startIndex + pageSize);
+  const showingFrom = sortedUsers.length ? startIndex + 1 : 0;
+  const showingTo = Math.min(startIndex + pageSize, sortedUsers.length);
 
   const openPlanDialog = (user) => {
     const existing = plansByUser[user.id];
@@ -157,8 +168,14 @@ function CoachWorkoutPlans() {
         subtitle="Build personalized exercise plans for users who requested coaching. Priority is ordered from high to low."
       />
 
-      <Stack spacing={2}>
-        {sortedUsers.map((user) => {
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' },
+          gap: 2,
+        }}
+      >
+        {paginatedUsers.map((user) => {
           const hasPlan = Boolean(plansByUser[user.id]);
           return (
             <Box
@@ -170,6 +187,15 @@ function CoachWorkoutPlans() {
                 borderRadius: 2.5,
                 p: { xs: 2, md: 2.5 },
                 boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                minHeight: 260,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                '&:hover': {
+                  transform: 'translateY(-3px)',
+                  boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
+                },
               }}
             >
               <Stack
@@ -261,7 +287,36 @@ function CoachWorkoutPlans() {
             </Box>
           );
         })}
-      </Stack>
+      </Box>
+
+      {sortedUsers.length > pageSize && (
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1}
+          justifyContent="space-between"
+          alignItems={{ xs: 'flex-start', sm: 'center' }}
+          sx={{ mt: 2 }}
+        >
+          <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>
+            Showing {showingFrom}-{showingTo} of {sortedUsers.length} users
+          </Typography>
+          <Pagination
+            page={safePage}
+            count={totalPages}
+            onChange={(_, page) => setCurrentPage(page)}
+            color="primary"
+            shape="rounded"
+            siblingCount={1}
+            boundaryCount={1}
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontWeight: 700,
+                borderRadius: 1.6,
+              },
+            }}
+          />
+        </Stack>
+      )}
 
       <Dialog
         open={Boolean(openUser)}
@@ -304,56 +359,77 @@ function CoachWorkoutPlans() {
             />
 
             <Divider />
-            <Typography sx={{ fontWeight: 700 }}>Exercises</Typography>
+            <Typography sx={{ fontWeight: 700 }}>Exercise Library Builder</Typography>
+            <Typography sx={{ color: mutedText, fontSize: '0.82rem' }}>
+              Add as many exercises as needed. Use Exercise Name, Amount, and Description for each row.
+            </Typography>
 
-            {planForm.exercises.map((exercise, index) => (
-              <Box
-                key={`exercise-${index}`}
-                sx={{
-                  p: 1.5,
-                  border: '1px solid',
-                  borderColor: panelBorder,
-                  borderRadius: 2,
-                  background: isDark ? '#0b1530' : '#f8fafc',
-                }}
-              >
-                <Stack
-                  direction={{ xs: 'column', md: 'row' }}
-                  spacing={1.2}
-                  alignItems={{ xs: 'stretch', md: 'flex-start' }}
-                >
-                  <TextField
-                    label="Exercise"
-                    value={exercise.name}
-                    onChange={(e) => updateExercise(index, 'name', e.target.value)}
-                    fullWidth
-                  />
-                  <TextField
-                    label="Amount to do"
-                    value={exercise.amount}
-                    onChange={(e) => updateExercise(index, 'amount', e.target.value)}
-                    placeholder="3x12 reps / 20 min / 4 rounds"
-                    fullWidth
-                  />
-                  <IconButton
-                    onClick={() => removeExercise(index)}
-                    disabled={planForm.exercises.length === 1}
-                    sx={{ mt: { xs: 0, md: 0.2 }, alignSelf: { xs: 'flex-end', md: 'flex-start' } }}
+            <Box sx={{ maxHeight: 420, overflowY: 'auto', pr: 0.5 }}>
+              <Stack spacing={1.2}>
+                {planForm.exercises.map((exercise, index) => (
+                  <Box
+                    key={`exercise-${index}`}
+                    sx={{
+                      p: 1.5,
+                      border: '1px solid',
+                      borderColor: panelBorder,
+                      borderRadius: 2,
+                      background: isDark ? '#0b1530' : '#f8fafc',
+                    }}
                   >
-                    <DeleteOutlineRoundedIcon />
-                  </IconButton>
-                </Stack>
-                <TextField
-                  sx={{ mt: 1.2 }}
-                  label="Exercise Description"
-                  value={exercise.description}
-                  onChange={(e) => updateExercise(index, 'description', e.target.value)}
-                  fullWidth
-                  multiline
-                  minRows={2}
-                />
-              </Box>
-            ))}
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                      <Chip
+                        size="small"
+                        icon={<FormatListNumberedRoundedIcon />}
+                        label={`Exercise ${index + 1}`}
+                        sx={{ fontWeight: 700 }}
+                      />
+                      <IconButton
+                        onClick={() => removeExercise(index)}
+                        disabled={planForm.exercises.length === 1}
+                        size="small"
+                      >
+                        <DeleteOutlineRoundedIcon />
+                      </IconButton>
+                    </Stack>
+
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2}>
+                      <TextField
+                        label="Exercise Name"
+                        value={exercise.name}
+                        onChange={(e) => updateExercise(index, 'name', e.target.value)}
+                        fullWidth
+                      />
+                      <TextField
+                        label="Amount"
+                        value={exercise.amount}
+                        onChange={(e) => updateExercise(index, 'amount', e.target.value)}
+                        placeholder="3 x 12 reps / 20 min / 5 rounds"
+                        fullWidth
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Typography sx={{ color: mutedText, fontSize: '0.75rem' }}>Qty</Typography>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    </Stack>
+
+                    <TextField
+                      sx={{ mt: 1.2 }}
+                      label="Description"
+                      value={exercise.description}
+                      onChange={(e) => updateExercise(index, 'description', e.target.value)}
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      placeholder="Coaching cues, tempo, rest time, and safety notes."
+                    />
+                  </Box>
+                ))}
+              </Stack>
+            </Box>
 
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Button
@@ -362,7 +438,7 @@ function CoachWorkoutPlans() {
                 onClick={addExercise}
                 sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}
               >
-                Add Exercise
+                Add New Exercise
               </Button>
               <Button
                 variant="contained"
