@@ -23,6 +23,8 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded';
+import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
 
 const MotionBox = motion(Box);
@@ -47,6 +49,11 @@ const endOfWeek = (date) => {
   const start = startOfWeek(date);
   return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999);
 };
+const formatWeekRange = (start, end) => {
+  const startLabel = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const endLabel = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${startLabel} - ${endLabel}`;
+};
 
 function CoachScheduling() {
   const theme = useTheme();
@@ -69,6 +76,7 @@ function CoachScheduling() {
   const [editingId, setEditingId] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [viewMode, setViewMode] = useState('weekly');
+  const [selectedDate, setSelectedDate] = useState(() => stripToDay(new Date()));
 
   const saveSlots = (next) => {
     setSlots(next);
@@ -80,13 +88,12 @@ function CoachScheduling() {
   }, [slots]);
 
   const filteredSlots = useMemo(() => {
-    const now = new Date();
-    const today = stripToDay(now);
-    const weekStart = startOfWeek(now);
-    const weekEnd = endOfWeek(now);
+    const dayRef = stripToDay(selectedDate);
+    const weekStart = startOfWeek(dayRef);
+    const weekEnd = endOfWeek(dayRef);
 
     if (viewMode === 'daily') {
-      return orderedSlots.filter((slot) => stripToDay(new Date(`${slot.date}T00:00:00`)).getTime() === today.getTime());
+      return orderedSlots.filter((slot) => stripToDay(new Date(`${slot.date}T00:00:00`)).getTime() === dayRef.getTime());
     }
     if (viewMode === 'weekly') {
       return orderedSlots.filter((slot) => {
@@ -96,9 +103,16 @@ function CoachScheduling() {
     }
     return orderedSlots.filter((slot) => {
       const day = new Date(`${slot.date}T00:00:00`);
-      return day.getFullYear() === now.getFullYear() && day.getMonth() === now.getMonth();
+      return day.getFullYear() === dayRef.getFullYear() && day.getMonth() === dayRef.getMonth();
     });
-  }, [orderedSlots, viewMode]);
+  }, [orderedSlots, viewMode, selectedDate]);
+
+  const selectedWeekStart = useMemo(() => startOfWeek(selectedDate), [selectedDate]);
+  const selectedWeekEnd = useMemo(() => endOfWeek(selectedDate), [selectedDate]);
+  const selectedDayLabel = useMemo(
+    () => selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+    [selectedDate]
+  );
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -174,6 +188,7 @@ function CoachScheduling() {
 
   const onEdit = (slot) => {
     setEditingId(slot.id);
+    setSelectedDate(new Date(`${slot.date}T00:00:00`));
     setForm({
       date: slot.date,
       startTime: slot.startTime,
@@ -188,6 +203,19 @@ function CoachScheduling() {
     saveSlots(slots.filter((s) => s.id !== deleteId));
     setDeleteId(null);
     if (editingId === deleteId) resetForm();
+  };
+
+  const moveRange = (direction) => {
+    const delta = direction === 'next' ? 1 : -1;
+    const next = new Date(selectedDate);
+    if (viewMode === 'monthly') {
+      next.setMonth(next.getMonth() + delta);
+    } else if (viewMode === 'weekly') {
+      next.setDate(next.getDate() + (7 * delta));
+    } else {
+      next.setDate(next.getDate() + delta);
+    }
+    setSelectedDate(stripToDay(next));
   };
 
   const slotStatus = (slot) => {
@@ -294,7 +322,33 @@ function CoachScheduling() {
           <Card sx={{ borderRadius: 2.8, border: '1px solid', borderColor: 'divider', minHeight: 560 }}>
             <CardContent sx={{ p: 2.4 }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} justifyContent="space-between" sx={{ mb: 1.4 }}>
-                <Typography sx={{ fontWeight: 800, color: 'text.primary' }}>Available Time Slots</Typography>
+                <Stack spacing={1}>
+                  <Typography sx={{ fontWeight: 800, color: 'text.primary' }}>Available Time Slots</Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Button
+                      size="small"
+                      onClick={() => moveRange('prev')}
+                      sx={{ minWidth: 38, width: 38, height: 38, p: 0, borderRadius: 1.4, border: '1px solid', borderColor: 'divider' }}
+                    >
+                      <ChevronLeftRoundedIcon />
+                    </Button>
+                    <Box sx={{ px: 1.4, py: 0.8, borderRadius: 1.4, border: '1px solid', borderColor: 'divider', minWidth: 180, textAlign: 'center' }}>
+                      <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: '0.9rem' }}>
+                        {viewMode === 'monthly' && selectedDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                        {viewMode === 'weekly' && formatWeekRange(selectedWeekStart, selectedWeekEnd)}
+                        {viewMode === 'daily' && selectedDayLabel}
+                      </Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      onClick={() => moveRange('next')}
+                      sx={{ minWidth: 38, width: 38, height: 38, p: 0, borderRadius: 1.4, border: '1px solid', borderColor: 'divider' }}
+                    >
+                      <ChevronRightRoundedIcon />
+                    </Button>
+                  </Stack>
+                </Stack>
+
                 <Stack direction="row" spacing={0.8}>
                   {[
                     { key: 'daily', label: 'Daily' },
@@ -325,9 +379,9 @@ function CoachScheduling() {
               {!filteredSlots.length && (
                 <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 2, py: 4, textAlign: 'center' }}>
                   <Typography sx={{ color: 'text.secondary' }}>
-                    {viewMode === 'daily' && 'No slots for today.'}
-                    {viewMode === 'weekly' && 'No slots for this week.'}
-                    {viewMode === 'monthly' && 'No slots for this month.'}
+                    {viewMode === 'daily' && `No slots for ${selectedDayLabel}.`}
+                    {viewMode === 'weekly' && `No slots for ${formatWeekRange(selectedWeekStart, selectedWeekEnd)}.`}
+                    {viewMode === 'monthly' && `No slots for ${selectedDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}.`}
                   </Typography>
                 </Box>
               )}
