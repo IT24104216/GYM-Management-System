@@ -20,6 +20,7 @@ import UserDietitianFeedbacks from '@/features/user/pages/UserDietitianFeedbacks
 import UserWorkouts from '@/features/user/pages/UserWorkouts';
 import UserMealPlan from '@/features/user/pages/UserMealPlan';
 import UserProgress from '@/features/user/pages/UserProgress';
+import UserAdsPromotions from '@/features/user/pages/UserAdsPromotions';
 import UserProfile from '@/features/user/pages/UserProfile';
 
 // Admin pages
@@ -62,6 +63,7 @@ function AppRouter() {
           <Route path={ROUTES.USER_WORKOUTS} element={<UserWorkouts />} />
           <Route path={ROUTES.USER_MEAL_PLAN} element={<UserMealPlan />} />
           <Route path={ROUTES.USER_PROGRESS} element={<UserProgress />} />
+          <Route path={ROUTES.USER_ADS_PROMOTIONS} element={<UserAdsPromotions />} />
           <Route path={ROUTES.USER_PROFILE} element={<UserProfile />} />
         </Route>
 
