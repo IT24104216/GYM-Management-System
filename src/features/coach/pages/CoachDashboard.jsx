@@ -1,4 +1,5 @@
-﻿import { motion as Motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion as Motion } from 'framer-motion';
 import {
   Avatar,
   Box,
@@ -123,12 +124,12 @@ const consultations = [
 ];
 
 const members = [
-  { name: 'Mike Torres', age: 28, goal: 'Muscle Gain', score: 92, program: 78, lastActive: 'Today', avatar: 'MT', grad: 'linear-gradient(135deg, #84CC16, #0D9488)' },
-  { name: 'Emma Wilson', age: 34, goal: 'Weight Loss', score: 85, program: 65, lastActive: 'Today', avatar: 'EW', grad: 'linear-gradient(135deg, #0D9488, #0284C7)' },
-  { name: 'James Park', age: 22, goal: 'Endurance', score: 78, program: 45, lastActive: '2h ago', avatar: 'JP', grad: 'linear-gradient(135deg, #F59E0B, #EF4444)' },
-  { name: 'Sofia Reyes', age: 31, goal: 'Strength', score: 95, program: 90, lastActive: 'Yesterday', avatar: 'SR', grad: 'linear-gradient(135deg, #8B5CF6, #EC4899)' },
-  { name: 'Chris Lee', age: 26, goal: 'Body Recomp', score: 71, program: 30, lastActive: '3h ago', avatar: 'CL', grad: 'linear-gradient(135deg, #06B6D4, #3B82F6)' },
-  { name: 'Aisha Brown', age: 29, goal: 'Flexibility', score: 88, program: 55, lastActive: 'Today', avatar: 'AB', grad: 'linear-gradient(135deg, #10B981, #0D9488)' },
+  { id: 1, name: 'Mike Torres', age: 28, goal: 'Muscle Gain', score: 92, program: 78, lastActive: 'Today', avatar: 'MT', grad: 'linear-gradient(135deg, #84CC16, #0D9488)', email: 'mike.torres@gympro.com', phone: '+1 (555) 802-9910', preferredSlot: 'Mon, Wed, Fri - 8:00 AM', trainingDays: 'Mon, Wed, Fri', priority: 'High', notes: 'Focus on hypertrophy and progressive overload.' },
+  { id: 2, name: 'Emma Wilson', age: 34, goal: 'Weight Loss', score: 85, program: 65, lastActive: 'Today', avatar: 'EW', grad: 'linear-gradient(135deg, #0D9488, #0284C7)', email: 'emma.wilson@gympro.com', phone: '+1 (555) 774-1020', preferredSlot: 'Tue, Thu - 9:30 AM', trainingDays: 'Tue, Thu', priority: 'Normal', notes: 'Weight management and nutrition adherence support.' },
+  { id: 3, name: 'James Park', age: 22, goal: 'Endurance', score: 78, program: 45, lastActive: '2h ago', avatar: 'JP', grad: 'linear-gradient(135deg, #F59E0B, #EF4444)', email: 'james.park@gympro.com', phone: '+1 (555) 456-2081', preferredSlot: 'Mon, Thu - 11:00 AM', trainingDays: 'Mon, Thu', priority: 'Medium', notes: 'Building aerobic capacity with progressive intervals.' },
+  { id: 4, name: 'Sofia Reyes', age: 31, goal: 'Strength', score: 95, program: 90, lastActive: 'Yesterday', avatar: 'SR', grad: 'linear-gradient(135deg, #8B5CF6, #EC4899)', email: 'sofia.reyes@gympro.com', phone: '+1 (555) 803-1166', preferredSlot: 'Tue, Fri - 1:00 PM', trainingDays: 'Tue, Fri', priority: 'High', notes: 'Advanced strength cycle with accessory mobility work.' },
+  { id: 5, name: 'Chris Lee', age: 26, goal: 'Body Recomp', score: 71, program: 30, lastActive: '3h ago', avatar: 'CL', grad: 'linear-gradient(135deg, #06B6D4, #3B82F6)', email: 'chris.lee@gympro.com', phone: '+1 (555) 552-4791', preferredSlot: 'Wed, Sat - 3:00 PM', trainingDays: 'Wed, Sat', priority: 'Normal', notes: 'Combining caloric cycling with compound lifts.' },
+  { id: 6, name: 'Aisha Brown', age: 29, goal: 'Flexibility', score: 88, program: 55, lastActive: 'Today', avatar: 'AB', grad: 'linear-gradient(135deg, #10B981, #0D9488)', email: 'aisha.brown@gympro.com', phone: '+1 (555) 917-2043', preferredSlot: 'Sun - 5:00 PM', trainingDays: 'Sun', priority: 'Low', notes: 'Mobility-first sessions with recovery blocks.' },
 ];
 
 const weeklyData = [
@@ -179,6 +180,7 @@ function CircularScore({ score, id, isDark }) {
 function CoachDashboard() {
   const navigate = useNavigate();
   const theme = useTheme();
+  const [flippedMemberIds, setFlippedMemberIds] = useState({});
   const isDark = theme.palette.mode === 'dark';
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
   const panelBorder = isDark ? '#24344f' : '#f3f4f6';
@@ -192,6 +194,9 @@ function CoachDashboard() {
   const currentRowBorder = isDark ? '#2dd4bf' : '#99f6e4';
   const barBg = isDark ? '#1f2937' : '#f3f4f6';
   const chartGrid = isDark ? '#23324b' : '#F1F5F9';
+  const toggleMemberCard = (id) => {
+    setFlippedMemberIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   return (
     <Motion.div variants={containerVariants} initial="hidden" animate="visible" style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 24 }}>
@@ -329,42 +334,93 @@ function CoachDashboard() {
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
           {members.map((m, i) => (
-            <Motion.div key={m.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.08 }} whileHover={{ y: -3 }}>
-              <Box sx={{ background: panelBg, borderRadius: 2, p: 2, border: '1px solid', borderColor: panelBorder, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', cursor: 'pointer' }}>
-                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
-                  <Avatar sx={{ width: 44, height: 44, color: '#fff', fontWeight: 700, background: m.grad }}>{m.avatar}</Avatar>
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: '0.875rem', color: primaryText, fontWeight: 700 }}>{m.name}</Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: mutedText }}>Age {m.age} · {m.goal}</Typography>
-                  </Box>
-                  <Box sx={{ ml: 'auto' }}>
-                    <CircularScore score={m.score} id={m.avatar} isDark={isDark} />
-                  </Box>
-                </Stack>
+            <Motion.div key={m.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.08 }} whileHover={{ y: -3 }}>
+              <Box sx={{ perspective: '1200px' }}>
+                <Box
+                  sx={{
+                    position: 'relative',
+                    minHeight: 258,
+                    transformStyle: 'preserve-3d',
+                    transition: 'transform 0.5s ease',
+                    transform: flippedMemberIds[m.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                  }}
+                >
+                  <Box sx={{ position: 'absolute', inset: 0, background: panelBg, borderRadius: 2, p: 2, border: '1px solid', borderColor: panelBorder, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', backfaceVisibility: 'hidden' }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                      <Avatar sx={{ width: 44, height: 44, color: '#fff', fontWeight: 700, background: m.grad }}>{m.avatar}</Avatar>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '0.875rem', color: primaryText, fontWeight: 700 }}>{m.name}</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: mutedText }}>Age {m.age} - {m.goal}</Typography>
+                      </Box>
+                      <Box sx={{ ml: 'auto' }}>
+                        <CircularScore score={m.score} id={m.avatar} isDark={isDark} />
+                      </Box>
+                    </Stack>
 
-                <Box sx={{ mb: 1.5 }}>
-                  <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.7 }}>
-                    <Typography sx={{ fontSize: '0.75rem', color: secondaryText }}>Program Progress</Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: primaryText, fontWeight: 600 }}>{m.program}%</Typography>
-                  </Stack>
-                  <Box sx={{ height: 6, borderRadius: 999, bgcolor: barBg, overflow: 'hidden' }}>
-                    <Motion.div
-                      style={{ height: '100%', borderRadius: 999, background: m.grad }}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${m.program}%` }}
-                      transition={{ duration: 1, ease: 'easeOut', delay: 0.5 + i * 0.1 }}
-                    />
+                    <Box sx={{ mb: 1.5 }}>
+                      <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.7 }}>
+                        <Typography sx={{ fontSize: '0.75rem', color: secondaryText }}>Program Progress</Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: primaryText, fontWeight: 600 }}>{m.program}%</Typography>
+                      </Stack>
+                      <Box sx={{ height: 6, borderRadius: 999, bgcolor: barBg, overflow: 'hidden' }}>
+                        <Motion.div
+                          style={{ height: '100%', borderRadius: 999, background: m.grad }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${m.program}%` }}
+                          transition={{ duration: 1, ease: 'easeOut', delay: 0.5 + i * 0.1 }}
+                        />
+                      </Box>
+                    </Box>
+
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography sx={{ fontSize: '0.75rem', color: mutedText, display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+                        <MonitorHeartRoundedIcon sx={{ fontSize: 11 }} /> {m.lastActive}
+                      </Typography>
+                      <Button
+                        size="small"
+                        onClick={() => toggleMemberCard(m.id)}
+                        sx={{ textTransform: 'none', color: '#0d9488', fontWeight: 600, p: 0, minWidth: 0, fontSize: 12 }}
+                      >
+                        View Profile
+                      </Button>
+                    </Stack>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: panelBg,
+                      borderRadius: 2,
+                      p: 2,
+                      border: '1px solid',
+                      borderColor: panelBorder,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                      backfaceVisibility: 'hidden',
+                      transform: 'rotateY(180deg)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <Box>
+                      <Typography sx={{ fontWeight: 700, color: primaryText, mb: 1 }}>Client Details</Typography>
+                      <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Email:</strong> {m.email}</Typography>
+                      <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Phone:</strong> {m.phone}</Typography>
+                      <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Preferred Slot:</strong> {m.preferredSlot}</Typography>
+                      <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Training Days:</strong> {m.trainingDays}</Typography>
+                      <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Priority:</strong> {m.priority}</Typography>
+                      <Typography sx={{ color: mutedText, fontSize: '0.78rem' }}><strong>Notes:</strong> {m.notes}</Typography>
+                    </Box>
+                    <Button
+                      size="small"
+                      onClick={() => toggleMemberCard(m.id)}
+                      sx={{ textTransform: 'none', color: '#0d9488', fontWeight: 600, alignSelf: 'flex-start', p: 0, minWidth: 0, fontSize: 12 }}
+                    >
+                      Back
+                    </Button>
                   </Box>
                 </Box>
-
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography sx={{ fontSize: '0.75rem', color: mutedText, display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
-                    <MonitorHeartRoundedIcon sx={{ fontSize: 11 }} /> {m.lastActive}
-                  </Typography>
-                  <Box component="button" type="button" style={{ border: 0, background: 'transparent', color: '#0d9488', fontWeight: 600, fontSize: 12, cursor: 'pointer' }}>
-                    View Profile →
-                  </Box>
-                </Stack>
               </Box>
             </Motion.div>
           ))}
@@ -405,4 +461,3 @@ function CoachDashboard() {
 }
 
 export default CoachDashboard;
-
