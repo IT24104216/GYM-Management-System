@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   Avatar,
   Box,
   Button,
   Chip,
-  Pagination,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
   IconButton,
   InputAdornment,
+  Pagination,
+  Snackbar,
   Stack,
   TextField,
   Typography,
@@ -20,6 +23,7 @@ import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
 import FormatListNumberedRoundedIcon from '@mui/icons-material/FormatListNumberedRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -113,6 +117,23 @@ function CoachWorkoutPlans() {
     weightGain: newCategoryExercise(),
     weightLoss: newCategoryExercise(),
   });
+  const [editDialog, setEditDialog] = useState({
+    open: false,
+    categoryKey: '',
+    index: -1,
+    draft: newCategoryExercise(),
+  });
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    categoryKey: '',
+    index: -1,
+    name: '',
+  });
+  const [feedback, setFeedback] = useState({
+    open: false,
+    severity: 'success',
+    message: '',
+  });
   const [planForm, setPlanForm] = useState({
     planTitle: '',
     planNote: '',
@@ -188,7 +209,14 @@ function CoachWorkoutPlans() {
 
   const addCategoryExercise = (categoryKey) => {
     const draft = categoryDrafts[categoryKey];
-    if (!draft.name.trim() || !draft.amount.trim()) return;
+    if (!draft.name.trim() || !draft.amount.trim()) {
+      setFeedback({
+        open: true,
+        severity: 'warning',
+        message: 'Exercise name and amount are required.',
+      });
+      return;
+    }
     setCategoryLibrary((prev) => ({
       ...prev,
       [categoryKey]: [...prev[categoryKey], draft],
@@ -197,6 +225,79 @@ function CoachWorkoutPlans() {
       ...prev,
       [categoryKey]: newCategoryExercise(),
     }));
+    setFeedback({
+      open: true,
+      severity: 'success',
+      message: 'Exercise added successfully.',
+    });
+  };
+
+  const openEditExercise = (categoryKey, index) => {
+    const selected = categoryLibrary[categoryKey][index];
+    if (!selected) return;
+    setEditDialog({
+      open: true,
+      categoryKey,
+      index,
+      draft: { ...selected },
+    });
+  };
+
+  const saveEditedExercise = () => {
+    const { categoryKey, index, draft } = editDialog;
+    if (!draft.name.trim() || !draft.amount.trim()) {
+      setFeedback({
+        open: true,
+        severity: 'warning',
+        message: 'Exercise name and amount are required.',
+      });
+      return;
+    }
+    setCategoryLibrary((prev) => ({
+      ...prev,
+      [categoryKey]: prev[categoryKey].map((item, i) => (i === index ? draft : item)),
+    }));
+    setEditDialog({
+      open: false,
+      categoryKey: '',
+      index: -1,
+      draft: newCategoryExercise(),
+    });
+    setFeedback({
+      open: true,
+      severity: 'success',
+      message: 'Exercise updated successfully.',
+    });
+  };
+
+  const openDeleteExercise = (categoryKey, index) => {
+    const selected = categoryLibrary[categoryKey][index];
+    if (!selected) return;
+    setDeleteDialog({
+      open: true,
+      categoryKey,
+      index,
+      name: selected.name,
+    });
+  };
+
+  const confirmDeleteExercise = () => {
+    const { categoryKey, index } = deleteDialog;
+    setCategoryLibrary((prev) => ({
+      ...prev,
+      [categoryKey]: prev[categoryKey].filter((_, i) => i !== index),
+    }));
+    setDeleteDialog({
+      open: false,
+      categoryKey: '',
+      index: -1,
+      name: '',
+    });
+    setFeedback({
+      open: true,
+      severity: 'success',
+      message: 'Exercise deleted successfully.',
+    });
   };
 
   return (
@@ -409,7 +510,30 @@ function CoachWorkoutPlans() {
                       background: isDark ? '#0b1530' : '#f8fafc',
                     }}
                   >
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{exercise.name}</Typography>
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{exercise.name}</Typography>
+                      <Stack direction="row" spacing={0.5}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<EditRoundedIcon sx={{ fontSize: 14 }} />}
+                          onClick={() => openEditExercise(category.key, idx)}
+                          sx={{ textTransform: 'none', minWidth: 0, px: 1 }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          startIcon={<DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />}
+                          onClick={() => openDeleteExercise(category.key, idx)}
+                          sx={{ textTransform: 'none', minWidth: 0, px: 1 }}
+                        >
+                          Delete
+                        </Button>
+                      </Stack>
+                    </Stack>
                     <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>{exercise.amount}</Typography>
                     <Typography sx={{ color: mutedText, fontSize: '0.8rem', mt: 0.4 }}>
                       {exercise.description}
@@ -597,6 +721,115 @@ function CoachWorkoutPlans() {
           </Stack>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={editDialog.open}
+        onClose={() =>
+          setEditDialog({ open: false, categoryKey: '', index: -1, draft: newCategoryExercise() })
+        }
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Edit Exercise</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.2} sx={{ mt: 0.5 }}>
+            <TextField
+              label="Exercise Name"
+              value={editDialog.draft.name}
+              onChange={(e) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  draft: { ...prev.draft, name: e.target.value },
+                }))
+              }
+              fullWidth
+            />
+            <TextField
+              label="Amount"
+              value={editDialog.draft.amount}
+              onChange={(e) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  draft: { ...prev.draft, amount: e.target.value },
+                }))
+              }
+              fullWidth
+            />
+            <TextField
+              label="Description"
+              value={editDialog.draft.description}
+              onChange={(e) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  draft: { ...prev.draft, description: e.target.value },
+                }))
+              }
+              multiline
+              minRows={3}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() =>
+              setEditDialog({ open: false, categoryKey: '', index: -1, draft: newCategoryExercise() })
+            }
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button onClick={saveEditedExercise} variant="contained" sx={{ textTransform: 'none' }}>
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteDialog.open}
+        onClose={() => setDeleteDialog({ open: false, categoryKey: '', index: -1, name: '' })}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Delete Exercise</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: 'text.secondary' }}>
+            Are you sure you want to delete <strong>{deleteDialog.name}</strong>?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setDeleteDialog({ open: false, categoryKey: '', index: -1, name: '' })}
+            sx={{ textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmDeleteExercise}
+            color="error"
+            variant="contained"
+            sx={{ textTransform: 'none' }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={feedback.open}
+        autoHideDuration={2500}
+        onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          severity={feedback.severity}
+          variant="filled"
+          onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
+          sx={{ width: '100%' }}
+        >
+          {feedback.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
