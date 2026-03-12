@@ -31,6 +31,9 @@ const INITIAL_APPOINTMENTS = [
     priority: 'Urgent',
     avatar: 'RM',
     gradient: 'linear-gradient(135deg, #EF4444, #DC2626)',
+    email: 'ryan.martinez@gympro.com',
+    phone: '+1 (555) 102-8812',
+    notes: 'Needs structured fat-loss block and accountability check-ins.',
   },
   {
     id: 102,
@@ -41,6 +44,9 @@ const INITIAL_APPOINTMENTS = [
     priority: 'High',
     avatar: 'LC',
     gradient: 'linear-gradient(135deg, #F97316, #EF4444)',
+    email: 'lisa.chen@gympro.com',
+    phone: '+1 (555) 229-1147',
+    notes: 'Requests low-impact alternatives for knee-sensitive sessions.',
   },
   {
     id: 103,
@@ -51,6 +57,9 @@ const INITIAL_APPOINTMENTS = [
     priority: 'Normal',
     avatar: 'TB',
     gradient: 'linear-gradient(135deg, #3B82F6, #0D9488)',
+    email: 'tom.bradley@gympro.com',
+    phone: '+1 (555) 371-0092',
+    notes: 'Wants a beginner-friendly progressive overload routine.',
   },
   {
     id: 104,
@@ -61,6 +70,9 @@ const INITIAL_APPOINTMENTS = [
     priority: 'Normal',
     avatar: 'PS',
     gradient: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+    email: 'priya.sharma@gympro.com',
+    phone: '+1 (555) 488-3210',
+    notes: 'Prefers mixed strength + conditioning split.',
   },
 ];
 
@@ -76,6 +88,12 @@ const INITIAL_MEMBERS = [
     avatar: 'MT',
     gradient: 'linear-gradient(135deg, #84CC16, #0D9488)',
     status: 'Active',
+    email: 'mike.torres@gympro.com',
+    phone: '+1 (555) 802-9910',
+    preferredSlot: 'Mon, Wed, Fri - 8:00 AM',
+    trainingDays: 'Mon, Wed, Fri',
+    notes: 'Focus on hypertrophy and progressive overload.',
+    priority: 'High',
   },
   {
     id: 2,
@@ -88,6 +106,12 @@ const INITIAL_MEMBERS = [
     avatar: 'EW',
     gradient: 'linear-gradient(135deg, #0D9488, #0284C7)',
     status: 'Active',
+    email: 'emma.wilson@gympro.com',
+    phone: '+1 (555) 774-1020',
+    preferredSlot: 'Tue, Thu - 9:30 AM',
+    trainingDays: 'Tue, Thu',
+    notes: 'Weight management and nutrition adherence support.',
+    priority: 'Normal',
   },
 ];
 
@@ -135,6 +159,7 @@ function CoachClients() {
 
   const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS);
   const [members, setMembers] = useState(INITIAL_MEMBERS);
+  const [flippedMemberIds, setFlippedMemberIds] = useState({});
 
   const updatePriority = (id, priority) => {
     setAppointments((prev) => prev.map((item) => (item.id === id ? { ...item, priority } : item)));
@@ -154,6 +179,12 @@ function CoachClients() {
         avatar: request.avatar,
         gradient: request.gradient,
         status: 'New Member',
+        email: request.email,
+        phone: request.phone,
+        preferredSlot: request.requestedAt,
+        trainingDays: 'Pending Schedule',
+        notes: request.notes || 'Approved from appointment queue.',
+        priority: request.priority,
       },
       ...prev,
     ]);
@@ -161,6 +192,10 @@ function CoachClients() {
 
   const rejectRequest = (id) => {
     setAppointments((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const toggleMemberCard = (id) => {
+    setFlippedMemberIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
@@ -291,59 +326,107 @@ function CoachClients() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05, duration: 0.28 }}
             whileHover={{ y: -4 }}
-            sx={{
-              background: panelBg,
-              borderRadius: 2.2,
-              p: 2,
-              border: '1px solid',
-              borderColor: panelBorder,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-            }}
+            sx={{ perspective: '1200px' }}
           >
-            <Stack direction="row" spacing={1.4} alignItems="center" sx={{ mb: 1.7 }}>
-              <Avatar sx={{ width: 46, height: 46, fontWeight: 800, fontSize: '1.05rem', color: '#fff', background: client.gradient }}>
-                {client.avatar}
-              </Avatar>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1.02rem' }}>{client.name}</Typography>
-                <Typography sx={{ color: muted, fontSize: '0.84rem' }}>
-                  Age {client.age} · {client.goal}
-                </Typography>
-              </Box>
-              <Box sx={{ ml: 'auto' }}>
-                <CircularScore score={client.score} id={client.id} isDark={isDark} />
-              </Box>
-            </Stack>
-
-            <Typography sx={{ color: muted, fontSize: '0.84rem' }}>Program Progress</Typography>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.65, mb: 1.2 }}>
-              <Box sx={{ flex: 1, height: 7, borderRadius: 999, overflow: 'hidden', bgcolor: isDark ? '#1f2937' : '#e5e7eb' }}>
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${client.progress}%` }}
-                  transition={{ duration: 0.9, ease: 'easeOut', delay: 0.15 + index * 0.05 }}
-                  style={{ height: '100%', borderRadius: 999, background: client.gradient }}
-                />
-              </Box>
-              <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'text.primary' }}>{client.progress}%</Typography>
-            </Stack>
-
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography sx={{ color: muted, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
-                <MonitorHeartRoundedIcon sx={{ fontSize: 13 }} /> {client.lastActive}
-              </Typography>
-              <Chip
-                label={client.status}
-                size="small"
+            <Box
+              sx={{
+                position: 'relative',
+                minHeight: 258,
+                transformStyle: 'preserve-3d',
+                transition: 'transform 0.5s ease',
+                transform: flippedMemberIds[client.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
+              }}
+            >
+              <Box
                 sx={{
-                  height: 24,
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  bgcolor: client.status === 'New Member' ? '#2563eb20' : '#16a34a20',
-                  color: client.status === 'New Member' ? '#2563eb' : '#16a34a',
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 2.2,
+                  p: 2,
+                  border: '1px solid',
+                  borderColor: panelBorder,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  background: panelBg,
+                  backfaceVisibility: 'hidden',
                 }}
-              />
-            </Stack>
+              >
+                <Stack direction="row" spacing={1.4} alignItems="center" sx={{ mb: 1.7 }}>
+                  <Avatar sx={{ width: 46, height: 46, fontWeight: 800, fontSize: '1.05rem', color: '#fff', background: client.gradient }}>
+                    {client.avatar}
+                  </Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1.02rem' }}>{client.name}</Typography>
+                    <Typography sx={{ color: muted, fontSize: '0.84rem' }}>
+                      Age {client.age} - {client.goal}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ ml: 'auto' }}>
+                    <CircularScore score={client.score} id={client.id} isDark={isDark} />
+                  </Box>
+                </Stack>
+
+                <Typography sx={{ color: muted, fontSize: '0.84rem' }}>Program Progress</Typography>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.65, mb: 1.2 }}>
+                  <Box sx={{ flex: 1, height: 7, borderRadius: 999, overflow: 'hidden', bgcolor: isDark ? '#1f2937' : '#e5e7eb' }}>
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${client.progress}%` }}
+                      transition={{ duration: 0.9, ease: 'easeOut', delay: 0.15 + index * 0.05 }}
+                      style={{ height: '100%', borderRadius: 999, background: client.gradient }}
+                    />
+                  </Box>
+                  <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'text.primary' }}>{client.progress}%</Typography>
+                </Stack>
+
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography sx={{ color: muted, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
+                    <MonitorHeartRoundedIcon sx={{ fontSize: 13 }} /> {client.lastActive}
+                  </Typography>
+                  <Button
+                    size="small"
+                    onClick={() => toggleMemberCard(client.id)}
+                    sx={{ textTransform: 'none', color: '#0d9488', fontWeight: 700, p: 0, minWidth: 0 }}
+                  >
+                    View Profile
+                  </Button>
+                </Stack>
+              </Box>
+
+              <Box
+                sx={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 2.2,
+                  p: 2,
+                  border: '1px solid',
+                  borderColor: panelBorder,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  background: panelBg,
+                  backfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Box>
+                  <Typography sx={{ fontWeight: 800, color: 'text.primary', mb: 1 }}>Client Details</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Email:</strong> {client.email}</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Phone:</strong> {client.phone}</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Preferred Slot:</strong> {client.preferredSlot}</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Training Days:</strong> {client.trainingDays}</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Priority:</strong> {client.priority}</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem' }}><strong>Notes:</strong> {client.notes}</Typography>
+                </Box>
+                <Button
+                  size="small"
+                  onClick={() => toggleMemberCard(client.id)}
+                  sx={{ textTransform: 'none', color: '#0d9488', fontWeight: 700, alignSelf: 'flex-start', p: 0, minWidth: 0 }}
+                >
+                  Back
+                </Button>
+              </Box>
+            </Box>
           </MotionBox>
         ))}
       </Box>
