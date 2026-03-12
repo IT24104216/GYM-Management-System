@@ -159,11 +159,11 @@ export default function AdminPromotions() {
     if (editingId) {
       const next = campaigns.map((item) => (item.id === editingId ? { ...item, ...payload } : item));
       persistCampaigns(next);
-      setToast({ open: true, message: 'Campaign updated successfully.', severity: 'success' });
+      setToast({ open: true, message: 'Ad/Promotion updated successfully.', severity: 'success' });
     } else {
       const next = [{ id: Date.now(), createdAt: new Date().toISOString(), ...payload }, ...campaigns];
       persistCampaigns(next);
-      setToast({ open: true, message: 'Campaign launched successfully.', severity: 'success' });
+      setToast({ open: true, message: 'Ad/Promotion submitted successfully.', severity: 'success' });
     }
 
     resetForm();
