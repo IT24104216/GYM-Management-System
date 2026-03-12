@@ -68,6 +68,7 @@ export default function AdminPromotions() {
   const inputBorderDefault = isDark ? 'rgba(148, 163, 184, 0.38)' : borderColor;
   const inputBorderHover = isDark ? 'rgba(148, 163, 184, 0.62)' : theme.palette.text.secondary;
   const inputBorderFocus = isDark ? '#93c5fd' : theme.palette.primary.main;
+  const fieldIconColor = isDark ? '#cbd5e1' : theme.palette.action.active;
   const primaryText = theme.palette.text.primary;
   const secondaryText = theme.palette.text.secondary;
 
@@ -243,6 +244,18 @@ export default function AdminPromotions() {
                     borderColor: inputBorderFocus,
                     borderWidth: 1.6,
                   },
+                },
+                '& .MuiSelect-icon': {
+                  color: fieldIconColor,
+                  opacity: 1,
+                },
+                '& .MuiSvgIcon-root': {
+                  color: fieldIconColor,
+                },
+                '& input[type="date"]::-webkit-calendar-picker-indicator': {
+                  opacity: isDark ? 1 : 0.74,
+                  filter: isDark ? 'invert(0.92) saturate(0) brightness(1.15)' : 'none',
+                  cursor: 'pointer',
                 },
               }}
             >
