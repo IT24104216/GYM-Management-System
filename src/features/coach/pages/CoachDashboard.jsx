@@ -16,6 +16,8 @@ import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
+import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/shared/utils/constants';
 import {
   BarChart,
   Bar,
@@ -175,6 +177,7 @@ function CircularScore({ score, id, isDark }) {
 }
 
 function CoachDashboard() {
+  const navigate = useNavigate();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
@@ -314,7 +317,12 @@ function CoachDashboard() {
       <Motion.div variants={itemVariants}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Typography sx={{ fontWeight: 700, color: primaryText, fontSize: '1.25rem' }}>Active Members</Typography>
-          <Box component="button" type="button" style={{ border: 0, background: 'transparent', color: '#0d9488', fontSize: 14, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+          <Box
+            component="button"
+            type="button"
+            onClick={() => navigate(ROUTES.COACH_CLIENTS)}
+            style={{ border: 0, background: 'transparent', color: '#0d9488', fontSize: 14, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+          >
             View all <ChevronRightRoundedIcon sx={{ fontSize: 14 }} />
           </Box>
         </Stack>
