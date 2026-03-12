@@ -82,6 +82,18 @@ const REQUESTED_USERS = [
 ];
 
 const newExercise = () => ({ name: '', amount: '', description: '' });
+const newCategoryExercise = () => ({ name: '', amount: '', description: '' });
+
+const INITIAL_CATEGORY_LIBRARY = {
+  weightGain: [
+    { name: 'Barbell Squat', amount: '4 x 8 reps', description: 'Primary compound for lower-body strength and mass.' },
+    { name: 'Deadlift', amount: '4 x 6 reps', description: 'Posterior-chain builder with progressive load.' },
+  ],
+  weightLoss: [
+    { name: 'Incline Walk Intervals', amount: '20 min', description: 'Alternate 2 min brisk + 1 min recovery.' },
+    { name: 'Kettlebell Circuit', amount: '4 rounds', description: 'Swings, goblet squats, rows with short rest.' },
+  ],
+};
 
 function CoachWorkoutPlans() {
   const theme = useTheme();
@@ -95,6 +107,12 @@ function CoachWorkoutPlans() {
   const [plansByUser, setPlansByUser] = useState({});
   const [openUser, setOpenUser] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeView, setActiveView] = useState('requests');
+  const [categoryLibrary, setCategoryLibrary] = useState(INITIAL_CATEGORY_LIBRARY);
+  const [categoryDrafts, setCategoryDrafts] = useState({
+    weightGain: newCategoryExercise(),
+    weightLoss: newCategoryExercise(),
+  });
   const [planForm, setPlanForm] = useState({
     planTitle: '',
     planNote: '',
@@ -161,6 +179,26 @@ function CoachWorkoutPlans() {
     closePlanDialog();
   };
 
+  const updateCategoryDraft = (categoryKey, field, value) => {
+    setCategoryDrafts((prev) => ({
+      ...prev,
+      [categoryKey]: { ...prev[categoryKey], [field]: value },
+    }));
+  };
+
+  const addCategoryExercise = (categoryKey) => {
+    const draft = categoryDrafts[categoryKey];
+    if (!draft.name.trim() || !draft.amount.trim()) return;
+    setCategoryLibrary((prev) => ({
+      ...prev,
+      [categoryKey]: [...prev[categoryKey], draft],
+    }));
+    setCategoryDrafts((prev) => ({
+      ...prev,
+      [categoryKey]: newCategoryExercise(),
+    }));
+  };
+
   return (
     <Box sx={{ pb: 3 }}>
       <PageHeader
@@ -168,154 +206,262 @@ function CoachWorkoutPlans() {
         subtitle="Build personalized exercise plans for users who requested coaching. Priority is ordered from high to low."
       />
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' },
-          gap: 2,
-        }}
-      >
-        {paginatedUsers.map((user) => {
-          const hasPlan = Boolean(plansByUser[user.id]);
-          return (
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+        <Button
+          variant={activeView === 'requests' ? 'contained' : 'outlined'}
+          onClick={() => setActiveView('requests')}
+          sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
+        >
+          User Workout Requests
+        </Button>
+        <Button
+          variant={activeView === 'categories' ? 'contained' : 'outlined'}
+          onClick={() => setActiveView('categories')}
+          sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
+        >
+          Exercise Categories
+        </Button>
+      </Stack>
+
+      {activeView === 'requests' && (
+        <>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' },
+              gap: 2,
+            }}
+          >
+            {paginatedUsers.map((user) => {
+              const hasPlan = Boolean(plansByUser[user.id]);
+              return (
+                <Box
+                  key={user.id}
+                  sx={{
+                    background: panelBg,
+                    border: '1px solid',
+                    borderColor: panelBorder,
+                    borderRadius: 2.5,
+                    p: { xs: 2, md: 2.5 },
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                    minHeight: 260,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    '&:hover': {
+                      transform: 'translateY(-3px)',
+                      boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
+                    },
+                  }}
+                >
+                  <Stack
+                    direction={{ xs: 'column', md: 'row' }}
+                    spacing={2}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', md: 'center' }}
+                  >
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <Avatar
+                        sx={{
+                          width: 48,
+                          height: 48,
+                          fontWeight: 800,
+                          color: '#fff',
+                          background: user.gradient,
+                        }}
+                      >
+                        {user.avatar}
+                      </Avatar>
+                      <Box>
+                        <Typography sx={{ fontWeight: 800, fontSize: '1rem' }}>{user.name}</Typography>
+                        <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>
+                          Age {user.age} | Goal: {user.goal} | {user.sessionsPerWeek} sessions/week
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Chip
+                        size="small"
+                        label={`${user.priority} Priority`}
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor:
+                            user.priority === 'High'
+                              ? '#ef44441a'
+                              : user.priority === 'Medium'
+                                ? '#f59e0b1a'
+                                : '#10b9811a',
+                          color:
+                            user.priority === 'High'
+                              ? '#ef4444'
+                              : user.priority === 'Medium'
+                                ? '#f59e0b'
+                                : '#10b981',
+                        }}
+                      />
+                      {hasPlan && (
+                        <Chip
+                          size="small"
+                          icon={<AssignmentTurnedInRoundedIcon />}
+                          label="Plan Ready"
+                          sx={{ fontWeight: 700, bgcolor: '#16a34a1a', color: '#16a34a' }}
+                        />
+                      )}
+                    </Stack>
+                  </Stack>
+
+                  <Typography sx={{ mt: 1.4, color: mutedText, fontSize: '0.86rem' }}>
+                    Request note: {user.notes}
+                  </Typography>
+
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={1}
+                    justifyContent="space-between"
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                    sx={{ mt: 1.6 }}
+                  >
+                    <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>
+                      Requested on: {user.requestedOn}
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      startIcon={<FitnessCenterRoundedIcon />}
+                      onClick={() => openPlanDialog(user)}
+                      sx={{
+                        textTransform: 'none',
+                        borderRadius: 2,
+                        fontWeight: 700,
+                        bgcolor: hasPlan ? '#0284c7' : '#0d9488',
+                        '&:hover': { bgcolor: hasPlan ? '#0369a1' : '#0f766e' },
+                      }}
+                    >
+                      {hasPlan ? 'Edit Workout Plan' : 'Create Workout Plan'}
+                    </Button>
+                  </Stack>
+                </Box>
+              );
+            })}
+          </Box>
+
+          {sortedUsers.length > pageSize && (
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1}
+              justifyContent="space-between"
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+              sx={{ mt: 2 }}
+            >
+              <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>
+                Showing {showingFrom}-{showingTo} of {sortedUsers.length} users
+              </Typography>
+              <Pagination
+                page={safePage}
+                count={totalPages}
+                onChange={(_, page) => setCurrentPage(page)}
+                color="primary"
+                shape="rounded"
+                siblingCount={1}
+                boundaryCount={1}
+                sx={{
+                  '& .MuiPaginationItem-root': {
+                    fontWeight: 700,
+                    borderRadius: 1.6,
+                  },
+                }}
+              />
+            </Stack>
+          )}
+        </>
+      )}
+
+      {activeView === 'categories' && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
+          {[
+            { key: 'weightGain', title: 'Weight Gaining Exercises', tone: '#16a34a' },
+            { key: 'weightLoss', title: 'Weight Reducing Exercises', tone: '#0284c7' },
+          ].map((category) => (
             <Box
-              key={user.id}
+              key={category.key}
               sx={{
                 background: panelBg,
                 border: '1px solid',
                 borderColor: panelBorder,
                 borderRadius: 2.5,
-                p: { xs: 2, md: 2.5 },
-                boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                minHeight: 260,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                '&:hover': {
-                  transform: 'translateY(-3px)',
-                  boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
-                },
+                p: 2,
               }}
             >
-              <Stack
-                direction={{ xs: 'column', md: 'row' }}
-                spacing={2}
-                justifyContent="space-between"
-                alignItems={{ xs: 'flex-start', md: 'center' }}
-              >
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Avatar
-                    sx={{
-                      width: 48,
-                      height: 48,
-                      fontWeight: 800,
-                      color: '#fff',
-                      background: user.gradient,
-                    }}
-                  >
-                    {user.avatar}
-                  </Avatar>
-                  <Box>
-                    <Typography sx={{ fontWeight: 800, fontSize: '1rem' }}>{user.name}</Typography>
-                    <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>
-                      Age {user.age} | Goal: {user.goal} | {user.sessionsPerWeek} sessions/week
-                    </Typography>
-                  </Box>
-                </Stack>
-
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Chip
-                    size="small"
-                    label={`${user.priority} Priority`}
-                    sx={{
-                      fontWeight: 700,
-                      bgcolor:
-                        user.priority === 'High'
-                          ? '#ef44441a'
-                          : user.priority === 'Medium'
-                            ? '#f59e0b1a'
-                            : '#10b9811a',
-                      color:
-                        user.priority === 'High'
-                          ? '#ef4444'
-                          : user.priority === 'Medium'
-                            ? '#f59e0b'
-                            : '#10b981',
-                    }}
-                  />
-                  {hasPlan && (
-                    <Chip
-                      size="small"
-                      icon={<AssignmentTurnedInRoundedIcon />}
-                      label="Plan Ready"
-                      sx={{ fontWeight: 700, bgcolor: '#16a34a1a', color: '#16a34a' }}
-                    />
-                  )}
-                </Stack>
-              </Stack>
-
-              <Typography sx={{ mt: 1.4, color: mutedText, fontSize: '0.86rem' }}>
-                Request note: {user.notes}
+              <Typography sx={{ fontWeight: 800, fontSize: '1rem', mb: 1.5, color: category.tone }}>
+                {category.title}
               </Typography>
 
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1}
-                justifyContent="space-between"
-                alignItems={{ xs: 'flex-start', sm: 'center' }}
-                sx={{ mt: 1.6 }}
-              >
-                <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>
-                  Requested on: {user.requestedOn}
-                </Typography>
+              <Stack spacing={1} sx={{ mb: 1.5, maxHeight: 260, overflowY: 'auto', pr: 0.5 }}>
+                {categoryLibrary[category.key].map((exercise, idx) => (
+                  <Box
+                    key={`${category.key}-${idx}`}
+                    sx={{
+                      p: 1.2,
+                      border: '1px solid',
+                      borderColor: panelBorder,
+                      borderRadius: 1.5,
+                      background: isDark ? '#0b1530' : '#f8fafc',
+                    }}
+                  >
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{exercise.name}</Typography>
+                    <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>{exercise.amount}</Typography>
+                    <Typography sx={{ color: mutedText, fontSize: '0.8rem', mt: 0.4 }}>
+                      {exercise.description}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+
+              <Divider sx={{ mb: 1.5 }} />
+
+              <Stack spacing={1}>
+                <TextField
+                  label="Exercise Name"
+                  size="small"
+                  value={categoryDrafts[category.key].name}
+                  onChange={(e) => updateCategoryDraft(category.key, 'name', e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  label="Amount"
+                  size="small"
+                  value={categoryDrafts[category.key].amount}
+                  onChange={(e) => updateCategoryDraft(category.key, 'amount', e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  label="Description"
+                  size="small"
+                  value={categoryDrafts[category.key].description}
+                  onChange={(e) => updateCategoryDraft(category.key, 'description', e.target.value)}
+                  multiline
+                  minRows={2}
+                  fullWidth
+                />
                 <Button
                   variant="contained"
-                  startIcon={<FitnessCenterRoundedIcon />}
-                  onClick={() => openPlanDialog(user)}
+                  startIcon={<AddRoundedIcon />}
+                  onClick={() => addCategoryExercise(category.key)}
                   sx={{
+                    alignSelf: 'flex-start',
                     textTransform: 'none',
                     borderRadius: 2,
                     fontWeight: 700,
-                    bgcolor: hasPlan ? '#0284c7' : '#0d9488',
-                    '&:hover': { bgcolor: hasPlan ? '#0369a1' : '#0f766e' },
+                    bgcolor: category.tone,
                   }}
                 >
-                  {hasPlan ? 'Edit Workout Plan' : 'Create Workout Plan'}
+                  Add To Category
                 </Button>
               </Stack>
             </Box>
-          );
-        })}
-      </Box>
-
-      {sortedUsers.length > pageSize && (
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={1}
-          justifyContent="space-between"
-          alignItems={{ xs: 'flex-start', sm: 'center' }}
-          sx={{ mt: 2 }}
-        >
-          <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>
-            Showing {showingFrom}-{showingTo} of {sortedUsers.length} users
-          </Typography>
-          <Pagination
-            page={safePage}
-            count={totalPages}
-            onChange={(_, page) => setCurrentPage(page)}
-            color="primary"
-            shape="rounded"
-            siblingCount={1}
-            boundaryCount={1}
-            sx={{
-              '& .MuiPaginationItem-root': {
-                fontWeight: 700,
-                borderRadius: 1.6,
-              },
-            }}
-          />
-        </Stack>
+          ))}
+        </Box>
       )}
 
       <Dialog
