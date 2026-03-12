@@ -15,6 +15,7 @@ import {
   Stack,
   TextField,
   Typography,
+  useTheme,
 } from '@mui/material';
 import AddPhotoAlternateRoundedIcon from '@mui/icons-material/AddPhotoAlternateRounded';
 import CampaignRoundedIcon from '@mui/icons-material/CampaignRounded';
@@ -59,6 +60,17 @@ function formatDateRange(startDate, endDate) {
 }
 
 export default function AdminPromotions() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const surfaceBg = isDark ? '#0f1b34' : '#ffffff';
+  const sectionBg = isDark ? '#142443' : '#f7f9ff';
+  const borderColor = theme.palette.divider;
+  const inputBorderDefault = isDark ? 'rgba(148, 163, 184, 0.38)' : borderColor;
+  const inputBorderHover = isDark ? 'rgba(148, 163, 184, 0.62)' : theme.palette.text.secondary;
+  const inputBorderFocus = isDark ? '#93c5fd' : theme.palette.primary.main;
+  const primaryText = theme.palette.text.primary;
+  const secondaryText = theme.palette.text.secondary;
+
   const [campaigns, setCampaigns] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -188,8 +200,10 @@ export default function AdminPromotions() {
       sx={{
         p: { xs: 1, md: 2 },
         borderRadius: 3,
-        background: 'linear-gradient(180deg, #f7f9ff 0%, #f1f4fb 100%)',
-        border: '1px solid #dde3ef',
+        background: isDark
+          ? 'linear-gradient(180deg, #0a142a 0%, #0d1a32 100%)'
+          : 'linear-gradient(180deg, #f7f9ff 0%, #f1f4fb 100%)',
+        border: `1px solid ${borderColor}`,
       }}
     >
       <Box
@@ -200,11 +214,11 @@ export default function AdminPromotions() {
           alignItems: 'start',
         }}
       >
-        <Card sx={{ borderRadius: 3, border: '1px solid #d8dfec', boxShadow: '0 10px 30px rgba(15,28,56,0.06)' }}>
+        <Card sx={{ borderRadius: 3, border: `1px solid ${borderColor}`, bgcolor: surfaceBg, boxShadow: '0 10px 30px rgba(15,28,56,0.06)' }}>
           <CardContent sx={{ p: { xs: 1.6, md: 2.2 } }}>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.6 }}>
-              <CampaignRoundedIcon sx={{ color: '#12306d' }} />
-              <Typography sx={{ fontSize: { xs: '1.4rem', md: '2rem' }, fontWeight: 900, color: '#0f1d4a' }}>
+              <CampaignRoundedIcon sx={{ color: isDark ? '#93c5fd' : '#12306d' }} />
+              <Typography sx={{ fontSize: { xs: '1.4rem', md: '2rem' }, fontWeight: 900, color: primaryText }}>
                 Ads & Promotions
               </Typography>
             </Stack>
@@ -214,6 +228,22 @@ export default function AdminPromotions() {
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
                 gap: 1.2,
+                '& .MuiFormLabel-root': { color: secondaryText },
+                '& .MuiInputLabel-root.Mui-focused': { color: primaryText },
+                '& .MuiOutlinedInput-root': {
+                  color: primaryText,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: inputBorderDefault,
+                    borderWidth: isDark ? 1.2 : 1,
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: inputBorderHover,
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: inputBorderFocus,
+                    borderWidth: 1.6,
+                  },
+                },
               }}
             >
               <TextField
@@ -314,7 +344,7 @@ export default function AdminPromotions() {
                 component="label"
                 variant="outlined"
                 startIcon={<AddPhotoAlternateRoundedIcon />}
-                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700 }}
+                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderColor, color: primaryText }}
               >
                 Upload Creative
                 <input type="file" accept="image/*" hidden onChange={handleImageUpload} />
@@ -336,14 +366,14 @@ export default function AdminPromotions() {
               </Button>
 
               {editingId && (
-                <Button variant="text" onClick={resetForm} sx={{ textTransform: 'none', fontWeight: 700 }}>
+                <Button variant="text" onClick={resetForm} sx={{ textTransform: 'none', fontWeight: 700, color: primaryText }}>
                   Cancel Edit
                 </Button>
               )}
             </Stack>
 
             {form.image && (
-              <Box sx={{ mt: 1.3, borderRadius: 2, overflow: 'hidden', border: '1px solid #d9dfeb', maxWidth: 280, height: 120 }}>
+              <Box sx={{ mt: 1.3, borderRadius: 2, overflow: 'hidden', border: `1px solid ${borderColor}`, maxWidth: 280, height: 120 }}>
                 <img src={form.image} alt="Campaign creative" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </Box>
             )}
@@ -364,50 +394,50 @@ export default function AdminPromotions() {
               gap: 1,
             }}
           >
-            <Card sx={{ borderRadius: 2.4, border: '1px solid #d8dfec', boxShadow: 'none' }}>
+            <Card sx={{ borderRadius: 2.4, border: `1px solid ${borderColor}`, bgcolor: sectionBg, boxShadow: 'none' }}>
               <CardContent sx={{ p: 1.2 }}>
                 <Stack direction="row" spacing={0.8} alignItems="center">
                   <LocalOfferRoundedIcon sx={{ color: '#ef6c5e', fontSize: 18 }} />
-                  <Typography sx={{ fontSize: '0.78rem', color: '#667085' }}>Total</Typography>
+                  <Typography sx={{ fontSize: '0.78rem', color: secondaryText }}>Total</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 900, color: '#0f1d4a' }}>{campaigns.length}</Typography>
+                <Typography sx={{ fontWeight: 900, color: primaryText }}>{campaigns.length}</Typography>
               </CardContent>
             </Card>
 
-            <Card sx={{ borderRadius: 2.4, border: '1px solid #d8dfec', boxShadow: 'none' }}>
+            <Card sx={{ borderRadius: 2.4, border: `1px solid ${borderColor}`, bgcolor: sectionBg, boxShadow: 'none' }}>
               <CardContent sx={{ p: 1.2 }}>
                 <Stack direction="row" spacing={0.8} alignItems="center">
                   <CampaignRoundedIcon sx={{ color: '#2e7d32', fontSize: 18 }} />
-                  <Typography sx={{ fontSize: '0.78rem', color: '#667085' }}>Active</Typography>
+                  <Typography sx={{ fontSize: '0.78rem', color: secondaryText }}>Active</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 900, color: '#0f1d4a' }}>{activeCount}</Typography>
+                <Typography sx={{ fontWeight: 900, color: primaryText }}>{activeCount}</Typography>
               </CardContent>
             </Card>
 
-            <Card sx={{ borderRadius: 2.4, border: '1px solid #d8dfec', boxShadow: 'none' }}>
+            <Card sx={{ borderRadius: 2.4, border: `1px solid ${borderColor}`, bgcolor: sectionBg, boxShadow: 'none' }}>
               <CardContent sx={{ p: 1.2 }}>
                 <Stack direction="row" spacing={0.8} alignItems="center">
                   <TrendingUpRoundedIcon sx={{ color: '#1565c0', fontSize: 18 }} />
-                  <Typography sx={{ fontSize: '0.78rem', color: '#667085' }}>Budget</Typography>
+                  <Typography sx={{ fontSize: '0.78rem', color: secondaryText }}>Budget</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 900, color: '#0f1d4a' }}>${totalBudget}</Typography>
+                <Typography sx={{ fontWeight: 900, color: primaryText }}>${totalBudget}</Typography>
               </CardContent>
             </Card>
           </Box>
 
-          <Card sx={{ borderRadius: 3, border: '1px solid #d8dfec', boxShadow: '0 10px 30px rgba(15,28,56,0.06)' }}>
+          <Card sx={{ borderRadius: 3, border: `1px solid ${borderColor}`, bgcolor: surfaceBg, boxShadow: '0 10px 30px rgba(15,28,56,0.06)' }}>
             <CardContent sx={{ p: { xs: 1.2, md: 1.5 } }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.1 }}>
-                <Typography sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, fontWeight: 800, color: '#0f1d4a' }}>
+                <Typography sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, fontWeight: 800, color: primaryText }}>
                   Live Ads & Promotions
                 </Typography>
-                <Chip label={`${campaigns.length} items`} size="small" sx={{ fontWeight: 700 }} />
+                <Chip label={`${campaigns.length} items`} size="small" sx={{ fontWeight: 700, bgcolor: isDark ? '#1f2f50' : undefined, color: primaryText }} />
               </Stack>
 
               {!campaigns.length && (
-                <Box sx={{ py: 3, border: '1px dashed #d3d9e5', borderRadius: 2.2, textAlign: 'center' }}>
-                  <Typography sx={{ fontWeight: 800, color: '#0f1d4a' }}>No campaigns yet</Typography>
-                  <Typography sx={{ fontSize: '0.84rem', color: '#667085', mt: 0.4 }}>
+                <Box sx={{ py: 3, border: `1px dashed ${borderColor}`, borderRadius: 2.2, textAlign: 'center' }}>
+                  <Typography sx={{ fontWeight: 800, color: primaryText }}>No campaigns yet</Typography>
+                  <Typography sx={{ fontSize: '0.84rem', color: secondaryText, mt: 0.4 }}>
                     Create your first promotion from the composer.
                   </Typography>
                 </Box>
@@ -415,12 +445,12 @@ export default function AdminPromotions() {
 
               <Stack spacing={1}>
                 {campaigns.map((campaign) => (
-                  <Card key={campaign.id} sx={{ borderRadius: 2, border: '1px solid #e1e6f0', boxShadow: 'none' }}>
+                  <Card key={campaign.id} sx={{ borderRadius: 2, border: `1px solid ${borderColor}`, bgcolor: sectionBg, boxShadow: 'none' }}>
                     <CardContent sx={{ p: 1.2 }}>
                       <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="flex-start">
                         <Box>
-                          <Typography sx={{ fontWeight: 800, color: '#0f1d4a' }}>{campaign.title}</Typography>
-                          <Typography sx={{ fontSize: '0.82rem', color: '#667085' }}>
+                          <Typography sx={{ fontWeight: 800, color: primaryText }}>{campaign.title}</Typography>
+                          <Typography sx={{ fontSize: '0.82rem', color: secondaryText }}>
                             {campaign.placement} | {campaign.target}
                           </Typography>
                         </Box>
@@ -436,18 +466,18 @@ export default function AdminPromotions() {
                       </Stack>
 
                       {campaign.image && (
-                        <Box sx={{ mt: 0.9, borderRadius: 1.5, overflow: 'hidden', height: 92, border: '1px solid #d9dfeb' }}>
+                        <Box sx={{ mt: 0.9, borderRadius: 1.5, overflow: 'hidden', height: 92, border: `1px solid ${borderColor}` }}>
                           <img src={campaign.image} alt={campaign.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         </Box>
                       )}
 
                       {!!campaign.description && (
-                        <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: '#64748b' }}>
+                        <Typography sx={{ mt: 0.8, fontSize: '0.82rem', color: secondaryText }}>
                           {campaign.description}
                         </Typography>
                       )}
 
-                      <Typography sx={{ mt: 0.6, fontSize: '0.78rem', color: '#64748b' }}>
+                      <Typography sx={{ mt: 0.6, fontSize: '0.78rem', color: secondaryText }}>
                         {formatDateRange(campaign.startDate, campaign.endDate)} | Budget ${campaign.budget}
                       </Typography>
 
