@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Autocomplete,
   Box,
   Button,
   Dialog,
@@ -31,6 +32,7 @@ import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
+import { loadDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
 
 const mockMembers = [
   {
@@ -130,6 +132,7 @@ function DietitianDashboard() {
     member: null,
   });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
+  const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
 
   const pageBg = isDark
     ? 'radial-gradient(circle at 15% 10%, #1b355b 0%, #0f1e3d 60%, #0b1731 100%)'
@@ -275,6 +278,7 @@ function DietitianDashboard() {
   };
 
   const openDietPlanModal = (member) => {
+    setMealSuggestions(loadDietitianMeals());
     setDietPlanForm(createDietPlanForm());
     setDietPlanModal({ open: true, member });
   };
@@ -288,6 +292,27 @@ function DietitianDashboard() {
       ...prev,
       [sectionKey]: prev[sectionKey].map((option, i) =>
         i === index ? { ...option, [field]: value } : option,
+      ),
+    }));
+  };
+
+  const applySuggestedMealToOption = (sectionKey, index, selectedMeal) => {
+    if (!selectedMeal || typeof selectedMeal === 'string') return;
+    setDietPlanForm((prev) => ({
+      ...prev,
+      [sectionKey]: prev[sectionKey].map((option, i) =>
+        i === index
+          ? {
+            ...option,
+            mealName: selectedMeal.mealName || option.mealName,
+            description: selectedMeal.description ?? option.description,
+            calories: selectedMeal.calories ?? option.calories,
+            protein: selectedMeal.protein ?? option.protein,
+            carbs: selectedMeal.carbs ?? option.carbs,
+            lipids: selectedMeal.lipids ?? option.lipids,
+            vitamins: selectedMeal.vitamins ?? option.vitamins,
+          }
+          : option,
       ),
     }));
   };
@@ -1011,19 +1036,34 @@ function DietitianDashboard() {
                         Option {index + 1}
                       </Typography>
 
-                      <TextField
-                        label="Meal Name"
-                        placeholder="e.g., Grilled"
-                        value={option.mealName}
-                        onChange={(e) => updateMealField(section.key, index, 'mealName', e.target.value)}
-                        fullWidth
-                        size="small"
-                        sx={{
-                          mb: 0.8,
-                          '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.15rem', fontWeight: 700 },
-                          '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
-                        }}
+                      <Autocomplete
+                        freeSolo
+                        options={mealSuggestions}
+                        getOptionLabel={(mealOption) =>
+                          typeof mealOption === 'string' ? mealOption : mealOption.mealName || ''
+                        }
+                        value={option.mealName || ''}
+                        onInputChange={(_, value) =>
+                          updateMealField(section.key, index, 'mealName', value)
+                        }
+                        onChange={(_, selected) =>
+                          applySuggestedMealToOption(section.key, index, selected)
+                        }
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Meal Name"
+                            placeholder="e.g., Grilled"
+                            fullWidth
+                            size="small"
+                            sx={{
+                              mb: 0.8,
+                              '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.15rem', fontWeight: 700 },
+                              '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                              '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                            }}
+                          />
+                        )}
                       />
 
                       <TextField
