@@ -742,7 +742,7 @@ function DietitianDashboard() {
         </Stack>
       )}
       <Dialog open={slotNotice.open} onClose={() => setSlotNotice((prev) => ({ ...prev, open: false }))} maxWidth="xs" fullWidth>
-        <DialogTitle>Figma</DialogTitle>
+        <DialogTitle>Success</DialogTitle>
         <DialogContent>
           <Typography>{slotNotice.message}</Typography>
         </DialogContent>
