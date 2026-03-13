@@ -22,6 +22,8 @@ import {
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
 import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
@@ -83,8 +85,20 @@ function DietitianDashboard() {
     endTime: '08:15',
   });
   const [timeSlots, setTimeSlots] = useState([]);
-  const [slotSuccessOpen, setSlotSuccessOpen] = useState(false);
+  const [slotNotice, setSlotNotice] = useState({ open: false, message: '' });
   const [slotError, setSlotError] = useState('');
+  const [editSlotState, setEditSlotState] = useState({
+    open: false,
+    id: null,
+    date: '',
+    startTime: '',
+    endTime: '',
+  });
+  const [deleteSlotState, setDeleteSlotState] = useState({
+    open: false,
+    id: null,
+    label: '',
+  });
 
   const pageBg = isDark
     ? 'radial-gradient(circle at 15% 10%, #1b355b 0%, #0f1e3d 60%, #0b1731 100%)'
@@ -178,7 +192,55 @@ function DietitianDashboard() {
         endTime: slotForm.endTime,
       },
     ]);
-    setSlotSuccessOpen(true);
+    setSlotNotice({ open: true, message: 'Time slot created successfully!' });
+  };
+
+  const openEditSlot = (slot) => {
+    setEditSlotState({
+      open: true,
+      id: slot.id,
+      date: slot.date,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+    });
+  };
+
+  const saveEditedSlot = () => {
+    const { id, date, startTime, endTime } = editSlotState;
+    if (!date || !startTime || !endTime) {
+      setSlotError('Please fill date, start time, and end time.');
+      return;
+    }
+    const selectedDate = new Date(date);
+    const day = selectedDate.getDay();
+    if (day !== 0 && day !== 6) {
+      setSlotError('Time slots can be created only for Saturday and Sunday.');
+      return;
+    }
+    setSlotError('');
+    setTimeSlots((prev) =>
+      prev.map((slot) =>
+        slot.id === id
+          ? { ...slot, date, day: getWeekdayLabel(date), startTime, endTime }
+          : slot,
+      ),
+    );
+    setEditSlotState({ open: false, id: null, date: '', startTime: '', endTime: '' });
+    setSlotNotice({ open: true, message: 'Time slot updated successfully!' });
+  };
+
+  const openDeleteSlot = (slot) => {
+    setDeleteSlotState({
+      open: true,
+      id: slot.id,
+      label: `${slot.day}, ${slot.date} (${to12Hour(slot.startTime)} - ${to12Hour(slot.endTime)})`,
+    });
+  };
+
+  const confirmDeleteSlot = () => {
+    setTimeSlots((prev) => prev.filter((slot) => slot.id !== deleteSlotState.id));
+    setDeleteSlotState({ open: false, id: null, label: '' });
+    setSlotNotice({ open: true, message: 'Time slot deleted successfully!' });
   };
 
   return (
@@ -640,12 +702,37 @@ function DietitianDashboard() {
                         background: isDark ? '#203456' : '#f8fbff',
                       }}
                     >
-                      <Typography sx={{ color: '#dbeafe', fontWeight: 700, fontSize: '1.45rem' }}>
-                        {slot.day}, {slot.date}
-                      </Typography>
-                      <Typography sx={{ color: mutedText, fontSize: '0.95rem' }}>
-                        {to12Hour(slot.startTime)} - {to12Hour(slot.endTime)}
-                      </Typography>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                        <Box>
+                          <Typography sx={{ color: '#dbeafe', fontWeight: 700, fontSize: '1.05rem' }}>
+                            {slot.day}, {slot.date}
+                          </Typography>
+                          <Typography sx={{ color: mutedText, fontSize: '0.95rem' }}>
+                            {to12Hour(slot.startTime)} - {to12Hour(slot.endTime)}
+                          </Typography>
+                        </Box>
+                        <Stack direction="row" spacing={0.8}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<EditRoundedIcon sx={{ fontSize: 14 }} />}
+                            onClick={() => openEditSlot(slot)}
+                            sx={{ textTransform: 'none', fontWeight: 700, minWidth: 0, px: 1.1 }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            startIcon={<DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />}
+                            onClick={() => openDeleteSlot(slot)}
+                            sx={{ textTransform: 'none', fontWeight: 700, minWidth: 0, px: 1.1 }}
+                          >
+                            Delete
+                          </Button>
+                        </Stack>
+                      </Stack>
                     </Box>
                   ))}
                 </Stack>
@@ -654,18 +741,77 @@ function DietitianDashboard() {
           </Box>
         </Stack>
       )}
+      <Dialog open={slotNotice.open} onClose={() => setSlotNotice((prev) => ({ ...prev, open: false }))} maxWidth="xs" fullWidth>
+        <DialogTitle>Figma</DialogTitle>
+        <DialogContent>
+          <Typography>{slotNotice.message}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSlotNotice((prev) => ({ ...prev, open: false }))}>OK</Button>
+        </DialogActions>
+      </Dialog>
+
       <Dialog
-        open={slotSuccessOpen}
-        onClose={() => setSlotSuccessOpen(false)}
+        open={editSlotState.open}
+        onClose={() => setEditSlotState({ open: false, id: null, date: '', startTime: '', endTime: '' })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Edit Time Slot</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.2} sx={{ mt: 0.5 }}>
+            <TextField
+              label="Date"
+              type="date"
+              value={editSlotState.date}
+              onChange={(e) => setEditSlotState((prev) => ({ ...prev, date: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <TextField
+              label="Start Time"
+              type="time"
+              value={editSlotState.startTime}
+              onChange={(e) => setEditSlotState((prev) => ({ ...prev, startTime: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <TextField
+              label="End Time"
+              type="time"
+              value={editSlotState.endTime}
+              onChange={(e) => setEditSlotState((prev) => ({ ...prev, endTime: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setEditSlotState({ open: false, id: null, date: '', startTime: '', endTime: '' })}
+          >
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={saveEditedSlot}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteSlotState.open}
+        onClose={() => setDeleteSlotState({ open: false, id: null, label: '' })}
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Figma</DialogTitle>
+        <DialogTitle>Delete Time Slot</DialogTitle>
         <DialogContent>
-          <Typography>Time slot created successfully!</Typography>
+          <Typography>Are you sure you want to delete this slot?</Typography>
+          <Typography sx={{ mt: 0.8, color: mutedText, fontSize: '0.9rem' }}>
+            {deleteSlotState.label}
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSlotSuccessOpen(false)}>OK</Button>
+          <Button onClick={() => setDeleteSlotState({ open: false, id: null, label: '' })}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={confirmDeleteSlot}>Delete</Button>
         </DialogActions>
       </Dialog>
     </Box>
