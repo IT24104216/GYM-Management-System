@@ -506,6 +506,14 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
                 gap: 1.2,
+                pt: 0.6,
+                '& .MuiInputLabel-shrink': {
+                  color: '#d9e8ff',
+                  backgroundColor: '#1f2f4a',
+                  px: 0.45,
+                  borderRadius: 0.4,
+                  transform: 'translate(14px, -7px) scale(0.75)',
+                },
               }}
             >
               <TextField
@@ -848,6 +856,14 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
                 gap: 1.2,
+                pt: 0.6,
+                '& .MuiInputLabel-shrink': {
+                  color: '#d9e8ff',
+                  backgroundColor: '#1f2f4a',
+                  px: 0.45,
+                  borderRadius: 0.4,
+                  transform: 'translate(14px, -7px) scale(0.75)',
+                },
               }}
             >
               <TextField
@@ -857,12 +873,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, age: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
-                  '& .MuiInputLabel-shrink': { transform: 'translate(14px, -9px) scale(0.75)' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -874,12 +888,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, gender: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
-                  '& .MuiInputLabel-shrink': { transform: 'translate(14px, -9px) scale(0.75)' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -891,11 +903,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, phone: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -907,11 +918,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, emergencyContact: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -923,11 +933,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, heightCm: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -939,11 +948,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, weightKg: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -959,7 +967,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                   '& input::-webkit-calendar-picker-indicator': {
@@ -976,13 +984,12 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, fitnessGoal: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 multiline
                 minRows={2}
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -1206,6 +1213,14 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
                 gap: 1.2,
+                pt: 0.6,
+                '& .MuiInputLabel-shrink': {
+                  color: '#d9e8ff',
+                  backgroundColor: '#1f2f4a',
+                  px: 0.45,
+                  borderRadius: 0.4,
+                  transform: 'translate(14px, -7px) scale(0.75)',
+                },
               }}
             >
               <TextField
@@ -1215,12 +1230,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditCoachProfile((prev) => ({ ...prev, specialization: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
-                  '& .MuiInputLabel-shrink': { transform: 'translate(14px, -9px) scale(0.75)' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -1232,12 +1245,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditCoachProfile((prev) => ({ ...prev, experienceYears: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
-                  '& .MuiInputLabel-shrink': { transform: 'translate(14px, -9px) scale(0.75)' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -1249,11 +1260,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditCoachProfile((prev) => ({ ...prev, phone: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -1265,11 +1275,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditCoachProfile((prev) => ({ ...prev, preferredTrainingType: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -1285,7 +1294,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                   '& input::-webkit-calendar-picker-indicator': {
@@ -1302,11 +1311,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditCoachProfile((prev) => ({ ...prev, certifications: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -1318,13 +1326,12 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditCoachProfile((prev) => ({ ...prev, coachingStyle: e.target.value }))
                 }
-                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 multiline
                 minRows={2}
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -1389,3 +1396,6 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
 }
 
 export default Topbar;
+
+
+
