@@ -15,11 +15,14 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
 import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
+import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/shared/utils/constants';
 
 const mockMembers = [
   {
@@ -62,6 +65,7 @@ const mockAppointments = [
 const tabItems = ['Members', 'Appointments', 'Time Slots'];
 
 function DietitianDashboard() {
+  const navigate = useNavigate();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [activeTab, setActiveTab] = useState('Members');
@@ -224,17 +228,36 @@ function DietitianDashboard() {
       />
 
       {activeTab === 'Members' && (
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, minmax(0, 1fr))',
-              xl: 'repeat(3, minmax(0, 1fr))',
-            },
-            gap: 2,
-          }}
-        >
+        <>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.3 }}>
+            <Typography sx={{ color: '#e6f0ff', fontWeight: 700, fontSize: '1rem' }}>
+              Members
+            </Typography>
+            <Button
+              onClick={() => navigate(ROUTES.DIETITIAN_CLIENTS)}
+              sx={{
+                textTransform: 'none',
+                color: '#93c5fd',
+                fontWeight: 700,
+                p: 0,
+                minWidth: 0,
+              }}
+              endIcon={<ChevronRightRoundedIcon sx={{ fontSize: 16 }} />}
+            >
+              View all
+            </Button>
+          </Stack>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, minmax(0, 1fr))',
+                xl: 'repeat(3, minmax(0, 1fr))',
+              },
+              gap: 2,
+            }}
+          >
           {filteredMembers.map((member) => (
             <Box
               key={member.id}
@@ -283,7 +306,8 @@ function DietitianDashboard() {
               </Button>
             </Box>
           ))}
-        </Box>
+          </Box>
+        </>
       )}
 
       {activeTab === 'Appointments' && (
