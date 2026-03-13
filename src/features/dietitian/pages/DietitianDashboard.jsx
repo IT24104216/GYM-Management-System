@@ -133,6 +133,7 @@ function DietitianDashboard() {
   });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
   const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
+  const [savedDietPlans, setSavedDietPlans] = useState({});
 
   const pageBg = isDark
     ? 'radial-gradient(circle at 15% 10%, #1b355b 0%, #0f1e3d 60%, #0b1731 100%)'
@@ -151,10 +152,10 @@ function DietitianDashboard() {
   );
 
   const stats = [
-    { label: 'Total Members', value: filteredMembers.length, icon: GroupRoundedIcon },
-    { label: 'Diet Plans', value: 0, icon: FavoriteBorderRoundedIcon },
-    { label: 'Available Slots', value: 0, icon: AccessTimeRoundedIcon },
-    { label: 'Appointments', value: 0, icon: CalendarMonthRoundedIcon },
+    { label: 'Total Members', value: members.length, icon: GroupRoundedIcon },
+    { label: 'Diet Plans', value: Object.keys(savedDietPlans).length, icon: FavoriteBorderRoundedIcon },
+    { label: 'Available Slots', value: timeSlots.length, icon: AccessTimeRoundedIcon },
+    { label: 'Appointments', value: appointments.length, icon: CalendarMonthRoundedIcon },
   ];
 
   const approveAppointment = (appointment) => {
@@ -285,6 +286,13 @@ function DietitianDashboard() {
 
   const closeDietPlanModal = () => {
     setDietPlanModal({ open: false, member: null });
+  };
+
+  const saveDietPlan = () => {
+    const memberId = dietPlanModal.member?.id;
+    if (!memberId) return;
+    setSavedDietPlans((prev) => ({ ...prev, [memberId]: dietPlanForm }));
+    closeDietPlanModal();
   };
 
   const updateMealField = (sectionKey, index, field, value) => {
@@ -1182,7 +1190,7 @@ function DietitianDashboard() {
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            onClick={closeDietPlanModal}
+            onClick={saveDietPlan}
             fullWidth
             sx={{
               textTransform: 'none',
