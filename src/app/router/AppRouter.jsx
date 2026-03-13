@@ -38,6 +38,7 @@ import DietitianMealPlans from '@/features/dietitian/pages/DietitianMealPlans';
 // Coach pages
 import CoachDashboard from '@/features/coach/pages/CoachDashboard';
 import CoachClients from '@/features/coach/pages/CoachClients';
+import CoachScheduling from '@/features/coach/pages/CoachScheduling';
 import CoachWorkoutPlans from '@/features/coach/pages/CoachWorkoutPlans';
 
 function AppRouter() {
@@ -87,6 +88,7 @@ function AppRouter() {
         <Route element={<ProtectedRoute allowedRoles={[ROLES.COACH]} />}>
           <Route path={ROUTES.COACH_DASHBOARD} element={<CoachDashboard />} />
           <Route path={ROUTES.COACH_CLIENTS} element={<CoachClients />} />
+          <Route path={ROUTES.COACH_SCHEDULING} element={<CoachScheduling />} />
           <Route path={ROUTES.COACH_WORKOUT_PLANS} element={<CoachWorkoutPlans />} />
         </Route>
       </Route>

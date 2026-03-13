@@ -30,6 +30,7 @@ export const ROUTES = {
   COACH_DASHBOARD: '/coach/dashboard',
   COACH_CLIENTS: '/coach/clients',
   COACH_WORKOUT_PLANS: '/coach/workout-plans',
+  COACH_SCHEDULING: '/coach/scheduling',
 };
 
 export const ROLE_HOME = {
