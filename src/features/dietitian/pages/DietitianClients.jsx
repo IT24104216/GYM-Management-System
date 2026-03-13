@@ -1,6 +1,19 @@
 import { useState } from 'react';
-import { Box, Button, InputAdornment, Stack, TextField, Typography, useTheme } from '@mui/material';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  InputAdornment,
+  Stack,
+  TextField,
+  Typography,
+  useTheme,
+} from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
 
 const allClientsMock = [
@@ -16,6 +29,7 @@ function DietitianClients() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [searchText, setSearchText] = useState('');
+  const [dietPlanModal, setDietPlanModal] = useState({ open: false, client: null });
 
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
@@ -24,6 +38,14 @@ function DietitianClients() {
   const visibleClients = allClientsMock.filter((client) =>
     client.name.toLowerCase().includes(searchText.trim().toLowerCase()),
   );
+
+  const openDietPlanModal = (client) => {
+    setDietPlanModal({ open: true, client });
+  };
+
+  const closeDietPlanModal = () => {
+    setDietPlanModal({ open: false, client: null });
+  };
 
   return (
     <Box>
@@ -100,6 +122,7 @@ function DietitianClients() {
             <Button
               variant="contained"
               fullWidth
+              onClick={() => openDietPlanModal(client)}
               sx={{
                 mt: 'auto',
                 pt: 1.9,
@@ -115,6 +138,53 @@ function DietitianClients() {
           </Box>
         ))}
       </Box>
+
+      <Dialog
+        open={dietPlanModal.open}
+        onClose={closeDietPlanModal}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            background: '#1f2f4a',
+            border: '1px solid',
+            borderColor: '#334d73',
+            color: '#e6f0ff',
+          },
+        }}
+      >
+        <DialogTitle sx={{ pr: 6 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', color: '#f8fafc' }}>
+            Create Diet Plan
+          </Typography>
+          <Typography sx={{ color: '#9fb3cf', fontSize: '0.95rem', mt: 0.4 }}>
+            Creating plan for: <Box component="span" sx={{ color: '#f8fafc', fontWeight: 700 }}>{dietPlanModal.client?.name}</Box>
+          </Typography>
+          <Button
+            onClick={closeDietPlanModal}
+            sx={{
+              position: 'absolute',
+              right: 10,
+              top: 10,
+              minWidth: 0,
+              p: 0.6,
+              borderRadius: 1,
+              color: '#94a3b8',
+            }}
+          >
+            <CloseRoundedIcon />
+          </Button>
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: '#c6d6ef', fontSize: '0.95rem' }}>
+            Diet plan editor is available from the dashboard workflow. This popup confirms the click is active.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDietPlanModal}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
