@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  Autocomplete,
   Alert,
   Box,
   Button,
@@ -19,36 +20,12 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import { loadDietitianMeals, saveDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
 
 const CATEGORY_OPTIONS = [
   { value: 'weight_gain', label: 'Weight Gaining' },
   { value: 'weight_loss', label: 'Weight Losing' },
   { value: 'other', label: 'Other' },
-];
-
-const initialMeals = [
-  {
-    id: 1001,
-    category: 'weight_gain',
-    mealName: 'Chicken Rice Bowl',
-    calories: 620,
-    protein: 42,
-    carbs: 68,
-    lipids: 18,
-    vitamins: 'A, B6, C',
-    description: 'High-protein lunch with quality carbs for mass gain.',
-  },
-  {
-    id: 1002,
-    category: 'weight_loss',
-    mealName: 'Grilled Fish Salad',
-    calories: 360,
-    protein: 34,
-    carbs: 18,
-    lipids: 14,
-    vitamins: 'D, K, C',
-    description: 'Low-calorie, high-protein meal for fat-loss phase.',
-  },
 ];
 
 const emptyMealForm = {
@@ -70,7 +47,7 @@ function DietitianMealPlans() {
   const mutedText = isDark ? '#88a1c7' : '#607aa5';
 
   const [activeCategory, setActiveCategory] = useState('weight_gain');
-  const [meals, setMeals] = useState(initialMeals);
+  const [meals, setMeals] = useState(() => loadDietitianMeals());
   const [mealForm, setMealForm] = useState(emptyMealForm);
   const [editState, setEditState] = useState({ open: false, meal: null });
   const [deleteState, setDeleteState] = useState({ open: false, meal: null });
@@ -80,6 +57,12 @@ function DietitianMealPlans() {
     () => meals.filter((meal) => meal.category === activeCategory),
     [meals, activeCategory],
   );
+
+  const mealSuggestionLibrary = useMemo(() => meals, [meals]);
+
+  useEffect(() => {
+    saveDietitianMeals(meals);
+  }, [meals]);
 
   const handleAddMeal = () => {
     if (!mealForm.mealName.trim() || !mealForm.calories || !mealForm.protein) {
@@ -97,6 +80,39 @@ function DietitianMealPlans() {
 
   const openEditMeal = (meal) => {
     setEditState({ open: true, meal: { ...meal } });
+  };
+
+  const applySuggestionToAddForm = (selected) => {
+    if (!selected) return;
+    setMealForm((prev) => ({
+      ...prev,
+      mealName: selected.mealName,
+      category: selected.category || prev.category,
+      calories: selected.calories,
+      protein: selected.protein,
+      carbs: selected.carbs,
+      lipids: selected.lipids,
+      vitamins: selected.vitamins,
+      description: selected.description,
+    }));
+  };
+
+  const applySuggestionToEditForm = (selected) => {
+    if (!selected || !editState.meal) return;
+    setEditState((prev) => ({
+      ...prev,
+      meal: {
+        ...prev.meal,
+        mealName: selected.mealName,
+        category: selected.category || prev.meal.category,
+        calories: selected.calories,
+        protein: selected.protein,
+        carbs: selected.carbs,
+        lipids: selected.lipids,
+        vitamins: selected.vitamins,
+        description: selected.description,
+      },
+    }));
   };
 
   const saveEditedMeal = () => {
@@ -173,11 +189,20 @@ function DietitianMealPlans() {
               <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
             ))}
           </TextField>
-          <TextField
-            label="Meal Name"
+          <Autocomplete
+            freeSolo
+            options={mealSuggestionLibrary}
+            getOptionLabel={(option) =>
+              typeof option === 'string' ? option : option.mealName || ''
+            }
             value={mealForm.mealName}
-            onChange={(e) => setMealForm((prev) => ({ ...prev, mealName: e.target.value }))}
-            size="small"
+            onInputChange={(_, value) =>
+              setMealForm((prev) => ({ ...prev, mealName: value }))
+            }
+            onChange={(_, selected) => applySuggestionToAddForm(selected)}
+            renderInput={(params) => (
+              <TextField {...params} label="Meal Name" size="small" />
+            )}
           />
           <TextField
             label="Calories"
@@ -322,13 +347,20 @@ function DietitianMealPlans() {
                 <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
               ))}
             </TextField>
-            <TextField
-              label="Meal Name"
-              value={editState.meal?.mealName || ''}
-              onChange={(e) =>
-                setEditState((prev) => ({ ...prev, meal: { ...prev.meal, mealName: e.target.value } }))
+            <Autocomplete
+              freeSolo
+              options={mealSuggestionLibrary}
+              getOptionLabel={(option) =>
+                typeof option === 'string' ? option : option.mealName || ''
               }
-              size="small"
+              value={editState.meal?.mealName || ''}
+              onInputChange={(_, value) =>
+                setEditState((prev) => ({ ...prev, meal: { ...prev.meal, mealName: value } }))
+              }
+              onChange={(_, selected) => applySuggestionToEditForm(selected)}
+              renderInput={(params) => (
+                <TextField {...params} label="Meal Name" size="small" />
+              )}
             />
             <TextField
               label="Description"
