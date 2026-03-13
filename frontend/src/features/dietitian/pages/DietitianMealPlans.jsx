@@ -45,6 +45,11 @@ function DietitianMealPlans() {
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
   const mutedText = isDark ? '#88a1c7' : '#607aa5';
+  const sectionTitleColor = isDark ? '#e6f0ff' : '#0f172a';
+  const mealTitleColor = isDark ? '#f8fafc' : '#0f172a';
+  const mealMetaColor = isDark ? '#cfe0fb' : '#475569';
+  const tagColor = isDark ? '#93c5fd' : '#1d4ed8';
+  const tagBg = isDark ? '#2563eb1f' : '#dbeafe';
 
   const [activeCategory, setActiveCategory] = useState('weight_gain');
   const [meals, setMeals] = useState(() => loadDietitianMeals());
@@ -168,7 +173,7 @@ function DietitianMealPlans() {
           mb: 2,
         }}
       >
-        <Typography sx={{ color: '#e6f0ff', fontWeight: 800, fontSize: '1.05rem', mb: 1.2 }}>
+        <Typography sx={{ color: sectionTitleColor, fontWeight: 800, fontSize: '1.05rem', mb: 1.2 }}>
           Add Meal
         </Typography>
         <Box
@@ -282,19 +287,19 @@ function DietitianMealPlans() {
             }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.8 }}>
-              <Typography sx={{ color: '#f8fafc', fontWeight: 800, fontSize: '1.05rem' }}>
+              <Typography sx={{ color: mealTitleColor, fontWeight: 800, fontSize: '1.05rem' }}>
                 {meal.mealName}
               </Typography>
               <Chip
                 size="small"
                 label={getCategoryLabel(meal.category)}
-                sx={{ bgcolor: '#2563eb1f', color: '#93c5fd', fontWeight: 700 }}
+                sx={{ bgcolor: tagBg, color: tagColor, fontWeight: 700 }}
               />
             </Stack>
             <Typography sx={{ color: mutedText, fontSize: '0.9rem', mb: 1 }}>
               {meal.description || 'No description added.'}
             </Typography>
-            <Typography sx={{ color: '#cfe0fb', fontSize: '0.88rem', lineHeight: 1.7 }}>
+            <Typography sx={{ color: mealMetaColor, fontSize: '0.88rem', lineHeight: 1.7 }}>
               Calories: {meal.calories || 0}
               <br />
               Protein: {meal.protein || 0} g
