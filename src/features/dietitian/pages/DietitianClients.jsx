@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Autocomplete,
   Alert,
   Box,
   Button,
   Chip,
+  Pagination,
   Dialog,
   DialogActions,
   DialogContent,
@@ -29,7 +30,15 @@ const allClientsMock = [
   { id: 4, name: 'Mila Fernando', joinedDate: '2026-03-11', age: 25, weight: 61, height: 165, goal: 'Lean maintenance diet' },
   { id: 5, name: 'Sahan Wickram', joinedDate: '2026-03-10', age: 34, weight: 89, height: 182, goal: 'Reduce body fat percentage' },
   { id: 6, name: 'Rashmi De Alwis', joinedDate: '2026-03-08', age: 29, weight: 66, height: 168, goal: 'High-protein muscle support' },
+  { id: 7, name: 'Nadeesha Wijeratne', joinedDate: '2026-03-07', age: 30, weight: 71, height: 171, goal: 'Balanced fat-loss meal plan' },
+  { id: 8, name: 'Anjalika Senanayake', joinedDate: '2026-03-06', age: 26, weight: 58, height: 162, goal: 'Healthy weight gain and energy' },
+  { id: 9, name: 'Dilan Fernando', joinedDate: '2026-03-05', age: 33, weight: 84, height: 180, goal: 'Reduce sugar intake and cut fat' },
+  { id: 10, name: 'Hasini Perera', joinedDate: '2026-03-04', age: 24, weight: 55, height: 160, goal: 'Sports nutrition meal structure' },
+  { id: 11, name: 'Tharindu Mendis', joinedDate: '2026-03-03', age: 36, weight: 92, height: 183, goal: 'Macro based meal planning' },
+  { id: 12, name: 'Ishara Rodrigo', joinedDate: '2026-03-02', age: 28, weight: 63, height: 167, goal: 'Lean muscle nutrition strategy' },
 ];
+
+const CLIENTS_PER_PAGE = 6;
 
 const mealSections = [
   { key: 'breakfast', title: 'Breakfast Options', icon: '🌅' },
@@ -66,14 +75,27 @@ function DietitianClients() {
   const [feedback, setFeedback] = useState({ open: false, message: '' });
   const [confirmDelete, setConfirmDelete] = useState({ open: false, client: null });
   const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
+  const [page, setPage] = useState(1);
 
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
   const mutedText = isDark ? '#88a1c7' : '#607aa5';
 
-  const visibleClients = allClientsMock.filter((client) =>
-    client.name.toLowerCase().includes(searchText.trim().toLowerCase()),
+  const visibleClients = useMemo(
+    () =>
+      allClientsMock.filter((client) =>
+        client.name.toLowerCase().includes(searchText.trim().toLowerCase()),
+      ),
+    [searchText],
   );
+
+  const totalPages = Math.max(1, Math.ceil(visibleClients.length / CLIENTS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+
+  const paginatedClients = useMemo(() => {
+    const start = (currentPage - 1) * CLIENTS_PER_PAGE;
+    return visibleClients.slice(start, start + CLIENTS_PER_PAGE);
+  }, [visibleClients, currentPage]);
 
   const openDietPlanModal = (client) => {
     setMealSuggestions(loadDietitianMeals());
@@ -151,7 +173,10 @@ function DietitianClients() {
         fullWidth
         placeholder="Search client by name..."
         value={searchText}
-        onChange={(e) => setSearchText(e.target.value)}
+        onChange={(e) => {
+          setSearchText(e.target.value);
+          setPage(1);
+        }}
         sx={{
           mb: 2.1,
           '& .MuiOutlinedInput-root': {
@@ -184,7 +209,7 @@ function DietitianClients() {
           gap: 2,
         }}
       >
-        {visibleClients.map((client) => (
+        {paginatedClients.map((client) => (
           <Box
             key={client.id}
             sx={{
@@ -275,6 +300,32 @@ function DietitianClients() {
           </Box>
         ))}
       </Box>
+
+      {visibleClients.length > CLIENTS_PER_PAGE && (
+        <Stack direction="row" justifyContent="center" sx={{ mt: 2.4 }}>
+          <Pagination
+            count={totalPages}
+            page={currentPage}
+            onChange={(_, value) => setPage(value)}
+            color="primary"
+            shape="rounded"
+            siblingCount={0}
+            boundaryCount={1}
+            sx={{
+              '& .MuiPaginationItem-root': {
+                color: '#d4e2f8',
+                borderColor: panelBorder,
+                backgroundColor: isDark ? '#1a2a47' : '#ffffff',
+                fontWeight: 700,
+              },
+              '& .Mui-selected': {
+                backgroundColor: '#2563eb !important',
+                color: '#ffffff !important',
+              },
+            }}
+          />
+        </Stack>
+      )}
 
       <Dialog
         open={dietPlanModal.open}
