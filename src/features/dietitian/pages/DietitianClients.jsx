@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   InputAdornment,
+  Snackbar,
   Stack,
   TextField,
   Typography,
@@ -57,6 +60,9 @@ function DietitianClients() {
   const [searchText, setSearchText] = useState('');
   const [dietPlanModal, setDietPlanModal] = useState({ open: false, client: null });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
+  const [savedPlans, setSavedPlans] = useState({});
+  const [feedback, setFeedback] = useState({ open: false, message: '' });
+  const [confirmDelete, setConfirmDelete] = useState({ open: false, client: null });
 
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
@@ -67,7 +73,7 @@ function DietitianClients() {
   );
 
   const openDietPlanModal = (client) => {
-    setDietPlanForm(createDietPlanForm());
+    setDietPlanForm(savedPlans[client.id] || createDietPlanForm());
     setDietPlanModal({ open: true, client });
   };
 
@@ -90,6 +96,26 @@ function DietitianClients() {
       .filter((value) => !Number.isNaN(value) && value > 0);
     if (!calories.length) return 0;
     return Math.round(calories.reduce((sum, value) => sum + value, 0) / calories.length);
+  };
+
+  const saveDietPlan = () => {
+    const clientId = dietPlanModal.client?.id;
+    if (!clientId) return;
+    setSavedPlans((prev) => ({ ...prev, [clientId]: dietPlanForm }));
+    setDietPlanModal({ open: false, client: null });
+    setFeedback({ open: true, message: 'Diet plan saved successfully.' });
+  };
+
+  const deleteDietPlan = () => {
+    const clientId = confirmDelete.client?.id;
+    if (!clientId) return;
+    setSavedPlans((prev) => {
+      const copy = { ...prev };
+      delete copy[clientId];
+      return copy;
+    });
+    setConfirmDelete({ open: false, client: null });
+    setFeedback({ open: true, message: 'Diet plan deleted successfully.' });
   };
 
   return (
@@ -163,6 +189,47 @@ function DietitianClients() {
               <br />
               Goal: {client.goal}
             </Typography>
+
+            {savedPlans[client.id] && (
+              <Chip
+                label="Done"
+                size="small"
+                sx={{
+                  mt: 1.2,
+                  alignSelf: 'flex-start',
+                  fontWeight: 800,
+                  bgcolor: '#22c55e1f',
+                  color: '#22c55e',
+                }}
+              />
+            )}
+
+            <Stack direction="row" spacing={0.9} sx={{ mt: 1.2 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => openDietPlanModal(client)}
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  borderColor: '#5e789f',
+                  color: '#d4e2f8',
+                }}
+              >
+                {savedPlans[client.id] ? 'Edit' : 'Create'}
+              </Button>
+              {savedPlans[client.id] && (
+                <Button
+                  size="small"
+                  color="error"
+                  variant="outlined"
+                  onClick={() => setConfirmDelete({ open: true, client })}
+                  sx={{ textTransform: 'none', fontWeight: 700 }}
+                >
+                  Delete
+                </Button>
+              )}
+            </Stack>
 
             <Button
               variant="contained"
@@ -390,7 +457,7 @@ function DietitianClients() {
           <Button
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            onClick={closeDietPlanModal}
+            onClick={saveDietPlan}
             fullWidth
             sx={{
               textTransform: 'none',
@@ -406,6 +473,40 @@ function DietitianClients() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={confirmDelete.open}
+        onClose={() => setConfirmDelete({ open: false, client: null })}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete Diet Plan</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete plan for <strong>{confirmDelete.client?.name}</strong>?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDelete({ open: false, client: null })}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={deleteDietPlan}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={feedback.open}
+        autoHideDuration={2500}
+        onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          severity="success"
+          variant="filled"
+          onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
+          sx={{ width: '100%' }}
+        >
+          {feedback.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
