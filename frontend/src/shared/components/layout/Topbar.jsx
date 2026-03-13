@@ -4,6 +4,7 @@ import {
   Button,
   AppBar,
   Avatar,
+  Badge,
   Box,
   Chip,
   Dialog,
@@ -24,10 +25,12 @@ import MenuIcon from '@mui/icons-material/Menu';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useAppTheme } from '@/shared/hooks/useAppTheme';
 import { ROUTES, ROLES } from '@/shared/utils/constants';
+import NotificationsDrawer from './NotificationsDrawer';
 
 const DRAWER_WIDTH = 240;
 const DIETITIAN_PROFILE_STORAGE_KEY = 'dietitian.profile.v1';
@@ -63,6 +66,41 @@ const defaultCoachProfile = {
   coachingStyle: '',
   joinedDate: '',
 };
+
+const initialNotifications = [
+  {
+    id: 1,
+    title: 'New Workout Assigned',
+    message: 'Coach Marcus added "Upper Body Power" to your schedule.',
+    time: '2h ago',
+    read: false,
+    type: 'workout',
+  },
+  {
+    id: 2,
+    title: 'Appointment Confirmed',
+    message: 'Your consultation with Dr. Sarah is confirmed for tomorrow.',
+    time: '5h ago',
+    read: false,
+    type: 'appointment',
+  },
+  {
+    id: 3,
+    title: 'Goal Reached!',
+    message: 'Congratulations! You hit your protein goal 7 days in a row.',
+    time: '1d ago',
+    read: true,
+    type: 'achievement',
+  },
+  {
+    id: 4,
+    title: 'System Update',
+    message: 'We have updated our privacy policy.',
+    time: '2d ago',
+    read: true,
+    type: 'system',
+  },
+];
 
 const hasProfileData = (profile) =>
   Boolean(
@@ -115,6 +153,8 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [coachProfileFormOpen, setCoachProfileFormOpen] = useState(false);
   const [coachFeedbackOpen, setCoachFeedbackOpen] = useState(false);
   const [coachDeleteFeedbackOpen, setCoachDeleteFeedbackOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState(initialNotifications);
   const [dietitianProfile, setDietitianProfile] = useState(() => {
     try {
       const saved = localStorage.getItem(DIETITIAN_PROFILE_STORAGE_KEY);
@@ -260,6 +300,20 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     setCoachDeleteFeedbackOpen(true);
   };
 
+  const unreadNotifications = notifications.filter((item) => !item.read).length;
+
+  const markAllNotificationsRead = () => {
+    setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+  };
+
+  const markNotificationRead = (id) => {
+    setNotifications((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, read: true } : item,
+      ),
+    );
+  };
+
   return (
     <AppBar
       position="fixed"
@@ -315,6 +369,24 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
         <Tooltip title={mode === 'light' ? 'Dark mode' : 'Light mode'}>
           <IconButton onClick={toggleTheme} color="inherit">
             {mode === 'light' ? <Brightness4Icon /> : <Brightness7Icon />}
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title="Notifications">
+          <IconButton onClick={() => setNotificationsOpen(true)} sx={{ ml: 0.3 }} color="inherit">
+            <Badge
+              badgeContent={unreadNotifications}
+              color="error"
+              sx={{
+                '& .MuiBadge-badge': {
+                  fontSize: '0.65rem',
+                  minWidth: 16,
+                  height: 16,
+                },
+              }}
+            >
+              <NotificationsRoundedIcon />
+            </Badge>
           </IconButton>
         </Tooltip>
 
@@ -1390,6 +1462,14 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
             Coach profile deleted successfully.
           </Alert>
         </Snackbar>
+
+        <NotificationsDrawer
+          open={notificationsOpen}
+          onClose={() => setNotificationsOpen(false)}
+          notifications={notifications}
+          onMarkAllRead={markAllNotificationsRead}
+          onMarkRead={markNotificationRead}
+        />
       </Toolbar>
     </AppBar>
   );
