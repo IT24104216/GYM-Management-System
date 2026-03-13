@@ -204,21 +204,21 @@ function DietitianClients() {
               />
             )}
 
-            <Stack direction="row" spacing={0.9} sx={{ mt: 1.2 }}>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => openDietPlanModal(client)}
-                sx={{
-                  textTransform: 'none',
-                  fontWeight: 700,
-                  borderColor: '#5e789f',
-                  color: '#d4e2f8',
-                }}
-              >
-                {savedPlans[client.id] ? 'Edit' : 'Create'}
-              </Button>
-              {savedPlans[client.id] && (
+            {savedPlans[client.id] ? (
+              <Stack direction="row" spacing={0.9} sx={{ mt: 'auto' }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => openDietPlanModal(client)}
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    borderColor: '#5e789f',
+                    color: '#d4e2f8',
+                  }}
+                >
+                  Edit
+                </Button>
                 <Button
                   size="small"
                   color="error"
@@ -228,25 +228,25 @@ function DietitianClients() {
                 >
                   Delete
                 </Button>
-              )}
-            </Stack>
-
-            <Button
-              variant="contained"
-              fullWidth
-              onClick={() => openDietPlanModal(client)}
-              sx={{
-                mt: 'auto',
-                pt: 1.9,
-                textTransform: 'none',
-                fontWeight: 700,
-                borderRadius: 1.8,
-                backgroundColor: '#f30612',
-                '&:hover': { backgroundColor: '#cf0812' },
-              }}
-            >
-              Create Diet Plan
-            </Button>
+              </Stack>
+            ) : (
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={() => openDietPlanModal(client)}
+                sx={{
+                  mt: 'auto',
+                  pt: 1.9,
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  borderRadius: 1.8,
+                  backgroundColor: '#f30612',
+                  '&:hover': { backgroundColor: '#cf0812' },
+                }}
+              >
+                Create Diet Plan
+              </Button>
+            )}
           </Box>
         ))}
       </Box>
