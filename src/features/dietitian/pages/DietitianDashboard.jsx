@@ -24,6 +24,7 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
 import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
@@ -71,6 +72,31 @@ const mockAppointments = [
 
 const tabItems = ['Members', 'Appointments', 'Time Slots'];
 
+const mealSections = [
+  { key: 'breakfast', title: 'Breakfast Options', icon: '🌅' },
+  { key: 'lunch', title: 'Lunch Options', icon: '🌞' },
+  { key: 'dinner', title: 'Dinner Options', icon: '🌙' },
+  { key: 'snacks', title: 'Snacks Options', icon: '🍎' },
+];
+
+const createMealOption = () => ({
+  mealName: '',
+  description: '',
+  calories: '',
+  protein: '',
+  carbs: '',
+  lipids: '',
+  vitamins: '',
+});
+
+const createDietPlanForm = () => ({
+  breakfast: [createMealOption(), createMealOption(), createMealOption()],
+  lunch: [createMealOption(), createMealOption(), createMealOption()],
+  dinner: [createMealOption(), createMealOption(), createMealOption()],
+  snacks: [createMealOption(), createMealOption(), createMealOption()],
+  additionalNotes: '',
+});
+
 function DietitianDashboard() {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -99,6 +125,11 @@ function DietitianDashboard() {
     id: null,
     label: '',
   });
+  const [dietPlanModal, setDietPlanModal] = useState({
+    open: false,
+    member: null,
+  });
+  const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
 
   const pageBg = isDark
     ? 'radial-gradient(circle at 15% 10%, #1b355b 0%, #0f1e3d 60%, #0b1731 100%)'
@@ -241,6 +272,32 @@ function DietitianDashboard() {
     setTimeSlots((prev) => prev.filter((slot) => slot.id !== deleteSlotState.id));
     setDeleteSlotState({ open: false, id: null, label: '' });
     setSlotNotice({ open: true, message: 'Time slot deleted successfully!' });
+  };
+
+  const openDietPlanModal = (member) => {
+    setDietPlanForm(createDietPlanForm());
+    setDietPlanModal({ open: true, member });
+  };
+
+  const closeDietPlanModal = () => {
+    setDietPlanModal({ open: false, member: null });
+  };
+
+  const updateMealField = (sectionKey, index, field, value) => {
+    setDietPlanForm((prev) => ({
+      ...prev,
+      [sectionKey]: prev[sectionKey].map((option, i) =>
+        i === index ? { ...option, [field]: value } : option,
+      ),
+    }));
+  };
+
+  const getSectionAverageCalories = (sectionKey) => {
+    const calories = dietPlanForm[sectionKey]
+      .map((option) => Number(option.calories))
+      .filter((value) => !Number.isNaN(value) && value > 0);
+    if (!calories.length) return 0;
+    return Math.round(calories.reduce((sum, value) => sum + value, 0) / calories.length);
   };
 
   return (
@@ -409,6 +466,7 @@ function DietitianDashboard() {
               <Button
                 variant="contained"
                 fullWidth
+                onClick={() => openDietPlanModal(member)}
                 sx={{
                   mt: 'auto',
                   pt: 1.9,
@@ -875,6 +933,229 @@ function DietitianDashboard() {
         <DialogActions>
           <Button onClick={() => setDeleteSlotState({ open: false, id: null, label: '' })}>Cancel</Button>
           <Button color="error" variant="contained" onClick={confirmDeleteSlot}>Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={dietPlanModal.open}
+        onClose={closeDietPlanModal}
+        fullWidth
+        maxWidth="lg"
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            background: '#1f2f4a',
+            border: '1px solid',
+            borderColor: '#334d73',
+            color: '#e6f0ff',
+            maxHeight: '92vh',
+          },
+        }}
+      >
+        <DialogTitle sx={{ pr: 6 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '2rem', color: '#f8fafc' }}>
+            Create Diet Plan
+          </Typography>
+          <Typography sx={{ color: '#9fb3cf', fontSize: '1.35rem', mt: 0.4 }}>
+            Creating plan for: <Box component="span" sx={{ color: '#f8fafc', fontWeight: 700 }}>{dietPlanModal.member?.name}</Box>
+          </Typography>
+          <Button
+            onClick={closeDietPlanModal}
+            sx={{
+              position: 'absolute',
+              right: 10,
+              top: 10,
+              minWidth: 0,
+              p: 0.6,
+              borderRadius: 1,
+              color: '#94a3b8',
+            }}
+          >
+            <CloseRoundedIcon />
+          </Button>
+        </DialogTitle>
+
+        <DialogContent sx={{ overflowY: 'auto', pb: 2 }}>
+          <Stack spacing={2}>
+            {mealSections.map((section) => (
+              <Box key={section.key}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.1 }}>
+                  <Typography sx={{ fontWeight: 800, color: '#f8fafc', fontSize: '2rem' }}>
+                    <Box component="span" sx={{ mr: 1 }}>{section.icon}</Box>
+                    {section.title}
+                  </Typography>
+                  <Typography sx={{ color: '#aac2e0', fontWeight: 700, fontSize: '1.2rem' }}>
+                    Total: {getSectionAverageCalories(section.key)} cal (avg per option)
+                  </Typography>
+                </Stack>
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+                    gap: 1.2,
+                  }}
+                >
+                  {dietPlanForm[section.key].map((option, index) => (
+                    <Box
+                      key={`${section.key}-${index}`}
+                      sx={{
+                        p: 1.4,
+                        borderRadius: 1.7,
+                        border: '1px solid',
+                        borderColor: '#415a82',
+                        background: '#354a6b',
+                      }}
+                    >
+                      <Typography sx={{ color: '#f8fafc', fontWeight: 800, mb: 1, fontSize: '1.45rem' }}>
+                        Option {index + 1}
+                      </Typography>
+
+                      <TextField
+                        label="Meal Name"
+                        placeholder="e.g., Grilled"
+                        value={option.mealName}
+                        onChange={(e) => updateMealField(section.key, index, 'mealName', e.target.value)}
+                        fullWidth
+                        size="small"
+                        sx={{
+                          mb: 0.8,
+                          '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.15rem', fontWeight: 700 },
+                          '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                        }}
+                      />
+
+                      <TextField
+                        label="Description"
+                        placeholder="Brief description"
+                        value={option.description}
+                        onChange={(e) => updateMealField(section.key, index, 'description', e.target.value)}
+                        fullWidth
+                        size="small"
+                        sx={{
+                          mb: 0.8,
+                          '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.15rem', fontWeight: 700 },
+                          '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                        }}
+                      />
+
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.8 }}>
+                        <TextField
+                          label="Calories"
+                          type="number"
+                          value={option.calories}
+                          onChange={(e) => updateMealField(section.key, index, 'calories', e.target.value)}
+                          size="small"
+                          sx={{
+                            '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.05rem', fontWeight: 700 },
+                            '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                          }}
+                        />
+                        <TextField
+                          label="Protein (g)"
+                          type="number"
+                          value={option.protein}
+                          onChange={(e) => updateMealField(section.key, index, 'protein', e.target.value)}
+                          size="small"
+                          sx={{
+                            '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.05rem', fontWeight: 700 },
+                            '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                          }}
+                        />
+                        <TextField
+                          label="Carbs (g)"
+                          type="number"
+                          value={option.carbs}
+                          onChange={(e) => updateMealField(section.key, index, 'carbs', e.target.value)}
+                          size="small"
+                          sx={{
+                            '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.05rem', fontWeight: 700 },
+                            '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                          }}
+                        />
+                        <TextField
+                          label="Lipids (g)"
+                          type="number"
+                          value={option.lipids}
+                          onChange={(e) => updateMealField(section.key, index, 'lipids', e.target.value)}
+                          size="small"
+                          sx={{
+                            '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.05rem', fontWeight: 700 },
+                            '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                          }}
+                        />
+                      </Box>
+
+                      <TextField
+                        label="Vitamins"
+                        placeholder="e.g., A, C, D"
+                        value={option.vitamins}
+                        onChange={(e) => updateMealField(section.key, index, 'vitamins', e.target.value)}
+                        fullWidth
+                        size="small"
+                        sx={{
+                          mt: 0.8,
+                          '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.15rem', fontWeight: 700 },
+                          '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                        }}
+                      />
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            ))}
+
+            <Box>
+              <Typography sx={{ color: '#f8fafc', fontWeight: 700, fontSize: '1.45rem', mb: 0.6 }}>
+                Additional Notes
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                minRows={2}
+                placeholder="Any special instructions or dietary restrictions..."
+                value={dietPlanForm.additionalNotes}
+                onChange={(e) =>
+                  setDietPlanForm((prev) => ({ ...prev, additionalNotes: e.target.value }))
+                }
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#edf5ff',
+                    background: '#3d5275',
+                    borderRadius: 1.3,
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#627ca4' },
+                }}
+              />
+            </Box>
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddRoundedIcon />}
+            onClick={closeDietPlanModal}
+            fullWidth
+            sx={{
+              textTransform: 'none',
+              fontWeight: 800,
+              borderRadius: 1.2,
+              py: 1,
+              fontSize: '1rem',
+              backgroundColor: '#f30612',
+              '&:hover': { backgroundColor: '#cf0812' },
+            }}
+          >
+            Create Diet Plan
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
