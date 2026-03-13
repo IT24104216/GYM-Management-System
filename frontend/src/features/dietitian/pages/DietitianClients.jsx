@@ -80,6 +80,9 @@ function DietitianClients() {
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
   const mutedText = isDark ? '#88a1c7' : '#607aa5';
+  const inputTextColor = isDark ? '#cfe0fb' : '#334155';
+  const cardTitleColor = isDark ? '#ffffff' : '#0f172a';
+  const cardBodyColor = isDark ? '#b7cce8' : '#64748b';
 
   const visibleClients = useMemo(
     () =>
@@ -180,7 +183,7 @@ function DietitianClients() {
         sx={{
           mb: 2.1,
           '& .MuiOutlinedInput-root': {
-            color: '#cfe0fb',
+            color: inputTextColor,
             borderRadius: 1.5,
             background: isDark ? '#1a2a47' : '#f7fbff',
             '& fieldset': { borderColor: panelBorder },
@@ -223,14 +226,14 @@ function DietitianClients() {
               flexDirection: 'column',
             }}
           >
-            <Typography sx={{ color: '#ffffff', fontWeight: 800, fontSize: '1.85rem', mb: 0.5 }}>
+            <Typography sx={{ color: cardTitleColor, fontWeight: 800, fontSize: '1.85rem', mb: 0.5 }}>
               {client.name}
             </Typography>
             <Typography sx={{ color: mutedText, fontSize: '1.02rem', mb: 2.2 }}>
               Member since {client.joinedDate}
             </Typography>
 
-            <Typography sx={{ color: '#b7cce8', fontSize: '1.03rem', lineHeight: 1.6 }}>
+            <Typography sx={{ color: cardBodyColor, fontSize: '1.03rem', lineHeight: 1.6 }}>
               Age: {client.age} years
               <br />
               Weight: {client.weight} kg
