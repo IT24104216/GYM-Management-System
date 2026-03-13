@@ -67,6 +67,7 @@ function DietitianDashboard() {
   const [activeTab, setActiveTab] = useState('Members');
   const [searchText, setSearchText] = useState('');
   const [appointments, setAppointments] = useState(mockAppointments);
+  const [members, setMembers] = useState(mockMembers);
 
   const pageBg = isDark
     ? 'radial-gradient(circle at 15% 10%, #1b355b 0%, #0f1e3d 60%, #0b1731 100%)'
@@ -78,10 +79,10 @@ function DietitianDashboard() {
 
   const filteredMembers = useMemo(
     () =>
-      mockMembers.filter((m) =>
+      members.filter((m) =>
         m.name.toLowerCase().includes(searchText.trim().toLowerCase()),
       ),
-    [searchText],
+    [members, searchText],
   );
 
   const stats = [
@@ -90,6 +91,33 @@ function DietitianDashboard() {
     { label: 'Available Slots', value: 0, icon: AccessTimeRoundedIcon },
     { label: 'Appointments', value: 0, icon: CalendarMonthRoundedIcon },
   ];
+
+  const approveAppointment = (appointment) => {
+    setAppointments((prev) =>
+      prev.map((item) =>
+        item.id === appointment.id ? { ...item, status: 'Approved' } : item,
+      ),
+    );
+
+    setMembers((prev) => {
+      const exists = prev.some(
+        (member) => member.name.toLowerCase() === appointment.member.toLowerCase(),
+      );
+      if (exists) return prev;
+      return [
+        ...prev,
+        {
+          id: Date.now(),
+          name: appointment.member,
+          joinedDate: appointment.date,
+          age: 27,
+          weight: 70,
+          height: 170,
+          goal: appointment.goal,
+        },
+      ];
+    });
+  };
 
   return (
     <Box
@@ -304,19 +332,14 @@ function DietitianDashboard() {
                         <Button
                           size="small"
                           variant="contained"
-                          onClick={() =>
-                            setAppointments((prev) =>
-                              prev.map((item) =>
-                                item.id === row.id ? { ...item, status: 'Approved' } : item,
-                              ),
-                            )
-                          }
+                          onClick={() => approveAppointment(row)}
                           sx={{
                             textTransform: 'none',
                             fontWeight: 700,
                             minWidth: 84,
                             bgcolor: '#16a34a',
                             '&:hover': { bgcolor: '#15803d' },
+                            visibility: row.status === 'Approved' ? 'hidden' : 'visible',
                           }}
                         >
                           Approve
