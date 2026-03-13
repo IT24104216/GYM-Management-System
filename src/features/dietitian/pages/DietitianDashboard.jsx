@@ -2,6 +2,10 @@ import { useMemo, useState } from 'react';
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   InputAdornment,
   Chip,
   Stack,
@@ -17,6 +21,7 @@ import {
 } from '@mui/material';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import GroupRoundedIcon from '@mui/icons-material/GroupRounded';
 import FavoriteBorderRoundedIcon from '@mui/icons-material/FavoriteBorderRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
@@ -72,6 +77,14 @@ function DietitianDashboard() {
   const [searchText, setSearchText] = useState('');
   const [appointments, setAppointments] = useState(mockAppointments);
   const [members, setMembers] = useState(mockMembers);
+  const [slotForm, setSlotForm] = useState({
+    date: '2026-03-08',
+    startTime: '08:00',
+    endTime: '08:15',
+  });
+  const [timeSlots, setTimeSlots] = useState([]);
+  const [slotSuccessOpen, setSlotSuccessOpen] = useState(false);
+  const [slotError, setSlotError] = useState('');
 
   const pageBg = isDark
     ? 'radial-gradient(circle at 15% 10%, #1b355b 0%, #0f1e3d 60%, #0b1731 100%)'
@@ -124,6 +137,48 @@ function DietitianDashboard() {
 
     setActiveTab('Members');
     setSearchText('');
+  };
+
+  const getWeekdayLabel = (isoDate) => {
+    if (!isoDate) return '';
+    const parsed = new Date(isoDate);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleDateString('en-US', { weekday: 'long' });
+  };
+
+  const to12Hour = (time24) => {
+    const [hoursRaw, minsRaw] = (time24 || '').split(':');
+    const hours = Number(hoursRaw);
+    const mins = Number(minsRaw);
+    if (Number.isNaN(hours) || Number.isNaN(mins)) return '';
+    const suffix = hours >= 12 ? 'PM' : 'AM';
+    const converted = hours % 12 || 12;
+    return `${String(converted).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${suffix}`;
+  };
+
+  const addTimeSlot = () => {
+    if (!slotForm.date || !slotForm.startTime || !slotForm.endTime) {
+      setSlotError('Please fill date, start time, and end time.');
+      return;
+    }
+    const selectedDate = new Date(slotForm.date);
+    const day = selectedDate.getDay();
+    if (day !== 0 && day !== 6) {
+      setSlotError('Time slots can be created only for Saturday and Sunday.');
+      return;
+    }
+    setSlotError('');
+    setTimeSlots((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        date: slotForm.date,
+        day: getWeekdayLabel(slotForm.date),
+        startTime: slotForm.startTime,
+        endTime: slotForm.endTime,
+      },
+    ]);
+    setSlotSuccessOpen(true);
   };
 
   return (
@@ -405,10 +460,169 @@ function DietitianDashboard() {
       )}
 
       {activeTab === 'Time Slots' && (
-        <Box sx={{ color: mutedText, p: 2, border: '1px dashed', borderColor: panelBorder, borderRadius: 2 }}>
-          No time slots yet.
-        </Box>
+        <Stack spacing={2.5}>
+          <Box
+            sx={{
+              background: panelBg,
+              border: '1px solid',
+              borderColor: panelBorder,
+              borderRadius: 2,
+              p: { xs: 1.8, md: 2.3 },
+            }}
+          >
+            <Typography sx={{ color: '#e6f0ff', fontWeight: 800, fontSize: '1.9rem' }}>
+              Create Consultation Time Slot
+            </Typography>
+            <Typography sx={{ color: subtitleColor, fontSize: '1.7rem', mb: 2.1 }}>
+              Available only on Saturday and Sunday
+            </Typography>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' },
+                gap: 1.6,
+              }}
+            >
+              <TextField
+                label="Date"
+                type="date"
+                value={slotForm.date}
+                onChange={(e) => setSlotForm((prev) => ({ ...prev, date: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#d8e7ff',
+                    borderRadius: 1.5,
+                    background: isDark ? '#253a5d' : '#f3f8ff',
+                    '& fieldset': { borderColor: panelBorder },
+                  },
+                }}
+              />
+              <TextField
+                label="Start Time"
+                type="time"
+                value={slotForm.startTime}
+                onChange={(e) => setSlotForm((prev) => ({ ...prev, startTime: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#d8e7ff',
+                    borderRadius: 1.5,
+                    background: isDark ? '#253a5d' : '#f3f8ff',
+                    '& fieldset': { borderColor: panelBorder },
+                  },
+                }}
+              />
+              <TextField
+                label="End Time"
+                type="time"
+                value={slotForm.endTime}
+                onChange={(e) => setSlotForm((prev) => ({ ...prev, endTime: e.target.value }))}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    color: '#d8e7ff',
+                    borderRadius: 1.5,
+                    background: isDark ? '#253a5d' : '#f3f8ff',
+                    '& fieldset': { borderColor: panelBorder },
+                  },
+                }}
+              />
+            </Box>
+
+            <Typography sx={{ color: subtitleColor, fontSize: '1.25rem', mt: 0.8 }}>
+              {getWeekdayLabel(slotForm.date)}
+            </Typography>
+
+            {!!slotError && (
+              <Typography sx={{ color: '#f87171', mt: 0.8, fontSize: '1.25rem' }}>
+                {slotError}
+              </Typography>
+            )}
+
+            <Button
+              variant="contained"
+              startIcon={<AddRoundedIcon />}
+              onClick={addTimeSlot}
+              sx={{
+                mt: 1.5,
+                textTransform: 'none',
+                fontWeight: 800,
+                borderRadius: 1.4,
+                px: 2,
+                py: 0.8,
+                fontSize: '1.45rem',
+                backgroundColor: '#f30612',
+                '&:hover': { backgroundColor: '#cf0812' },
+              }}
+            >
+              Add Time Slot
+            </Button>
+          </Box>
+
+          <Box>
+            <Typography sx={{ color: '#e6f0ff', fontWeight: 800, fontSize: '1.95rem', mb: 1.2 }}>
+              Your Time Slots
+            </Typography>
+            <Box
+              sx={{
+                border: '1px solid',
+                borderColor: panelBorder,
+                borderRadius: 2,
+                background: panelBg,
+                p: 2,
+                minHeight: 92,
+              }}
+            >
+              {timeSlots.length === 0 ? (
+                <Typography sx={{ color: mutedText, textAlign: 'center', mt: 2, fontSize: '1.45rem' }}>
+                  No time slots created yet. Add one to get started!
+                </Typography>
+              ) : (
+                <Stack spacing={1.1}>
+                  {timeSlots.map((slot) => (
+                    <Box
+                      key={slot.id}
+                      sx={{
+                        border: '1px solid',
+                        borderColor: panelBorder,
+                        borderRadius: 1.5,
+                        p: 1.2,
+                        background: isDark ? '#203456' : '#f8fbff',
+                      }}
+                    >
+                      <Typography sx={{ color: '#dbeafe', fontWeight: 700, fontSize: '1.45rem' }}>
+                        {slot.day}, {slot.date}
+                      </Typography>
+                      <Typography sx={{ color: mutedText, fontSize: '1.3rem' }}>
+                        {to12Hour(slot.startTime)} - {to12Hour(slot.endTime)}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          </Box>
+        </Stack>
       )}
+      <Dialog
+        open={slotSuccessOpen}
+        onClose={() => setSlotSuccessOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Figma</DialogTitle>
+        <DialogContent>
+          <Typography>Time slot created successfully!</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSlotSuccessOpen(false)}>OK</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
