@@ -470,10 +470,16 @@ function DietitianDashboard() {
               p: { xs: 1.8, md: 2.3 },
             }}
           >
-            <Typography sx={{ color: '#e6f0ff', fontWeight: 800, fontSize: '1.9rem' }}>
+            <Typography
+              sx={{
+                color: '#e6f0ff',
+                fontWeight: 800,
+                fontSize: { xs: '1.35rem', md: '1.75rem' },
+              }}
+            >
               Create Consultation Time Slot
             </Typography>
-            <Typography sx={{ color: subtitleColor, fontSize: '1.7rem', mb: 2.1 }}>
+            <Typography sx={{ color: subtitleColor, fontSize: { xs: '0.98rem', md: '1.1rem' }, mb: 2.1 }}>
               Available only on Saturday and Sunday
             </Typography>
 
@@ -498,6 +504,19 @@ function DietitianDashboard() {
                     background: isDark ? '#253a5d' : '#f3f8ff',
                     '& fieldset': { borderColor: panelBorder },
                   },
+                  '& .MuiInputLabel-root': {
+                    color: subtitleColor,
+                    fontSize: '0.9rem',
+                  },
+                  '& .MuiInputBase-input': {
+                    fontSize: '0.98rem',
+                    fontWeight: 600,
+                  },
+                  '& input::-webkit-calendar-picker-indicator': {
+                    filter: isDark ? 'invert(1) brightness(1.5)' : 'none',
+                    opacity: 0.95,
+                    cursor: 'pointer',
+                  },
                 }}
               />
               <TextField
@@ -513,6 +532,19 @@ function DietitianDashboard() {
                     borderRadius: 1.5,
                     background: isDark ? '#253a5d' : '#f3f8ff',
                     '& fieldset': { borderColor: panelBorder },
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: subtitleColor,
+                    fontSize: '0.9rem',
+                  },
+                  '& .MuiInputBase-input': {
+                    fontSize: '0.98rem',
+                    fontWeight: 600,
+                  },
+                  '& input::-webkit-calendar-picker-indicator': {
+                    filter: isDark ? 'invert(1) brightness(1.5)' : 'none',
+                    opacity: 0.95,
+                    cursor: 'pointer',
                   },
                 }}
               />
@@ -530,16 +562,29 @@ function DietitianDashboard() {
                     background: isDark ? '#253a5d' : '#f3f8ff',
                     '& fieldset': { borderColor: panelBorder },
                   },
+                  '& .MuiInputLabel-root': {
+                    color: subtitleColor,
+                    fontSize: '0.9rem',
+                  },
+                  '& .MuiInputBase-input': {
+                    fontSize: '0.98rem',
+                    fontWeight: 600,
+                  },
+                  '& input::-webkit-calendar-picker-indicator': {
+                    filter: isDark ? 'invert(1) brightness(1.5)' : 'none',
+                    opacity: 0.95,
+                    cursor: 'pointer',
+                  },
                 }}
               />
             </Box>
 
-            <Typography sx={{ color: subtitleColor, fontSize: '1.25rem', mt: 0.8 }}>
+            <Typography sx={{ color: subtitleColor, fontSize: '0.98rem', mt: 0.8 }}>
               {getWeekdayLabel(slotForm.date)}
             </Typography>
 
             {!!slotError && (
-              <Typography sx={{ color: '#f87171', mt: 0.8, fontSize: '1.25rem' }}>
+              <Typography sx={{ color: '#f87171', mt: 0.8, fontSize: '0.92rem' }}>
                 {slotError}
               </Typography>
             )}
@@ -555,7 +600,7 @@ function DietitianDashboard() {
                 borderRadius: 1.4,
                 px: 2,
                 py: 0.8,
-                fontSize: '1.45rem',
+                fontSize: '0.98rem',
                 backgroundColor: '#f30612',
                 '&:hover': { backgroundColor: '#cf0812' },
               }}
@@ -565,7 +610,7 @@ function DietitianDashboard() {
           </Box>
 
           <Box>
-            <Typography sx={{ color: '#e6f0ff', fontWeight: 800, fontSize: '1.95rem', mb: 1.2 }}>
+            <Typography sx={{ color: '#e6f0ff', fontWeight: 800, fontSize: { xs: '1.4rem', md: '1.8rem' }, mb: 1.2 }}>
               Your Time Slots
             </Typography>
             <Box
@@ -579,7 +624,7 @@ function DietitianDashboard() {
               }}
             >
               {timeSlots.length === 0 ? (
-                <Typography sx={{ color: mutedText, textAlign: 'center', mt: 2, fontSize: '1.45rem' }}>
+                <Typography sx={{ color: mutedText, textAlign: 'center', mt: 2, fontSize: '1rem' }}>
                   No time slots created yet. Add one to get started!
                 </Typography>
               ) : (
@@ -598,7 +643,7 @@ function DietitianDashboard() {
                       <Typography sx={{ color: '#dbeafe', fontWeight: 700, fontSize: '1.45rem' }}>
                         {slot.day}, {slot.date}
                       </Typography>
-                      <Typography sx={{ color: mutedText, fontSize: '1.3rem' }}>
+                      <Typography sx={{ color: mutedText, fontSize: '0.95rem' }}>
                         {to12Hour(slot.startTime)} - {to12Hour(slot.endTime)}
                       </Typography>
                     </Box>
