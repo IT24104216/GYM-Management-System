@@ -31,6 +31,7 @@ import { ROUTES, ROLES } from '@/shared/utils/constants';
 
 const DRAWER_WIDTH = 240;
 const DIETITIAN_PROFILE_STORAGE_KEY = 'dietitian.profile.v1';
+const USER_PROFILE_STORAGE_KEY = 'user.profile.v1';
 
 const defaultDietitianProfile = {
   qualifications: '',
@@ -39,6 +40,17 @@ const defaultDietitianProfile = {
   licenseNumber: '',
   phone: '',
   joinDate: '',
+};
+
+const defaultUserProfile = {
+  age: '',
+  gender: '',
+  phone: '',
+  heightCm: '',
+  weightKg: '',
+  fitnessGoal: '',
+  emergencyContact: '',
+  joinedDate: '',
 };
 
 const hasProfileData = (profile) =>
@@ -51,6 +63,18 @@ const hasProfileData = (profile) =>
       || profile?.joinDate,
   );
 
+const hasUserProfileData = (profile) =>
+  Boolean(
+    profile?.age
+      || profile?.gender
+      || profile?.phone
+      || profile?.heightCm
+      || profile?.weightKg
+      || profile?.fitnessGoal
+      || profile?.emergencyContact
+      || profile?.joinedDate,
+  );
+
 function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebarHidden = false }) {
   const { user, logout } = useAuth();
   const { mode, toggleTheme } = useAppTheme();
@@ -61,6 +85,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [profileFormOpen, setProfileFormOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [deleteFeedbackOpen, setDeleteFeedbackOpen] = useState(false);
+  const [userProfileDetailsOpen, setUserProfileDetailsOpen] = useState(false);
+  const [userProfileFormOpen, setUserProfileFormOpen] = useState(false);
+  const [userFeedbackOpen, setUserFeedbackOpen] = useState(false);
+  const [userDeleteFeedbackOpen, setUserDeleteFeedbackOpen] = useState(false);
   const [dietitianProfile, setDietitianProfile] = useState(() => {
     try {
       const saved = localStorage.getItem(DIETITIAN_PROFILE_STORAGE_KEY);
@@ -70,8 +98,12 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     }
   });
   const [editDietitianProfile, setEditDietitianProfile] = useState(defaultDietitianProfile);
+  const [userProfile, setUserProfile] = useState(defaultUserProfile);
+  const [editUserProfile, setEditUserProfile] = useState(defaultUserProfile);
   const isUserRoute = location.pathname.startsWith('/user/');
   const isDietitian = user?.role === ROLES.DIETITIAN;
+  const isMemberUser = user?.role === ROLES.USER;
+  const userProfileStorageKey = `${USER_PROFILE_STORAGE_KEY}.${user?.id || 'guest'}`;
 
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -85,6 +117,18 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const openDietitianProfile = () => {
     handleMenuClose();
     setProfileDetailsOpen(true);
+  };
+
+  const openUserProfile = () => {
+    handleMenuClose();
+    try {
+      const saved = localStorage.getItem(userProfileStorageKey);
+      const parsed = saved ? { ...defaultUserProfile, ...JSON.parse(saved) } : defaultUserProfile;
+      setUserProfile(parsed);
+    } catch {
+      setUserProfile(defaultUserProfile);
+    }
+    setUserProfileDetailsOpen(true);
   };
 
   const openProfileSettingsForm = () => {
@@ -114,6 +158,35 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     setEditDietitianProfile(defaultDietitianProfile);
     localStorage.removeItem(DIETITIAN_PROFILE_STORAGE_KEY);
     setDeleteFeedbackOpen(true);
+  };
+
+  const openUserProfileForm = () => {
+    setEditUserProfile(userProfile);
+    setUserProfileDetailsOpen(false);
+    setUserProfileFormOpen(true);
+  };
+
+  const closeUserProfileDetails = () => {
+    setUserProfileDetailsOpen(false);
+  };
+
+  const closeUserProfileForm = () => {
+    setUserProfileFormOpen(false);
+  };
+
+  const saveUserProfile = () => {
+    setUserProfile(editUserProfile);
+    localStorage.setItem(userProfileStorageKey, JSON.stringify(editUserProfile));
+    setUserProfileFormOpen(false);
+    setUserProfileDetailsOpen(true);
+    setUserFeedbackOpen(true);
+  };
+
+  const deleteUserProfile = () => {
+    setUserProfile(defaultUserProfile);
+    setEditUserProfile(defaultUserProfile);
+    localStorage.removeItem(userProfileStorageKey);
+    setUserDeleteFeedbackOpen(true);
   };
 
   return (
@@ -191,6 +264,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
           </MenuItem>
           {isDietitian && (
             <MenuItem onClick={openDietitianProfile}>Dietician Profile</MenuItem>
+          )}
+          {isMemberUser && (
+            <MenuItem onClick={openUserProfile}>My Profile</MenuItem>
           )}
           <MenuItem onClick={handleLogout}>Logout</MenuItem>
         </Menu>
@@ -528,6 +604,358 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
             sx={{ width: '100%' }}
           >
             Profile deleted successfully.
+          </Alert>
+        </Snackbar>
+
+        <Dialog
+          open={userProfileDetailsOpen}
+          onClose={closeUserProfileDetails}
+          fullWidth
+          maxWidth="sm"
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              background: '#1f2f4a',
+              border: '1px solid',
+              borderColor: '#334d73',
+              color: '#e6f0ff',
+            },
+          }}
+        >
+          <DialogTitle sx={{ pr: 6 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.5rem', md: '1.8rem' }, color: '#f8fafc' }}>
+              My Profile
+            </Typography>
+            <Typography sx={{ color: '#9fb3cf', fontSize: '1rem', mt: 0.4 }}>
+              Personal details
+            </Typography>
+            <IconButton
+              onClick={closeUserProfileDetails}
+              sx={{
+                position: 'absolute',
+                right: 10,
+                top: 10,
+                color: '#94a3b8',
+              }}
+            >
+              <CloseRoundedIcon />
+            </IconButton>
+          </DialogTitle>
+
+          <DialogContent>
+            <Stack spacing={1}>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Name:</strong> {user?.name || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Email:</strong> {user?.email || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Age:</strong> {userProfile.age || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Gender:</strong> {userProfile.gender || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Phone:</strong> {userProfile.phone || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Height:</strong> {userProfile.heightCm ? `${userProfile.heightCm} cm` : '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Weight:</strong> {userProfile.weightKg ? `${userProfile.weightKg} kg` : '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Fitness Goal:</strong> {userProfile.fitnessGoal || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Emergency Contact:</strong> {userProfile.emergencyContact || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Joined Date:</strong> {userProfile.joinedDate || '-'}
+              </Typography>
+            </Stack>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, pb: 2.2 }}>
+            {!hasUserProfileData(userProfile) ? (
+              <Button
+                variant="contained"
+                onClick={openUserProfileForm}
+                fullWidth
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 800,
+                  borderRadius: 1.2,
+                  py: 1,
+                  fontSize: '1rem',
+                  backgroundColor: '#2563eb',
+                  '&:hover': { backgroundColor: '#1d4ed8' },
+                }}
+              >
+                Add
+              </Button>
+            ) : (
+              <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+                <Button
+                  variant="outlined"
+                  onClick={openUserProfileForm}
+                  fullWidth
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    borderRadius: 1.2,
+                    py: 1,
+                    fontSize: '1rem',
+                    color: '#dbeafe',
+                    borderColor: '#4f668f',
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={deleteUserProfile}
+                  fullWidth
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    borderRadius: 1.2,
+                    py: 1,
+                    fontSize: '1rem',
+                  }}
+                >
+                  Delete
+                </Button>
+              </Stack>
+            )}
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={userProfileFormOpen}
+          onClose={closeUserProfileForm}
+          fullWidth
+          maxWidth="md"
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              background: '#1f2f4a',
+              border: '1px solid',
+              borderColor: '#334d73',
+              color: '#e6f0ff',
+            },
+          }}
+        >
+          <DialogTitle sx={{ pr: 6 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.5rem', md: '2rem' }, color: '#f8fafc' }}>
+              My Profile
+            </Typography>
+            <Typography sx={{ color: '#9fb3cf', fontSize: { xs: '1rem', md: '1.15rem' }, mt: 0.4 }}>
+              Update your personal information
+            </Typography>
+            <IconButton
+              onClick={closeUserProfileForm}
+              sx={{
+                position: 'absolute',
+                right: 10,
+                top: 10,
+                color: '#94a3b8',
+              }}
+            >
+              <CloseRoundedIcon />
+            </IconButton>
+          </DialogTitle>
+
+          <DialogContent>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                gap: 1.2,
+              }}
+            >
+              <TextField
+                label="Age"
+                type="number"
+                value={editUserProfile.age}
+                onChange={(e) =>
+                  setEditUserProfile((prev) => ({ ...prev, age: e.target.value }))
+                }
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Gender"
+                placeholder="e.g., Male"
+                value={editUserProfile.gender}
+                onChange={(e) =>
+                  setEditUserProfile((prev) => ({ ...prev, gender: e.target.value }))
+                }
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Phone"
+                placeholder="+1234567890"
+                value={editUserProfile.phone}
+                onChange={(e) =>
+                  setEditUserProfile((prev) => ({ ...prev, phone: e.target.value }))
+                }
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Emergency Contact"
+                placeholder="+1234567890"
+                value={editUserProfile.emergencyContact}
+                onChange={(e) =>
+                  setEditUserProfile((prev) => ({ ...prev, emergencyContact: e.target.value }))
+                }
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Height (cm)"
+                type="number"
+                value={editUserProfile.heightCm}
+                onChange={(e) =>
+                  setEditUserProfile((prev) => ({ ...prev, heightCm: e.target.value }))
+                }
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Weight (kg)"
+                type="number"
+                value={editUserProfile.weightKg}
+                onChange={(e) =>
+                  setEditUserProfile((prev) => ({ ...prev, weightKg: e.target.value }))
+                }
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Joined Date"
+                type="date"
+                value={editUserProfile.joinedDate}
+                onChange={(e) =>
+                  setEditUserProfile((prev) => ({ ...prev, joinedDate: e.target.value }))
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                  '& input::-webkit-calendar-picker-indicator': {
+                    filter: 'invert(1) brightness(1.6)',
+                    opacity: 1,
+                    cursor: 'pointer',
+                  },
+                }}
+              />
+              <TextField
+                label="Fitness Goal"
+                placeholder="e.g., Build lean muscle"
+                value={editUserProfile.fitnessGoal}
+                onChange={(e) =>
+                  setEditUserProfile((prev) => ({ ...prev, fitnessGoal: e.target.value }))
+                }
+                fullWidth
+                size="small"
+                multiline
+                minRows={2}
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+            </Box>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, pb: 2.2 }}>
+            <Button
+              variant="contained"
+              onClick={saveUserProfile}
+              fullWidth
+              sx={{
+                textTransform: 'none',
+                fontWeight: 800,
+                borderRadius: 1.2,
+                py: 1,
+                fontSize: '1rem',
+                backgroundColor: '#2563eb',
+                '&:hover': { backgroundColor: '#1d4ed8' },
+              }}
+            >
+              Save Profile
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Snackbar
+          open={userFeedbackOpen}
+          autoHideDuration={2500}
+          onClose={() => setUserFeedbackOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            severity="success"
+            variant="filled"
+            onClose={() => setUserFeedbackOpen(false)}
+            sx={{ width: '100%' }}
+          >
+            User profile saved successfully.
+          </Alert>
+        </Snackbar>
+
+        <Snackbar
+          open={userDeleteFeedbackOpen}
+          autoHideDuration={2500}
+          onClose={() => setUserDeleteFeedbackOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            severity="success"
+            variant="filled"
+            onClose={() => setUserDeleteFeedbackOpen(false)}
+            sx={{ width: '100%' }}
+          >
+            User profile deleted successfully.
           </Alert>
         </Snackbar>
       </Toolbar>
