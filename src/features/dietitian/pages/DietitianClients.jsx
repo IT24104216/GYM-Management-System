@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Autocomplete,
   Alert,
   Box,
   Button,
@@ -19,6 +20,7 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import { loadDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
 
 const allClientsMock = [
   { id: 1, name: 'John Doe', joinedDate: '2025-01-15', age: 28, weight: 75, height: 175, goal: 'Build muscle and increase strength' },
@@ -63,6 +65,7 @@ function DietitianClients() {
   const [savedPlans, setSavedPlans] = useState({});
   const [feedback, setFeedback] = useState({ open: false, message: '' });
   const [confirmDelete, setConfirmDelete] = useState({ open: false, client: null });
+  const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
 
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
@@ -73,6 +76,7 @@ function DietitianClients() {
   );
 
   const openDietPlanModal = (client) => {
+    setMealSuggestions(loadDietitianMeals());
     setDietPlanForm(savedPlans[client.id] || createDietPlanForm());
     setDietPlanModal({ open: true, client });
   };
@@ -86,6 +90,27 @@ function DietitianClients() {
       ...prev,
       [sectionKey]: prev[sectionKey].map((option, i) =>
         i === index ? { ...option, [field]: value } : option,
+      ),
+    }));
+  };
+
+  const applySuggestedMealToOption = (sectionKey, index, selectedMeal) => {
+    if (!selectedMeal || typeof selectedMeal === 'string') return;
+    setDietPlanForm((prev) => ({
+      ...prev,
+      [sectionKey]: prev[sectionKey].map((option, i) =>
+        i === index
+          ? {
+            ...option,
+            mealName: selectedMeal.mealName || option.mealName,
+            description: selectedMeal.description ?? option.description,
+            calories: selectedMeal.calories ?? option.calories,
+            protein: selectedMeal.protein ?? option.protein,
+            carbs: selectedMeal.carbs ?? option.carbs,
+            lipids: selectedMeal.lipids ?? option.lipids,
+            vitamins: selectedMeal.vitamins ?? option.vitamins,
+          }
+          : option,
       ),
     }));
   };
@@ -326,19 +351,34 @@ function DietitianClients() {
                         Option {index + 1}
                       </Typography>
 
-                      <TextField
-                        label="Meal Name"
-                        placeholder="e.g., Grilled"
-                        value={option.mealName}
-                        onChange={(e) => updateMealField(section.key, index, 'mealName', e.target.value)}
-                        fullWidth
-                        size="small"
-                        sx={{
-                          mb: 0.8,
-                          '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.15rem', fontWeight: 700 },
-                          '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
-                          '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
-                        }}
+                      <Autocomplete
+                        freeSolo
+                        options={mealSuggestions}
+                        getOptionLabel={(mealOption) =>
+                          typeof mealOption === 'string' ? mealOption : mealOption.mealName || ''
+                        }
+                        value={option.mealName || ''}
+                        onInputChange={(_, value) =>
+                          updateMealField(section.key, index, 'mealName', value)
+                        }
+                        onChange={(_, selected) =>
+                          applySuggestedMealToOption(section.key, index, selected)
+                        }
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Meal Name"
+                            placeholder="e.g., Grilled"
+                            fullWidth
+                            size="small"
+                            sx={{
+                              mb: 0.8,
+                              '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.15rem', fontWeight: 700 },
+                              '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                              '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                            }}
+                          />
+                        )}
                       />
 
                       <TextField
