@@ -23,7 +23,6 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
-import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -42,6 +41,16 @@ const defaultDietitianProfile = {
   joinDate: '',
 };
 
+const hasProfileData = (profile) =>
+  Boolean(
+    profile?.qualifications
+      || profile?.specialization
+      || profile?.experienceYears
+      || profile?.licenseNumber
+      || profile?.phone
+      || profile?.joinDate,
+  );
+
 function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebarHidden = false }) {
   const { user, logout } = useAuth();
   const { mode, toggleTheme } = useAppTheme();
@@ -51,6 +60,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [profileFormOpen, setProfileFormOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [deleteFeedbackOpen, setDeleteFeedbackOpen] = useState(false);
   const [dietitianProfile, setDietitianProfile] = useState(() => {
     try {
       const saved = localStorage.getItem(DIETITIAN_PROFILE_STORAGE_KEY);
@@ -97,6 +107,13 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     setProfileFormOpen(false);
     setProfileDetailsOpen(true);
     setFeedbackOpen(true);
+  };
+
+  const deleteDietitianProfile = () => {
+    setDietitianProfile(defaultDietitianProfile);
+    setEditDietitianProfile(defaultDietitianProfile);
+    localStorage.removeItem(DIETITIAN_PROFILE_STORAGE_KEY);
+    setDeleteFeedbackOpen(true);
   };
 
   return (
@@ -151,9 +168,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
           GymPro
         </Typography>
 
-        <Tooltip title="Settings">
-          <IconButton onClick={handleAvatarClick} color="inherit">
-            <SettingsRoundedIcon />
+        <Tooltip title={mode === 'light' ? 'Dark mode' : 'Light mode'}>
+          <IconButton onClick={toggleTheme} color="inherit">
+            {mode === 'light' ? <Brightness4Icon /> : <Brightness7Icon />}
           </IconButton>
         </Tooltip>
 
@@ -175,19 +192,6 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
           {isDietitian && (
             <MenuItem onClick={openDietitianProfile}>Dietician Profile</MenuItem>
           )}
-          <MenuItem onClick={toggleTheme}>
-            {mode === 'light' ? (
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-                <Brightness4Icon fontSize="small" />
-                Dark mode
-              </Box>
-            ) : (
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-                <Brightness7Icon fontSize="small" />
-                Light mode
-              </Box>
-            )}
-          </MenuItem>
           <MenuItem onClick={handleLogout}>Logout</MenuItem>
         </Menu>
 
@@ -256,22 +260,58 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
           </DialogContent>
 
           <DialogActions sx={{ px: 3, pb: 2.2 }}>
-            <Button
-              variant="contained"
-              onClick={openProfileSettingsForm}
-              fullWidth
-              sx={{
-                textTransform: 'none',
-                fontWeight: 800,
-                borderRadius: 1.2,
-                py: 1,
-                fontSize: '1rem',
-                backgroundColor: '#f30612',
-                '&:hover': { backgroundColor: '#cf0812' },
-              }}
-            >
-              Profile Settings
-            </Button>
+            {!hasProfileData(dietitianProfile) ? (
+              <Button
+                variant="contained"
+                onClick={openProfileSettingsForm}
+                fullWidth
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 800,
+                  borderRadius: 1.2,
+                  py: 1,
+                  fontSize: '1rem',
+                  backgroundColor: '#f30612',
+                  '&:hover': { backgroundColor: '#cf0812' },
+                }}
+              >
+                Add
+              </Button>
+            ) : (
+              <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+                <Button
+                  variant="outlined"
+                  onClick={openProfileSettingsForm}
+                  fullWidth
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    borderRadius: 1.2,
+                    py: 1,
+                    fontSize: '1rem',
+                    color: '#dbeafe',
+                    borderColor: '#4f668f',
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={deleteDietitianProfile}
+                  fullWidth
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    borderRadius: 1.2,
+                    py: 1,
+                    fontSize: '1rem',
+                  }}
+                >
+                  Delete
+                </Button>
+              </Stack>
+            )}
           </DialogActions>
         </Dialog>
 
@@ -472,6 +512,22 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
             sx={{ width: '100%' }}
           >
             Profile saved successfully.
+          </Alert>
+        </Snackbar>
+
+        <Snackbar
+          open={deleteFeedbackOpen}
+          autoHideDuration={2500}
+          onClose={() => setDeleteFeedbackOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            severity="success"
+            variant="filled"
+            onClose={() => setDeleteFeedbackOpen(false)}
+            sx={{ width: '100%' }}
+          >
+            Profile deleted successfully.
           </Alert>
         </Snackbar>
       </Toolbar>
