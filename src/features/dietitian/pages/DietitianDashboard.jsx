@@ -227,7 +227,11 @@ function DietitianDashboard() {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: '320px 1fr' },
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, minmax(0, 1fr))',
+              xl: 'repeat(3, minmax(0, 1fr))',
+            },
             gap: 2,
           }}
         >
@@ -240,6 +244,9 @@ function DietitianDashboard() {
                 borderColor: panelBorder,
                 borderRadius: 2,
                 p: 2.4,
+                minHeight: 330,
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
               <Typography sx={{ color: '#ffffff', fontWeight: 800, fontSize: '1.85rem', mb: 0.5 }}>
@@ -263,7 +270,8 @@ function DietitianDashboard() {
                 variant="contained"
                 fullWidth
                 sx={{
-                  mt: 2,
+                  mt: 'auto',
+                  pt: 1.9,
                   textTransform: 'none',
                   fontWeight: 700,
                   borderRadius: 1.8,
