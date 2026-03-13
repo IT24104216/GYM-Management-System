@@ -767,6 +767,27 @@ function DietitianDashboard() {
               onChange={(e) => setEditSlotState((prev) => ({ ...prev, date: e.target.value }))}
               InputLabelProps={{ shrink: true }}
               fullWidth
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  color: '#d8e7ff',
+                  borderRadius: 1.5,
+                  background: isDark ? '#253a5d' : '#f3f8ff',
+                  '& fieldset': { borderColor: panelBorder },
+                },
+                '& .MuiInputLabel-root': {
+                  color: subtitleColor,
+                  fontSize: '0.9rem',
+                },
+                '& .MuiInputBase-input': {
+                  fontSize: '0.98rem',
+                  fontWeight: 600,
+                },
+                '& input::-webkit-calendar-picker-indicator': {
+                  filter: isDark ? 'invert(1) brightness(1.5)' : 'none',
+                  opacity: 0.95,
+                  cursor: 'pointer',
+                },
+              }}
             />
             <TextField
               label="Start Time"
@@ -775,6 +796,27 @@ function DietitianDashboard() {
               onChange={(e) => setEditSlotState((prev) => ({ ...prev, startTime: e.target.value }))}
               InputLabelProps={{ shrink: true }}
               fullWidth
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  color: '#d8e7ff',
+                  borderRadius: 1.5,
+                  background: isDark ? '#253a5d' : '#f3f8ff',
+                  '& fieldset': { borderColor: panelBorder },
+                },
+                '& .MuiInputLabel-root': {
+                  color: subtitleColor,
+                  fontSize: '0.9rem',
+                },
+                '& .MuiInputBase-input': {
+                  fontSize: '0.98rem',
+                  fontWeight: 600,
+                },
+                '& input::-webkit-calendar-picker-indicator': {
+                  filter: isDark ? 'invert(1) brightness(1.5)' : 'none',
+                  opacity: 0.95,
+                  cursor: 'pointer',
+                },
+              }}
             />
             <TextField
               label="End Time"
@@ -783,6 +825,27 @@ function DietitianDashboard() {
               onChange={(e) => setEditSlotState((prev) => ({ ...prev, endTime: e.target.value }))}
               InputLabelProps={{ shrink: true }}
               fullWidth
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  color: '#d8e7ff',
+                  borderRadius: 1.5,
+                  background: isDark ? '#253a5d' : '#f3f8ff',
+                  '& fieldset': { borderColor: panelBorder },
+                },
+                '& .MuiInputLabel-root': {
+                  color: subtitleColor,
+                  fontSize: '0.9rem',
+                },
+                '& .MuiInputBase-input': {
+                  fontSize: '0.98rem',
+                  fontWeight: 600,
+                },
+                '& input::-webkit-calendar-picker-indicator': {
+                  filter: isDark ? 'invert(1) brightness(1.5)' : 'none',
+                  opacity: 0.95,
+                  cursor: 'pointer',
+                },
+              }}
             />
           </Stack>
         </DialogContent>
