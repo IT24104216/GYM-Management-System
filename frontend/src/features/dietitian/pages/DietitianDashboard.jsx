@@ -142,6 +142,12 @@ function DietitianDashboard() {
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
   const subtitleColor = isDark ? '#8ea7cb' : '#5b7398';
   const mutedText = isDark ? '#88a1c7' : '#607aa5';
+  const sectionTitleColor = isDark ? '#e6f0ff' : '#0f172a';
+  const inputTextColor = isDark ? '#cfe0fb' : '#334155';
+  const cardTitleColor = isDark ? '#ffffff' : '#0f172a';
+  const cardBodyColor = isDark ? '#b7cce8' : '#64748b';
+  const linkColor = isDark ? '#93c5fd' : '#2563eb';
+  const slotTitleColor = isDark ? '#dbeafe' : '#0f172a';
 
   const filteredMembers = useMemo(
     () =>
@@ -379,7 +385,7 @@ function DietitianDashboard() {
                 </Typography>
                 <Icon sx={{ color: '#ff3048', fontSize: 18 }} />
               </Stack>
-              <Typography sx={{ color: '#ffffff', fontWeight: 800, fontSize: '2.2rem', lineHeight: 1 }}>
+              <Typography sx={{ color: cardTitleColor, fontWeight: 800, fontSize: '2.2rem', lineHeight: 1 }}>
                 {stat.value}
               </Typography>
             </Box>
@@ -416,7 +422,7 @@ function DietitianDashboard() {
         sx={{
           mb: 2.1,
           '& .MuiOutlinedInput-root': {
-            color: '#cfe0fb',
+            color: inputTextColor,
             borderRadius: 1.5,
             background: isDark ? '#1a2a47' : '#f7fbff',
             '& fieldset': { borderColor: panelBorder },
@@ -437,14 +443,14 @@ function DietitianDashboard() {
       {activeTab === 'Members' && (
         <>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.3 }}>
-            <Typography sx={{ color: '#e6f0ff', fontWeight: 700, fontSize: '1rem' }}>
+            <Typography sx={{ color: sectionTitleColor, fontWeight: 700, fontSize: '1rem' }}>
               Members
             </Typography>
             <Button
               onClick={() => navigate(ROUTES.DIETITIAN_CLIENTS)}
               sx={{
                 textTransform: 'none',
-                color: '#93c5fd',
+                color: linkColor,
                 fontWeight: 700,
                 p: 0,
                 minWidth: 0,
@@ -479,14 +485,14 @@ function DietitianDashboard() {
                 flexDirection: 'column',
               }}
             >
-              <Typography sx={{ color: '#ffffff', fontWeight: 800, fontSize: '1.85rem', mb: 0.5 }}>
+              <Typography sx={{ color: cardTitleColor, fontWeight: 800, fontSize: '1.85rem', mb: 0.5 }}>
                 {member.name}
               </Typography>
               <Typography sx={{ color: mutedText, fontSize: '1.02rem', mb: 2.2 }}>
                 Member since {member.joinedDate}
               </Typography>
 
-              <Typography sx={{ color: '#b7cce8', fontSize: '1.03rem', lineHeight: 1.6 }}>
+              <Typography sx={{ color: cardBodyColor, fontSize: '1.03rem', lineHeight: 1.6 }}>
                 Age: {member.age} years
                 <br />
                 Weight: {member.weight} kg
@@ -625,7 +631,7 @@ function DietitianDashboard() {
           >
             <Typography
               sx={{
-                color: '#e6f0ff',
+                color: sectionTitleColor,
                 fontWeight: 800,
                 fontSize: { xs: '1.35rem', md: '1.75rem' },
               }}
@@ -763,7 +769,7 @@ function DietitianDashboard() {
           </Box>
 
           <Box>
-            <Typography sx={{ color: '#e6f0ff', fontWeight: 800, fontSize: { xs: '1.4rem', md: '1.8rem' }, mb: 1.2 }}>
+            <Typography sx={{ color: sectionTitleColor, fontWeight: 800, fontSize: { xs: '1.4rem', md: '1.8rem' }, mb: 1.2 }}>
               Your Time Slots
             </Typography>
             <Box
@@ -795,7 +801,7 @@ function DietitianDashboard() {
                     >
                       <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
                         <Box>
-                          <Typography sx={{ color: '#dbeafe', fontWeight: 700, fontSize: '1.05rem' }}>
+                          <Typography sx={{ color: slotTitleColor, fontWeight: 700, fontSize: '1.05rem' }}>
                             {slot.day}, {slot.date}
                           </Typography>
                           <Typography sx={{ color: mutedText, fontSize: '0.95rem' }}>
