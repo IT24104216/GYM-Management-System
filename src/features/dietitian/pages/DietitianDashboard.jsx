@@ -117,6 +117,9 @@ function DietitianDashboard() {
         },
       ];
     });
+
+    setActiveTab('Members');
+    setSearchText('');
   };
 
   return (
