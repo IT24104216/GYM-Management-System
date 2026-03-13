@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   Button,
   AppBar,
   Avatar,
@@ -12,6 +13,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Snackbar,
   Stack,
   TextField,
   Toolbar,
@@ -46,7 +48,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const navigate = useNavigate();
   const location = useLocation();
   const [anchorEl, setAnchorEl] = useState(null);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
+  const [profileFormOpen, setProfileFormOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [dietitianProfile, setDietitianProfile] = useState(() => {
     try {
       const saved = localStorage.getItem(DIETITIAN_PROFILE_STORAGE_KEY);
@@ -55,6 +59,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
       return defaultDietitianProfile;
     }
   });
+  const [editDietitianProfile, setEditDietitianProfile] = useState(defaultDietitianProfile);
   const isUserRoute = location.pathname.startsWith('/user/');
   const isDietitian = user?.role === ROLES.DIETITIAN;
 
@@ -69,16 +74,29 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
 
   const openDietitianProfile = () => {
     handleMenuClose();
-    setProfileOpen(true);
+    setProfileDetailsOpen(true);
   };
 
-  const closeDietitianProfile = () => {
-    setProfileOpen(false);
+  const openProfileSettingsForm = () => {
+    setEditDietitianProfile(dietitianProfile);
+    setProfileDetailsOpen(false);
+    setProfileFormOpen(true);
+  };
+
+  const closeDietitianProfileDetails = () => {
+    setProfileDetailsOpen(false);
+  };
+
+  const closeProfileSettingsForm = () => {
+    setProfileFormOpen(false);
   };
 
   const saveDietitianProfile = () => {
-    localStorage.setItem(DIETITIAN_PROFILE_STORAGE_KEY, JSON.stringify(dietitianProfile));
-    setProfileOpen(false);
+    setDietitianProfile(editDietitianProfile);
+    localStorage.setItem(DIETITIAN_PROFILE_STORAGE_KEY, JSON.stringify(editDietitianProfile));
+    setProfileFormOpen(false);
+    setProfileDetailsOpen(true);
+    setFeedbackOpen(true);
   };
 
   return (
@@ -174,8 +192,92 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
         </Menu>
 
         <Dialog
-          open={profileOpen}
-          onClose={closeDietitianProfile}
+          open={profileDetailsOpen}
+          onClose={closeDietitianProfileDetails}
+          fullWidth
+          maxWidth="sm"
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              background: '#1f2f4a',
+              border: '1px solid',
+              borderColor: '#334d73',
+              color: '#e6f0ff',
+            },
+          }}
+        >
+          <DialogTitle sx={{ pr: 6 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.5rem', md: '1.8rem' }, color: '#f8fafc' }}>
+              Dietician Profile
+            </Typography>
+            <Typography sx={{ color: '#9fb3cf', fontSize: '1rem', mt: 0.4 }}>
+              Profile details
+            </Typography>
+            <IconButton
+              onClick={closeDietitianProfileDetails}
+              sx={{
+                position: 'absolute',
+                right: 10,
+                top: 10,
+                color: '#94a3b8',
+              }}
+            >
+              <CloseRoundedIcon />
+            </IconButton>
+          </DialogTitle>
+
+          <DialogContent>
+            <Stack spacing={1}>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Name:</strong> {user?.name || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Email:</strong> {user?.email || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Qualifications:</strong> {dietitianProfile.qualifications || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Specialization:</strong> {dietitianProfile.specialization || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Experience:</strong> {dietitianProfile.experienceYears || '0'} years
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>License Number:</strong> {dietitianProfile.licenseNumber || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Phone:</strong> {dietitianProfile.phone || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Join Date:</strong> {dietitianProfile.joinDate || '-'}
+              </Typography>
+            </Stack>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, pb: 2.2 }}>
+            <Button
+              variant="contained"
+              onClick={openProfileSettingsForm}
+              fullWidth
+              sx={{
+                textTransform: 'none',
+                fontWeight: 800,
+                borderRadius: 1.2,
+                py: 1,
+                fontSize: '1rem',
+                backgroundColor: '#f30612',
+                '&:hover': { backgroundColor: '#cf0812' },
+              }}
+            >
+              Profile Settings
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={profileFormOpen}
+          onClose={closeProfileSettingsForm}
           fullWidth
           maxWidth="md"
           PaperProps={{
@@ -196,7 +298,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               Update your professional information
             </Typography>
             <IconButton
-              onClick={closeDietitianProfile}
+              onClick={closeProfileSettingsForm}
               sx={{
                 position: 'absolute',
                 right: 10,
@@ -219,9 +321,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               <TextField
                 label="Qualifications"
                 placeholder="e.g., MSc in Nutrition"
-                value={dietitianProfile.qualifications}
+                value={editDietitianProfile.qualifications}
                 onChange={(e) =>
-                  setDietitianProfile((prev) => ({ ...prev, qualifications: e.target.value }))
+                  setEditDietitianProfile((prev) => ({ ...prev, qualifications: e.target.value }))
                 }
                 fullWidth
                 size="small"
@@ -234,9 +336,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               <TextField
                 label="Specialization"
                 placeholder="e.g., Sports Nutrition"
-                value={dietitianProfile.specialization}
+                value={editDietitianProfile.specialization}
                 onChange={(e) =>
-                  setDietitianProfile((prev) => ({ ...prev, specialization: e.target.value }))
+                  setEditDietitianProfile((prev) => ({ ...prev, specialization: e.target.value }))
                 }
                 fullWidth
                 size="small"
@@ -249,9 +351,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               <TextField
                 label="Experience (Years)"
                 type="number"
-                value={dietitianProfile.experienceYears}
+                value={editDietitianProfile.experienceYears}
                 onChange={(e) =>
-                  setDietitianProfile((prev) => ({ ...prev, experienceYears: e.target.value }))
+                  setEditDietitianProfile((prev) => ({ ...prev, experienceYears: e.target.value }))
                 }
                 fullWidth
                 size="small"
@@ -264,9 +366,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               <TextField
                 label="License Number"
                 placeholder="LIC12345"
-                value={dietitianProfile.licenseNumber}
+                value={editDietitianProfile.licenseNumber}
                 onChange={(e) =>
-                  setDietitianProfile((prev) => ({ ...prev, licenseNumber: e.target.value }))
+                  setEditDietitianProfile((prev) => ({ ...prev, licenseNumber: e.target.value }))
                 }
                 fullWidth
                 size="small"
@@ -279,9 +381,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               <TextField
                 label="Phone"
                 placeholder="+1234567890"
-                value={dietitianProfile.phone}
+                value={editDietitianProfile.phone}
                 onChange={(e) =>
-                  setDietitianProfile((prev) => ({ ...prev, phone: e.target.value }))
+                  setEditDietitianProfile((prev) => ({ ...prev, phone: e.target.value }))
                 }
                 fullWidth
                 size="small"
@@ -294,9 +396,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               <TextField
                 label="Join Date"
                 type="date"
-                value={dietitianProfile.joinDate}
+                value={editDietitianProfile.joinDate}
                 onChange={(e) =>
-                  setDietitianProfile((prev) => ({ ...prev, joinDate: e.target.value }))
+                  setEditDietitianProfile((prev) => ({ ...prev, joinDate: e.target.value }))
                 }
                 InputLabelProps={{ shrink: true }}
                 fullWidth
@@ -356,6 +458,22 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
             </Button>
           </DialogActions>
         </Dialog>
+
+        <Snackbar
+          open={feedbackOpen}
+          autoHideDuration={2500}
+          onClose={() => setFeedbackOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            severity="success"
+            variant="filled"
+            onClose={() => setFeedbackOpen(false)}
+            sx={{ width: '100%' }}
+          >
+            Profile saved successfully.
+          </Alert>
+        </Snackbar>
       </Toolbar>
     </AppBar>
   );
