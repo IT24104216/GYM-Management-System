@@ -32,6 +32,7 @@ import { ROUTES, ROLES } from '@/shared/utils/constants';
 const DRAWER_WIDTH = 240;
 const DIETITIAN_PROFILE_STORAGE_KEY = 'dietitian.profile.v1';
 const USER_PROFILE_STORAGE_KEY = 'user.profile.v1';
+const COACH_PROFILE_STORAGE_KEY = 'coach.profile.v1';
 
 const defaultDietitianProfile = {
   qualifications: '',
@@ -50,6 +51,16 @@ const defaultUserProfile = {
   weightKg: '',
   fitnessGoal: '',
   emergencyContact: '',
+  joinedDate: '',
+};
+
+const defaultCoachProfile = {
+  specialization: '',
+  experienceYears: '',
+  certifications: '',
+  phone: '',
+  preferredTrainingType: '',
+  coachingStyle: '',
   joinedDate: '',
 };
 
@@ -75,6 +86,17 @@ const hasUserProfileData = (profile) =>
       || profile?.joinedDate,
   );
 
+const hasCoachProfileData = (profile) =>
+  Boolean(
+    profile?.specialization
+      || profile?.experienceYears
+      || profile?.certifications
+      || profile?.phone
+      || profile?.preferredTrainingType
+      || profile?.coachingStyle
+      || profile?.joinedDate,
+  );
+
 function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebarHidden = false }) {
   const { user, logout } = useAuth();
   const { mode, toggleTheme } = useAppTheme();
@@ -89,6 +111,10 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [userProfileFormOpen, setUserProfileFormOpen] = useState(false);
   const [userFeedbackOpen, setUserFeedbackOpen] = useState(false);
   const [userDeleteFeedbackOpen, setUserDeleteFeedbackOpen] = useState(false);
+  const [coachProfileDetailsOpen, setCoachProfileDetailsOpen] = useState(false);
+  const [coachProfileFormOpen, setCoachProfileFormOpen] = useState(false);
+  const [coachFeedbackOpen, setCoachFeedbackOpen] = useState(false);
+  const [coachDeleteFeedbackOpen, setCoachDeleteFeedbackOpen] = useState(false);
   const [dietitianProfile, setDietitianProfile] = useState(() => {
     try {
       const saved = localStorage.getItem(DIETITIAN_PROFILE_STORAGE_KEY);
@@ -100,10 +126,14 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [editDietitianProfile, setEditDietitianProfile] = useState(defaultDietitianProfile);
   const [userProfile, setUserProfile] = useState(defaultUserProfile);
   const [editUserProfile, setEditUserProfile] = useState(defaultUserProfile);
+  const [coachProfile, setCoachProfile] = useState(defaultCoachProfile);
+  const [editCoachProfile, setEditCoachProfile] = useState(defaultCoachProfile);
   const isUserRoute = location.pathname.startsWith('/user/');
   const isDietitian = user?.role === ROLES.DIETITIAN;
   const isMemberUser = user?.role === ROLES.USER;
+  const isCoach = user?.role === ROLES.COACH;
   const userProfileStorageKey = `${USER_PROFILE_STORAGE_KEY}.${user?.id || 'guest'}`;
+  const coachProfileStorageKey = `${COACH_PROFILE_STORAGE_KEY}.${user?.id || 'guest'}`;
 
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -129,6 +159,18 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
       setUserProfile(defaultUserProfile);
     }
     setUserProfileDetailsOpen(true);
+  };
+
+  const openCoachProfile = () => {
+    handleMenuClose();
+    try {
+      const saved = localStorage.getItem(coachProfileStorageKey);
+      const parsed = saved ? { ...defaultCoachProfile, ...JSON.parse(saved) } : defaultCoachProfile;
+      setCoachProfile(parsed);
+    } catch {
+      setCoachProfile(defaultCoachProfile);
+    }
+    setCoachProfileDetailsOpen(true);
   };
 
   const openProfileSettingsForm = () => {
@@ -187,6 +229,35 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     setEditUserProfile(defaultUserProfile);
     localStorage.removeItem(userProfileStorageKey);
     setUserDeleteFeedbackOpen(true);
+  };
+
+  const openCoachProfileForm = () => {
+    setEditCoachProfile(coachProfile);
+    setCoachProfileDetailsOpen(false);
+    setCoachProfileFormOpen(true);
+  };
+
+  const closeCoachProfileDetails = () => {
+    setCoachProfileDetailsOpen(false);
+  };
+
+  const closeCoachProfileForm = () => {
+    setCoachProfileFormOpen(false);
+  };
+
+  const saveCoachProfile = () => {
+    setCoachProfile(editCoachProfile);
+    localStorage.setItem(coachProfileStorageKey, JSON.stringify(editCoachProfile));
+    setCoachProfileFormOpen(false);
+    setCoachProfileDetailsOpen(true);
+    setCoachFeedbackOpen(true);
+  };
+
+  const deleteCoachProfile = () => {
+    setCoachProfile(defaultCoachProfile);
+    setEditCoachProfile(defaultCoachProfile);
+    localStorage.removeItem(coachProfileStorageKey);
+    setCoachDeleteFeedbackOpen(true);
   };
 
   return (
@@ -267,6 +338,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
           )}
           {isMemberUser && (
             <MenuItem onClick={openUserProfile}>My Profile</MenuItem>
+          )}
+          {isCoach && (
+            <MenuItem onClick={openCoachProfile}>My Profile</MenuItem>
           )}
           <MenuItem onClick={handleLogout}>Logout</MenuItem>
         </Menu>
@@ -783,10 +857,12 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, age: e.target.value }))
                 }
+                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-shrink': { transform: 'translate(14px, -9px) scale(0.75)' },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -798,10 +874,12 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, gender: e.target.value }))
                 }
+                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-shrink': { transform: 'translate(14px, -9px) scale(0.75)' },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -813,10 +891,11 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, phone: e.target.value }))
                 }
+                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -828,10 +907,11 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, emergencyContact: e.target.value }))
                 }
+                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -843,10 +923,11 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, heightCm: e.target.value }))
                 }
+                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -858,10 +939,11 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, weightKg: e.target.value }))
                 }
+                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -877,7 +959,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 fullWidth
                 size="small"
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                   '& input::-webkit-calendar-picker-indicator': {
@@ -894,12 +976,13 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 onChange={(e) =>
                   setEditUserProfile((prev) => ({ ...prev, fitnessGoal: e.target.value }))
                 }
+                InputLabelProps={{ shrink: true }}
                 fullWidth
                 size="small"
                 multiline
                 minRows={2}
                 sx={{
-                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
                   '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                 }}
@@ -956,6 +1039,348 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
             sx={{ width: '100%' }}
           >
             User profile deleted successfully.
+          </Alert>
+        </Snackbar>
+
+        <Dialog
+          open={coachProfileDetailsOpen}
+          onClose={closeCoachProfileDetails}
+          fullWidth
+          maxWidth="sm"
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              background: '#1f2f4a',
+              border: '1px solid',
+              borderColor: '#334d73',
+              color: '#e6f0ff',
+            },
+          }}
+        >
+          <DialogTitle sx={{ pr: 6 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.5rem', md: '1.8rem' }, color: '#f8fafc' }}>
+              Coach Profile
+            </Typography>
+            <Typography sx={{ color: '#9fb3cf', fontSize: '1rem', mt: 0.4 }}>
+              Professional details
+            </Typography>
+            <IconButton
+              onClick={closeCoachProfileDetails}
+              sx={{
+                position: 'absolute',
+                right: 10,
+                top: 10,
+                color: '#cbd5e1',
+              }}
+            >
+              <CloseRoundedIcon />
+            </IconButton>
+          </DialogTitle>
+
+          <DialogContent>
+            <Stack spacing={1}>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Name:</strong> {user?.name || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Email:</strong> {user?.email || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Specialization:</strong> {coachProfile.specialization || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Experience:</strong> {coachProfile.experienceYears ? `${coachProfile.experienceYears} years` : '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Certifications:</strong> {coachProfile.certifications || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Phone:</strong> {coachProfile.phone || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Preferred Training:</strong> {coachProfile.preferredTrainingType || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Coaching Style:</strong> {coachProfile.coachingStyle || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Joined Date:</strong> {coachProfile.joinedDate || '-'}
+              </Typography>
+            </Stack>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, pb: 2.2 }}>
+            {!hasCoachProfileData(coachProfile) ? (
+              <Button
+                variant="contained"
+                onClick={openCoachProfileForm}
+                fullWidth
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 800,
+                  borderRadius: 1.2,
+                  py: 1,
+                  fontSize: '1rem',
+                  backgroundColor: '#0ea5a2',
+                  '&:hover': { backgroundColor: '#0f8d8b' },
+                }}
+              >
+                Add
+              </Button>
+            ) : (
+              <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+                <Button
+                  variant="outlined"
+                  onClick={openCoachProfileForm}
+                  fullWidth
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    borderRadius: 1.2,
+                    py: 1,
+                    fontSize: '1rem',
+                    color: '#dbeafe',
+                    borderColor: '#4f668f',
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={deleteCoachProfile}
+                  fullWidth
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    borderRadius: 1.2,
+                    py: 1,
+                    fontSize: '1rem',
+                  }}
+                >
+                  Delete
+                </Button>
+              </Stack>
+            )}
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={coachProfileFormOpen}
+          onClose={closeCoachProfileForm}
+          fullWidth
+          maxWidth="md"
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              background: '#1f2f4a',
+              border: '1px solid',
+              borderColor: '#334d73',
+              color: '#e6f0ff',
+            },
+          }}
+        >
+          <DialogTitle sx={{ pr: 6 }}>
+            <Typography sx={{ fontWeight: 800, fontSize: { xs: '1.5rem', md: '2rem' }, color: '#f8fafc' }}>
+              Coach Profile
+            </Typography>
+            <Typography sx={{ color: '#9fb3cf', fontSize: { xs: '1rem', md: '1.15rem' }, mt: 0.4 }}>
+              Update your coaching profile
+            </Typography>
+            <IconButton
+              onClick={closeCoachProfileForm}
+              sx={{
+                position: 'absolute',
+                right: 10,
+                top: 10,
+                color: '#cbd5e1',
+              }}
+            >
+              <CloseRoundedIcon />
+            </IconButton>
+          </DialogTitle>
+
+          <DialogContent>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                gap: 1.2,
+              }}
+            >
+              <TextField
+                label="Specialization"
+                placeholder="e.g., Strength & Conditioning"
+                value={editCoachProfile.specialization}
+                onChange={(e) =>
+                  setEditCoachProfile((prev) => ({ ...prev, specialization: e.target.value }))
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-shrink': { transform: 'translate(14px, -9px) scale(0.75)' },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Experience (Years)"
+                type="number"
+                value={editCoachProfile.experienceYears}
+                onChange={(e) =>
+                  setEditCoachProfile((prev) => ({ ...prev, experienceYears: e.target.value }))
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiInputLabel-shrink': { transform: 'translate(14px, -9px) scale(0.75)' },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Phone"
+                placeholder="+1234567890"
+                value={editCoachProfile.phone}
+                onChange={(e) =>
+                  setEditCoachProfile((prev) => ({ ...prev, phone: e.target.value }))
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Preferred Training Type"
+                placeholder="e.g., Weight Loss / Hypertrophy"
+                value={editCoachProfile.preferredTrainingType}
+                onChange={(e) =>
+                  setEditCoachProfile((prev) => ({ ...prev, preferredTrainingType: e.target.value }))
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Joined Date"
+                type="date"
+                value={editCoachProfile.joinedDate}
+                onChange={(e) =>
+                  setEditCoachProfile((prev) => ({ ...prev, joinedDate: e.target.value }))
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                  '& input::-webkit-calendar-picker-indicator': {
+                    filter: 'invert(1) brightness(1.7)',
+                    opacity: 1,
+                    cursor: 'pointer',
+                  },
+                }}
+              />
+              <TextField
+                label="Certifications"
+                placeholder="e.g., ACE CPT, NASM"
+                value={editCoachProfile.certifications}
+                onChange={(e) =>
+                  setEditCoachProfile((prev) => ({ ...prev, certifications: e.target.value }))
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                size="small"
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+              <TextField
+                label="Coaching Style"
+                placeholder="How you coach your clients..."
+                value={editCoachProfile.coachingStyle}
+                onChange={(e) =>
+                  setEditCoachProfile((prev) => ({ ...prev, coachingStyle: e.target.value }))
+                }
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+                size="small"
+                multiline
+                minRows={2}
+                sx={{
+                  '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700, px: 0.4, bgcolor: '#1f2f4a' },
+                  '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                }}
+              />
+            </Box>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, pb: 2.2 }}>
+            <Button
+              variant="contained"
+              onClick={saveCoachProfile}
+              fullWidth
+              sx={{
+                textTransform: 'none',
+                fontWeight: 800,
+                borderRadius: 1.2,
+                py: 1,
+                fontSize: '1rem',
+                backgroundColor: '#0ea5a2',
+                '&:hover': { backgroundColor: '#0f8d8b' },
+              }}
+            >
+              Save Profile
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Snackbar
+          open={coachFeedbackOpen}
+          autoHideDuration={2500}
+          onClose={() => setCoachFeedbackOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            severity="success"
+            variant="filled"
+            onClose={() => setCoachFeedbackOpen(false)}
+            sx={{ width: '100%' }}
+          >
+            Coach profile saved successfully.
+          </Alert>
+        </Snackbar>
+
+        <Snackbar
+          open={coachDeleteFeedbackOpen}
+          autoHideDuration={2500}
+          onClose={() => setCoachDeleteFeedbackOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert
+            severity="success"
+            variant="filled"
+            onClose={() => setCoachDeleteFeedbackOpen(false)}
+            sx={{ width: '100%' }}
+          >
+            Coach profile deleted successfully.
           </Alert>
         </Snackbar>
       </Toolbar>
