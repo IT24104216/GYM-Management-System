@@ -12,6 +12,7 @@ import {
   Divider,
   IconButton,
   InputAdornment,
+  MenuItem,
   Pagination,
   Snackbar,
   Stack,
@@ -85,7 +86,13 @@ const REQUESTED_USERS = [
   },
 ];
 
-const newExercise = () => ({ name: '', amount: '', description: '' });
+const newExercise = () => ({
+  name: '',
+  amount: '',
+  description: '',
+  sourceType: 'manual',
+  suggestionKey: '',
+});
 const newCategoryExercise = () => ({ name: '', amount: '', description: '' });
 
 const INITIAL_CATEGORY_LIBRARY = {
@@ -97,6 +104,11 @@ const INITIAL_CATEGORY_LIBRARY = {
     { name: 'Incline Walk Intervals', amount: '20 min', description: 'Alternate 2 min brisk + 1 min recovery.' },
     { name: 'Kettlebell Circuit', amount: '4 rounds', description: 'Swings, goblet squats, rows with short rest.' },
   ],
+};
+
+const CATEGORY_LABELS = {
+  weightGain: 'Weight Gaining',
+  weightLoss: 'Weight Reducing',
 };
 
 function CoachWorkoutPlans() {
@@ -144,6 +156,16 @@ function CoachWorkoutPlans() {
     () => [...users].sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]),
     [users],
   );
+  const categorySuggestionOptions = useMemo(
+    () =>
+      Object.entries(categoryLibrary).flatMap(([categoryKey, exercises]) =>
+        exercises.map((exercise, idx) => ({
+          key: `${categoryKey}::${idx}`,
+          label: `${CATEGORY_LABELS[categoryKey]} - ${exercise.name}`,
+        })),
+      ),
+    [categoryLibrary],
+  );
   const totalPages = Math.max(1, Math.ceil(sortedUsers.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * pageSize;
@@ -159,8 +181,17 @@ function CoachWorkoutPlans() {
         planTitle: '',
         planNote: '',
         exercises: [newExercise()],
-      },
+      }
     );
+    if (existing) {
+      setPlanForm({
+        ...existing,
+        exercises: (existing.exercises || []).map((exercise) => ({
+          ...newExercise(),
+          ...exercise,
+        })),
+      });
+    }
   };
 
   const closePlanDialog = () => {
@@ -173,6 +204,42 @@ function CoachWorkoutPlans() {
       ...prev,
       exercises: prev.exercises.map((exercise, i) =>
         i === index ? { ...exercise, [field]: value } : exercise,
+      ),
+    }));
+  };
+
+  const updateExerciseSourceType = (index, sourceType) => {
+    setPlanForm((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise, i) =>
+        i === index
+          ? {
+              ...exercise,
+              sourceType,
+              suggestionKey: sourceType === 'manual' ? '' : exercise.suggestionKey,
+            }
+          : exercise,
+      ),
+    }));
+  };
+
+  const applyCategorySuggestion = (index, suggestionKey) => {
+    const [categoryKey, rawIndex] = suggestionKey.split('::');
+    const selectedExercise = categoryLibrary[categoryKey]?.[Number(rawIndex)];
+    if (!selectedExercise) return;
+    setPlanForm((prev) => ({
+      ...prev,
+      exercises: prev.exercises.map((exercise, i) =>
+        i === index
+          ? {
+              ...exercise,
+              sourceType: 'category',
+              suggestionKey,
+              name: selectedExercise.name,
+              amount: selectedExercise.amount,
+              description: selectedExercise.description,
+            }
+          : exercise,
       ),
     }));
   };
@@ -661,6 +728,34 @@ function CoachWorkoutPlans() {
                       >
                         <DeleteOutlineRoundedIcon />
                       </IconButton>
+                    </Stack>
+
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ mb: 1.2 }}>
+                      <TextField
+                        select
+                        label="Input Mode"
+                        value={exercise.sourceType}
+                        onChange={(e) => updateExerciseSourceType(index, e.target.value)}
+                        fullWidth
+                      >
+                        <MenuItem value="manual">Manual</MenuItem>
+                        <MenuItem value="category">From Category Suggestions</MenuItem>
+                      </TextField>
+                      {exercise.sourceType === 'category' && (
+                        <TextField
+                          select
+                          label="Suggested Exercise"
+                          value={exercise.suggestionKey}
+                          onChange={(e) => applyCategorySuggestion(index, e.target.value)}
+                          fullWidth
+                        >
+                          {categorySuggestionOptions.map((option) => (
+                            <MenuItem key={option.key} value={option.key}>
+                              {option.label}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      )}
                     </Stack>
 
                     <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2}>
