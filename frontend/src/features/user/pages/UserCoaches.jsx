@@ -25,9 +25,15 @@ import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  bookCoachAppointment,
+  getUserAppointments,
+  updateAppointmentStatus,
+  updateUserAppointment,
+} from '@/features/user/api/user.api';
 import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
@@ -245,7 +251,7 @@ function UserCoaches() {
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
   const [toastState, setToastState] = useState({ open: false, message: '' });
-  const [bookings, setBookings] = useState(BOOKINGS);
+  const [bookings, setBookings] = useState([]);
   const [coachStats, setCoachStats] = useState(buildInitialCoachStats);
   const [editingBookingId, setEditingBookingId] = useState(null);
   const [slotError, setSlotError] = useState('');
@@ -265,6 +271,77 @@ function UserCoaches() {
     description: '',
     medicalConditions: '',
   });
+
+  const getNoteValue = (notes, key) => {
+    if (!notes) return '';
+    const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+    const match = notes.match(pattern);
+    return match?.[1]?.trim() || '';
+  };
+
+  const mapAppointmentToBooking = (item) => {
+    const startsAt = new Date(item.startsAt);
+    const endsAt = new Date(item.endsAt);
+    const date = Number.isNaN(startsAt.getTime())
+      ? getTodayDate()
+      : startsAt.toISOString().split('T')[0];
+    const fromTime = Number.isNaN(startsAt.getTime())
+      ? ''
+      : `${String(startsAt.getHours()).padStart(2, '0')}:${String(startsAt.getMinutes()).padStart(2, '0')}`;
+    const toTime = Number.isNaN(endsAt.getTime())
+      ? ''
+      : `${String(endsAt.getHours()).padStart(2, '0')}:${String(endsAt.getMinutes()).padStart(2, '0')}`;
+    const coach = COACHES.find((row) => String(row.id) === String(item.coachId));
+
+    const statusMap = {
+      pending: 'pending',
+      approved: 'confirmed',
+      completed: 'completed',
+      cancelled: 'cancelled',
+      rejected: 'cancelled',
+    };
+    const progressStatus = statusMap[item.status] || 'pending';
+    const status = endsAt.getTime() < Date.now() || progressStatus === 'completed' ? 'past' : 'upcoming';
+
+    return {
+      id: item._id,
+      coachId: item.coachId,
+      coachName: coach?.name || String(item.coachId),
+      date,
+      fromTime,
+      toTime,
+      time: toDisplayTime(fromTime),
+      appointmentType: getNoteValue(item.notes, 'Appointment Type')
+        || (item.sessionType === 'training' ? 'In-person' : 'Online'),
+      goal: getNoteValue(item.notes, 'Goal') || 'Weight Gaining',
+      description: getNoteValue(item.notes, 'Description'),
+      medicalConditions: getNoteValue(item.notes, 'Medical'),
+      status,
+      progressStatus,
+      rawStatus: item.status,
+    };
+  };
+
+  const loadBookings = async () => {
+    if (!user?.id) return;
+    try {
+      const { data } = await getUserAppointments({
+        userId: String(user.id),
+        page: 1,
+        limit: 100,
+      });
+      const items = Array.isArray(data?.data) ? data.data.map(mapAppointmentToBooking) : [];
+      setBookings(items);
+    } catch {
+      setBookings(BOOKINGS);
+    }
+  };
+
+  useEffect(() => {
+    loadBookings();
+    const interval = setInterval(loadBookings, 15000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   const handleOpenBooking = (coach) => {
     setSelectedCoach(coach);
@@ -316,7 +393,7 @@ function UserCoaches() {
     setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const handleSubmitBooking = (event) => {
+  const handleSubmitBooking = async (event) => {
     event.preventDefault();
 
     const isDateAvailable = isDateWithinCoachSchedule(selectedCoach, bookingForm.date);
@@ -349,48 +426,54 @@ function UserCoaches() {
 
     setSlotError('');
 
-    const nextBookingPayload = {
-      coachName: selectedCoach?.name || '',
-      date: bookingForm.date,
-      fromTime: bookingForm.fromTime,
-      toTime: bookingForm.toTime,
-      time: toDisplayTime(bookingForm.fromTime),
-      appointmentType: bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online',
-      goal: bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing',
-      description: bookingForm.description,
-      medicalConditions: bookingForm.medicalConditions,
-      status: 'upcoming',
-      progressStatus: editingBookingId ? 'pending' : 'pending',
-    };
+    try {
+      const startsAt = new Date(`${bookingForm.date}T${bookingForm.fromTime}:00`);
+      const endsAt = new Date(`${bookingForm.date}T${bookingForm.toTime}:00`);
 
-    if (editingBookingId) {
-      setBookings((prev) => prev.map((item) => (
-        item.id === editingBookingId
-          ? { ...item, ...nextBookingPayload }
-          : item
-      )));
-    } else {
-      setBookings((prev) => [
-        {
-          id: `b${Date.now()}`,
-          ...nextBookingPayload,
-        },
-        ...prev,
-      ]);
+      const sessionTypeMap = {
+        inperson: 'training',
+        online: 'consultation',
+      };
+
+      const notes = [
+        `Coach: ${selectedCoach?.name || ''}`,
+        `Appointment Type: ${bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online'}`,
+        `Goal: ${bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing'}`,
+        bookingForm.description ? `Description: ${bookingForm.description}` : '',
+        bookingForm.medicalConditions ? `Medical: ${bookingForm.medicalConditions}` : '',
+        bookingForm.mobileNumber ? `Mobile: ${bookingForm.mobileNumber}` : '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      if (editingBookingId) {
+        await updateUserAppointment(editingBookingId, {
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          sessionType: sessionTypeMap[bookingForm.appointmentType] || 'consultation',
+          notes,
+        });
+      } else {
+        await bookCoachAppointment({
+          userId: String(user?.id || bookingForm.userEmail || bookingForm.userName || 'guest-user'),
+          coachId: String(selectedCoach?.id || selectedCoach?.name || 'unknown-coach'),
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          sessionType: sessionTypeMap[bookingForm.appointmentType] || 'consultation',
+          notes,
+        });
+      }
+
+      await loadBookings();
+      handleCloseBooking();
+      setToastState({
+        open: true,
+        message: editingBookingId ? 'Booking updated and saved to database' : 'Booking confirmed and saved to database',
+      });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to save booking. Please try again.';
+      setToastState({ open: true, message });
     }
-
-    // Placeholder until API integration is added in the next step.
-    console.log('Booking payload:', {
-      coachId: selectedCoach?.id,
-      coachName: selectedCoach?.name,
-      ...bookingForm,
-    });
-
-    handleCloseBooking();
-    setToastState({
-      open: true,
-      message: editingBookingId ? 'Booking updated successfully' : 'Booking confirmed successfully',
-    });
   };
 
   const handleCloseSuccess = (_, reason) => {
@@ -477,12 +560,15 @@ function UserCoaches() {
     setToastState({ open: true, message: 'Feedback submitted successfully' });
   };
 
-  const handleCancelBooking = (bookingId) => {
-    setBookings((prev) => prev.map((item) => (
-      item.id === bookingId
-        ? { ...item, progressStatus: 'cancelled' }
-        : item
-    )));
+  const handleCancelBooking = async (bookingId) => {
+    try {
+      await updateAppointmentStatus(bookingId, { status: 'cancelled' });
+      await loadBookings();
+      setToastState({ open: true, message: 'Booking cancelled successfully' });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to cancel booking. Please try again.';
+      setToastState({ open: true, message });
+    }
   };
 
   const filteredBookings = bookings.filter((booking) => booking.status === bookingView);
