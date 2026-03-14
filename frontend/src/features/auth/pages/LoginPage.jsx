@@ -12,6 +12,7 @@ import {
   Checkbox,
   FormControlLabel,
   Link,
+  useTheme,
 } from '@mui/material';
 import { motion } from 'framer-motion';
 import MailOutlineRoundedIcon from '@mui/icons-material/MailOutlineRounded';
@@ -53,11 +54,14 @@ function LoginPage() {
   const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ identifier: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState(location.state?.successMessage || '');
   const [loading, setLoading] = useState(false);
 
   // Already logged in — redirect to role home
@@ -76,10 +80,10 @@ function LoginPage() {
     setLoading(true);
     try {
       const loggedInUser = await login(form);
-      const from = location.state?.from || ROLE_HOME[loggedInUser.role];
+      const from = location.state?.from || (loggedInUser?.role === 'user' ? ROUTES.USER_DASHBOARD : ROLE_HOME[loggedInUser.role]);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || 'Invalid email or password.');
+      setError(err?.response?.data?.message || err?.message || 'Invalid username or password.');
     } finally {
       setLoading(false);
     }
@@ -89,7 +93,9 @@ function LoginPage() {
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(180deg, #eef5ff 0%, #f9fbff 72%, #ffffff 100%)',
+        background: isDark
+          ? 'linear-gradient(180deg, #06122a 0%, #081a39 72%, #091b3f 100%)'
+          : 'linear-gradient(180deg, #eef5ff 0%, #f9fbff 72%, #ffffff 100%)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -262,8 +268,11 @@ function LoginPage() {
               width: '100%',
               justifySelf: 'center',
               borderRadius: 4,
-              border: '1px solid #dbe7f5',
-              boxShadow: '0 30px 70px rgba(52, 85, 140, 0.16)',
+              border: `1px solid ${isDark ? '#27446f' : '#dbe7f5'}`,
+              bgcolor: isDark ? '#0f1f3f' : '#ffffff',
+              boxShadow: isDark
+                ? '0 30px 70px rgba(3, 9, 20, 0.58)'
+                : '0 30px 70px rgba(52, 85, 140, 0.16)',
               overflow: 'hidden',
             }}
           >
@@ -278,7 +287,7 @@ function LoginPage() {
                 component="h2"
                 sx={{
                   textAlign: 'center',
-                  color: '#0e1a2e',
+                  color: isDark ? '#eef4ff' : '#0e1a2e',
                   fontWeight: 800,
                   fontSize: { xs: '2rem', sm: '2.4rem' },
                   lineHeight: 1,
@@ -291,7 +300,7 @@ function LoginPage() {
                   mt: 1.25,
                   mb: 3,
                   textAlign: 'center',
-                  color: '#8793a7',
+                  color: isDark ? '#9eb3cf' : '#8793a7',
                   fontSize: '0.94rem',
                 }}
               >
@@ -303,19 +312,24 @@ function LoginPage() {
                   {error}
                 </Alert>
               )}
+              {successMessage && (
+                <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMessage('')}>
+                  {successMessage}
+                </Alert>
+              )}
 
               <Box component="form" onSubmit={handleSubmit} noValidate>
-                <Typography sx={{ mb: 1, color: '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
-                  Email Address
+                <Typography sx={{ mb: 1, color: isDark ? '#c8d6eb' : '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
+                  Username or Email
                 </Typography>
                 <TextField
-                  placeholder="name@example.com"
-                  name="email"
-                  type="email"
-                  value={form.email}
+                  placeholder="Enter username or email"
+                  name="identifier"
+                  type="text"
+                  value={form.identifier}
                   onChange={handleChange}
                   required
-                  autoComplete="email"
+                  autoComplete="username"
                   autoFocus
                   sx={{ mb: 2.2 }}
                   InputProps={{
@@ -328,7 +342,7 @@ function LoginPage() {
                 />
 
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                  <Typography sx={{ color: '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
+                  <Typography sx={{ color: isDark ? '#c8d6eb' : '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
                     Password
                   </Typography>
                   <Link
