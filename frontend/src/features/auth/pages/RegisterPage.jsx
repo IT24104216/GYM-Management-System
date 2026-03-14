@@ -169,11 +169,20 @@ function RegisterPage() {
             value={form.password}
             onChange={handleChange}
             required
-            sx={inputSx}
+            helperText="Use at least 8 characters with uppercase, lowercase, and a number."
+            FormHelperTextProps={{
+              sx: {
+                mt: 0.8,
+                mx: 0.4,
+                color: isDark ? '#9eb3cf' : '#6f7f95',
+                fontSize: '0.8rem',
+              },
+            }}
+            sx={{
+              ...inputSx,
+              mb: 2.6,
+            }}
           />
-          <Typography sx={{ mb: 1.6, mt: -1.2, fontSize: '0.8rem', color: isDark ? '#9eb3cf' : '#6f7f95' }}>
-            Use at least 8 characters with uppercase, lowercase, and a number.
-          </Typography>
           <TextField
             label="Confirm password"
             name="confirmPassword"
