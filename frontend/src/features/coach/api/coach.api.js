@@ -17,3 +17,9 @@ export const updateWorkoutPlan = (id, data) =>
 
 export const deleteWorkoutPlan = (id) =>
   axiosClient.delete(`/coach/workout-plans/${id}`);
+
+export const getCoachAppointments = (params) =>
+  axiosClient.get('/appointments', { params });
+
+export const updateCoachAppointmentStatus = (id, data) =>
+  axiosClient.patch(`/appointments/${id}/status`, data);
