@@ -137,11 +137,13 @@ function RegisterPage() {
           </Typography>
         </Box>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
+        <Box sx={{ minHeight: 64, mb: 1 }}>
+          {error && (
+            <Alert severity="error" sx={{ mb: 0 }}>
+              {error}
+            </Alert>
+          )}
+        </Box>
 
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <TextField
@@ -150,6 +152,7 @@ function RegisterPage() {
             value={form.name}
             onChange={handleChange}
             required
+            InputLabelProps={{ shrink: true }}
             sx={inputSx}
             autoFocus
           />
@@ -160,6 +163,7 @@ function RegisterPage() {
             value={form.email}
             onChange={handleChange}
             required
+            InputLabelProps={{ shrink: true }}
             sx={inputSx}
           />
           <TextField
@@ -169,6 +173,7 @@ function RegisterPage() {
             value={form.password}
             onChange={handleChange}
             required
+            InputLabelProps={{ shrink: true }}
             helperText="Use at least 8 characters with uppercase, lowercase, and a number."
             FormHelperTextProps={{
               sx: {
@@ -190,6 +195,7 @@ function RegisterPage() {
             value={form.confirmPassword}
             onChange={handleChange}
             required
+            InputLabelProps={{ shrink: true }}
             sx={{ ...inputSx, mb: 2.5 }}
           />
 
