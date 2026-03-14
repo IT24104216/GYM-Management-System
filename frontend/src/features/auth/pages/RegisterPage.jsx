@@ -7,18 +7,11 @@ import {
   Typography,
   Alert,
   Paper,
-  MenuItem,
   useTheme,
 } from '@mui/material';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { ROLE_HOME, ROLES, ROUTES } from '@/shared/utils/constants';
-
-const ROLE_OPTIONS = [
-  { value: ROLES.USER,      label: 'Member / User' },
-  { value: ROLES.COACH,     label: 'Coach' },
-  { value: ROLES.DIETITIAN, label: 'Dietitian' },
-];
+import { ROUTES } from '@/shared/utils/constants';
 
 function RegisterPage() {
   const { register } = useAuth();
@@ -31,7 +24,6 @@ function RegisterPage() {
     email: '',
     password: '',
     confirmPassword: '',
-    role: ROLES.USER,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -80,8 +72,11 @@ function RegisterPage() {
     setLoading(true);
     try {
       const { confirmPassword: _confirmPassword, ...payload } = form;
-      const newUser = await register(payload);
-      navigate(ROLE_HOME[newUser.role], { replace: true });
+      await register(payload);
+      navigate(ROUTES.LOGIN, {
+        replace: true,
+        state: { successMessage: 'Registration successful. Please sign in with your username and password.' },
+      });
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Registration failed. Please try again.');
     } finally {
@@ -157,21 +152,6 @@ function RegisterPage() {
             required
             sx={inputSx}
           />
-          <TextField
-            label="Role"
-            name="role"
-            select
-            value={form.role}
-            onChange={handleChange}
-            required
-            sx={inputSx}
-          >
-            {ROLE_OPTIONS.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </MenuItem>
-            ))}
-          </TextField>
           <TextField
             label="Password"
             name="password"
