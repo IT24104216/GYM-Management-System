@@ -78,7 +78,17 @@ function RegisterPage() {
         state: { successMessage: 'Registration successful. Please sign in with your username and password.' },
       });
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || 'Registration failed. Please try again.');
+      const apiError = err?.response?.data;
+      const fieldErrors = apiError?.details?.fieldErrors;
+      const firstFieldMessage = fieldErrors
+        ? Object.values(fieldErrors).flat().find(Boolean)
+        : '';
+      setError(
+        firstFieldMessage
+          || apiError?.message
+          || err?.message
+          || 'Registration failed. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
@@ -161,6 +171,9 @@ function RegisterPage() {
             required
             sx={inputSx}
           />
+          <Typography sx={{ mb: 1.6, mt: -1.2, fontSize: '0.8rem', color: isDark ? '#9eb3cf' : '#6f7f95' }}>
+            Use at least 8 characters with uppercase, lowercase, and a number.
+          </Typography>
           <TextField
             label="Confirm password"
             name="confirmPassword"
