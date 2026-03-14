@@ -5,8 +5,6 @@ import { getToken, getUser, setToken, setUser, clearAuth } from '@/shared/utils/
 
 const AuthContext = createContext(null);
 
-const USE_MOCK_AUTH = false;
-
 export function AuthProvider({ children }) {
   const [user, setUserState] = useState(null);
   const [token, setTokenState] = useState(null);
@@ -34,10 +32,9 @@ export function AuthProvider({ children }) {
 
   const register = async (formData) => {
     const { data } = await apiRegister(formData);
-    setToken(data.token);
-    setUser(data.user);
-    setTokenState(data.token);
-    setUserState(data.user);
+    clearAuth();
+    setTokenState(null);
+    setUserState(null);
     return data.user;
   };
 
