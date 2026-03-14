@@ -13,4 +13,13 @@ export const getWorkoutById = (id) =>
   axiosClient.get(`/user/workouts/${id}`);
 
 export const bookCoachAppointment = (data) =>
-  axiosClient.post('/user/appointments', data);
+  axiosClient.post('/appointments', data);
+
+export const getUserAppointments = (params) =>
+  axiosClient.get('/appointments', { params });
+
+export const updateAppointmentStatus = (id, data) =>
+  axiosClient.patch(`/appointments/${id}/status`, data);
+
+export const updateUserAppointment = (id, data) =>
+  axiosClient.patch(`/appointments/${id}`, data);
