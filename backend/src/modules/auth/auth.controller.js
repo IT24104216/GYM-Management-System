@@ -63,7 +63,7 @@ export const register = asyncHandler(async (req, res) => {
     name: payload.name,
     email: payload.email.toLowerCase(),
     passwordHash,
-    role: payload.role,
+    role: 'user',
     status: 'active',
   });
 
