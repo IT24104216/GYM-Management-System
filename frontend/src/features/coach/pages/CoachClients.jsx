@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Avatar,
@@ -7,6 +7,7 @@ import {
   Chip,
   MenuItem,
   Select,
+  Snackbar,
   Stack,
   Table,
   TableBody,
@@ -18,102 +19,41 @@ import {
   useTheme,
 } from '@mui/material';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { getCoachAppointments, updateCoachAppointmentStatus } from '@/features/coach/api/coach.api';
 
 const MotionBox = motion(Box);
 
-const INITIAL_APPOINTMENTS = [
-  {
-    id: 101,
-    name: 'Ryan Martinez',
-    age: 30,
-    goal: 'Weight Loss',
-    requestedAt: '2026-03-13 08:00 AM',
-    priority: 'Urgent',
-    avatar: 'RM',
-    gradient: 'linear-gradient(135deg, #EF4444, #DC2626)',
-    email: 'ryan.martinez@gympro.com',
-    phone: '+1 (555) 102-8812',
-    notes: 'Needs structured fat-loss block and accountability check-ins.',
-  },
-  {
-    id: 102,
-    name: 'Lisa Chen',
-    age: 27,
-    goal: 'Mobility',
-    requestedAt: '2026-03-13 11:00 AM',
-    priority: 'High',
-    avatar: 'LC',
-    gradient: 'linear-gradient(135deg, #F97316, #EF4444)',
-    email: 'lisa.chen@gympro.com',
-    phone: '+1 (555) 229-1147',
-    notes: 'Requests low-impact alternatives for knee-sensitive sessions.',
-  },
-  {
-    id: 103,
-    name: 'Tom Bradley',
-    age: 25,
-    goal: 'Strength',
-    requestedAt: '2026-03-14 02:00 PM',
-    priority: 'Normal',
-    avatar: 'TB',
-    gradient: 'linear-gradient(135deg, #3B82F6, #0D9488)',
-    email: 'tom.bradley@gympro.com',
-    phone: '+1 (555) 371-0092',
-    notes: 'Wants a beginner-friendly progressive overload routine.',
-  },
-  {
-    id: 104,
-    name: 'Priya Sharma',
-    age: 29,
-    goal: 'Body Recomp',
-    requestedAt: '2026-03-15 09:30 AM',
-    priority: 'Normal',
-    avatar: 'PS',
-    gradient: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
-    email: 'priya.sharma@gympro.com',
-    phone: '+1 (555) 488-3210',
-    notes: 'Prefers mixed strength + conditioning split.',
-  },
-];
+const PRIORITY_GRADIENT = {
+  Urgent: 'linear-gradient(135deg, #EF4444, #DC2626)',
+  High: 'linear-gradient(135deg, #F97316, #EF4444)',
+  Medium: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+  Normal: 'linear-gradient(135deg, #3B82F6, #0D9488)',
+  Low: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+};
 
-const INITIAL_MEMBERS = [
-  {
-    id: 1,
-    name: 'Mike Torres',
-    age: 28,
-    goal: 'Muscle Gain',
-    score: 92,
-    progress: 78,
-    lastActive: 'Today',
-    avatar: 'MT',
-    gradient: 'linear-gradient(135deg, #84CC16, #0D9488)',
-    status: 'Active',
-    email: 'mike.torres@gympro.com',
-    phone: '+1 (555) 802-9910',
-    preferredSlot: 'Mon, Wed, Fri - 8:00 AM',
-    trainingDays: 'Mon, Wed, Fri',
-    notes: 'Focus on hypertrophy and progressive overload.',
-    priority: 'High',
-  },
-  {
-    id: 2,
-    name: 'Emma Wilson',
-    age: 34,
-    goal: 'Weight Loss',
-    score: 85,
-    progress: 65,
-    lastActive: 'Today',
-    avatar: 'EW',
-    gradient: 'linear-gradient(135deg, #0D9488, #0284C7)',
-    status: 'Active',
-    email: 'emma.wilson@gympro.com',
-    phone: '+1 (555) 774-1020',
-    preferredSlot: 'Tue, Thu - 9:30 AM',
-    trainingDays: 'Tue, Thu',
-    notes: 'Weight management and nutrition adherence support.',
-    priority: 'Normal',
-  },
-];
+const getInitials = (name = '') => name
+  .split(' ')
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((part) => part[0]?.toUpperCase() || '')
+  .join('') || 'NA';
+
+const toDateTimeLabel = (rawDate) => {
+  if (!rawDate) return 'N/A';
+  const date = new Date(rawDate);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  const datePart = date.toISOString().split('T')[0];
+  const timePart = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `${datePart} ${timePart}`;
+};
+
+const getNoteValue = (notes, key) => {
+  if (!notes) return '';
+  const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+  const match = notes.match(pattern);
+  return match?.[1]?.trim() || '';
+};
 
 function CircularScore({ score, id, isDark }) {
   const r = 28;
@@ -152,46 +92,131 @@ function CircularScore({ score, id, isDark }) {
 
 function CoachClients() {
   const theme = useTheme();
+  const { user } = useAuth();
   const isDark = theme.palette.mode === 'dark';
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
   const panelBorder = isDark ? '#24344f' : '#e5e7eb';
   const muted = isDark ? '#94a3b8' : '#6b7280';
 
-  const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS);
-  const [members, setMembers] = useState(INITIAL_MEMBERS);
+  const [appointments, setAppointments] = useState([]);
+  const [priorityById, setPriorityById] = useState({});
   const [flippedMemberIds, setFlippedMemberIds] = useState({});
+  const [toast, setToast] = useState({ open: false, message: '' });
+
+  const mapAppointmentRow = (item) => {
+    const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
+    const priority = priorityById[item._id] || 'Normal';
+    return {
+      id: item._id,
+      userId: item.userId,
+      name,
+      age: '-',
+      goal: getNoteValue(item.notes, 'Goal') || item.sessionType || 'General',
+      requestedAt: toDateTimeLabel(item.startsAt),
+      priority,
+      avatar: getInitials(name),
+      gradient: PRIORITY_GRADIENT[priority] || PRIORITY_GRADIENT.Normal,
+      email: getNoteValue(item.notes, 'User Email') || '-',
+      phone: getNoteValue(item.notes, 'Mobile') || '-',
+      notes: getNoteValue(item.notes, 'Description') || item.notes || '-',
+      status: item.status,
+      startsAt: item.startsAt,
+      updatedAt: item.updatedAt,
+    };
+  };
+
+  const loadAppointments = async () => {
+    if (!user?.id) return;
+    try {
+      const { data } = await getCoachAppointments({
+        page: 1,
+        limit: 200,
+      });
+      const all = Array.isArray(data?.data) ? data.data : [];
+      const coachName = String(user?.name || '').trim().toLowerCase();
+      const mine = all.filter((item) => {
+        const byId = String(item.coachId) === String(user.id);
+        const noteCoach = getNoteValue(item.notes, 'Coach').toLowerCase();
+        const byName = coachName && noteCoach && noteCoach === coachName;
+        return byId || byName;
+      });
+
+      setAppointments(mine.length ? mine : all);
+    } catch (error) {
+      setAppointments([]);
+      const message = error?.response?.data?.message || 'Failed to load appointments';
+      setToast({ open: true, message });
+    }
+  };
+
+  useEffect(() => {
+    loadAppointments();
+    const interval = setInterval(loadAppointments, 15000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
+  const pendingRows = useMemo(
+    () => appointments.filter((item) => item.status === 'pending').map(mapAppointmentRow),
+    [appointments, priorityById],
+  );
+
+  const members = useMemo(() => {
+    const accepted = appointments.filter((item) => item.status === 'approved' || item.status === 'completed');
+    const byUser = new Map();
+
+    accepted.forEach((item) => {
+      const prev = byUser.get(item.userId);
+      if (!prev || new Date(item.updatedAt).getTime() > new Date(prev.updatedAt).getTime()) {
+        byUser.set(item.userId, item);
+      }
+    });
+
+    return Array.from(byUser.values()).map((item) => {
+      const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
+      const goal = getNoteValue(item.notes, 'Goal') || item.sessionType || 'General';
+      return {
+        id: item.userId,
+        name,
+        age: '-',
+        goal,
+        score: item.status === 'completed' ? 65 : 0,
+        progress: item.status === 'completed' ? 100 : 0,
+        lastActive: item.status === 'completed' ? 'Completed session' : 'Recently approved',
+        avatar: getInitials(name),
+        gradient: 'linear-gradient(135deg, #3B82F6, #0D9488)',
+        status: item.status === 'completed' ? 'Completed' : 'Active',
+        email: getNoteValue(item.notes, 'User Email') || '-',
+        phone: getNoteValue(item.notes, 'Mobile') || '-',
+        preferredSlot: toDateTimeLabel(item.startsAt),
+        trainingDays: 'To be scheduled',
+        notes: getNoteValue(item.notes, 'Description') || item.notes || '-',
+        priority: 'Normal',
+      };
+    });
+  }, [appointments]);
 
   const updatePriority = (id, priority) => {
-    setAppointments((prev) => prev.map((item) => (item.id === id ? { ...item, priority } : item)));
+    setPriorityById((prev) => ({ ...prev, [id]: priority }));
   };
 
-  const approveRequest = (request) => {
-    setAppointments((prev) => prev.filter((item) => item.id !== request.id));
-    setMembers((prev) => [
-      {
-        id: `new-${request.id}`,
-        name: request.name,
-        age: request.age,
-        goal: request.goal,
-        score: 0,
-        progress: 0,
-        lastActive: 'Just approved',
-        avatar: request.avatar,
-        gradient: request.gradient,
-        status: 'New Member',
-        email: request.email,
-        phone: request.phone,
-        preferredSlot: request.requestedAt,
-        trainingDays: 'Pending Schedule',
-        notes: request.notes || 'Approved from appointment queue.',
-        priority: request.priority,
-      },
-      ...prev,
-    ]);
+  const approveRequest = async (request) => {
+    try {
+      await updateCoachAppointmentStatus(request.id, { status: 'approved' });
+      await loadAppointments();
+      setToast({ open: true, message: 'Appointment approved' });
+    } catch (error) {
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to approve appointment' });
+    }
   };
 
-  const rejectRequest = (id) => {
-    setAppointments((prev) => prev.filter((item) => item.id !== id));
+  const rejectRequest = async (id) => {
+    try {
+      await updateCoachAppointmentStatus(id, { status: 'rejected' });
+      await loadAppointments();
+      setToast({ open: true, message: 'Appointment rejected' });
+    } catch (error) {
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to reject appointment' });
+    }
   };
 
   const toggleMemberCard = (id) => {
@@ -224,7 +249,7 @@ function CoachClients() {
       >
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.2 }}>
           <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1.05rem' }}>Appointments</Typography>
-          <Chip label={`${appointments.length} pending`} size="small" sx={{ fontWeight: 700 }} />
+          <Chip label={`${pendingRows.length} pending`} size="small" sx={{ fontWeight: 700 }} />
         </Stack>
 
         <TableContainer>
@@ -239,7 +264,7 @@ function CoachClients() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {!appointments.length && (
+              {!pendingRows.length && (
                 <TableRow>
                   <TableCell colSpan={5}>
                     <Typography sx={{ color: 'text.secondary', py: 1 }}>No pending requests.</Typography>
@@ -247,7 +272,7 @@ function CoachClients() {
                 </TableRow>
               )}
 
-              {appointments.map((row) => (
+              {pendingRows.map((row) => (
                 <TableRow key={row.id} hover>
                   <TableCell>
                     <Stack direction="row" spacing={1} alignItems="center">
@@ -430,6 +455,14 @@ function CoachClients() {
           </MotionBox>
         ))}
       </Box>
+
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={3000}
+        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+        message={toast.message}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      />
     </Box>
   );
 }
