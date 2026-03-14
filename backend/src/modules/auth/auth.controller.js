@@ -82,14 +82,21 @@ export const register = asyncHandler(async (req, res) => {
 export const login = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(loginSchema, req.body);
 
-  const user = await User.findOne({ email: payload.email.toLowerCase() });
+  const identifier = payload.identifier.trim();
+  const byEmail = identifier.toLowerCase();
+  const user = await User.findOne({
+    $or: [
+      { email: byEmail },
+      { name: { $regex: `^${identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+    ],
+  });
   if (!user) {
-    throw new AppError('Invalid email or password', HTTP_STATUS.UNAUTHORIZED);
+    throw new AppError('Invalid username or password', HTTP_STATUS.UNAUTHORIZED);
   }
 
   const isMatch = await bcrypt.compare(payload.password, user.passwordHash);
   if (!isMatch) {
-    throw new AppError('Invalid email or password', HTTP_STATUS.UNAUTHORIZED);
+    throw new AppError('Invalid username or password', HTTP_STATUS.UNAUTHORIZED);
   }
 
   if (user.status !== 'active') {
