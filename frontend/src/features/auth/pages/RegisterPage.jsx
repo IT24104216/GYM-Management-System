@@ -8,6 +8,7 @@ import {
   Alert,
   Paper,
   MenuItem,
+  useTheme,
 } from '@mui/material';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -22,6 +23,8 @@ const ROLE_OPTIONS = [
 function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
   const [form, setForm] = useState({
     name: '',
@@ -37,21 +40,28 @@ function RegisterPage() {
     mb: 2,
     '& .MuiOutlinedInput-root': {
       borderRadius: 3,
-      backgroundColor: '#f2f6fd',
+      backgroundColor: isDark ? '#172846' : '#f2f6fd',
+      color: isDark ? '#e2e8f0' : '#1f2a3a',
       '& fieldset': {
-        borderColor: '#d5dfed',
+        borderColor: isDark ? '#375278' : '#d5dfed',
       },
       '&:hover fieldset': {
-        borderColor: '#b8c9e0',
+        borderColor: isDark ? '#4f709f' : '#b8c9e0',
       },
       '&.Mui-focused fieldset': {
         borderColor: '#2b8eff',
         borderWidth: '1px',
       },
     },
+    '& .MuiSelect-icon': {
+      color: isDark ? '#d1deef' : '#66758c',
+    },
     '& .MuiInputLabel-root': {
-      color: '#66758c',
+      color: isDark ? '#9fb3d0' : '#66758c',
       fontWeight: 500,
+    },
+    '& .MuiInputLabel-root.Mui-focused': {
+      color: '#5ba8ff',
     },
   };
 
@@ -87,6 +97,7 @@ function RegisterPage() {
         alignItems: 'center',
         justifyContent: 'center',
         background: 'linear-gradient(180deg, #edf4ff 0%, #f8fbff 72%, #ffffff 100%)',
+        ...(isDark && { background: 'linear-gradient(180deg, #06122a 0%, #081a39 72%, #091b3f 100%)' }),
         p: 2,
       }}
     >
@@ -95,8 +106,11 @@ function RegisterPage() {
           width: '100%',
           maxWidth: 460,
           borderRadius: 4,
-          border: '1px solid #dbe7f5',
-          boxShadow: '0 30px 70px rgba(52, 85, 140, 0.16)',
+          border: `1px solid ${isDark ? '#27446f' : '#dbe7f5'}`,
+          bgcolor: isDark ? '#0f1f3f' : '#ffffff',
+          boxShadow: isDark
+            ? '0 30px 70px rgba(3, 9, 20, 0.58)'
+            : '0 30px 70px rgba(52, 85, 140, 0.16)',
           overflow: 'hidden',
         }}
       >
@@ -110,10 +124,10 @@ function RegisterPage() {
         {/* Brand */}
         <Box sx={{ textAlign: 'center', mb: 3.2 }}>
           <FitnessCenterIcon sx={{ fontSize: 36, color: '#2b8eff' }} />
-          <Typography sx={{ color: '#0e1a2e', fontSize: '2rem', fontWeight: 800, mt: 0.5 }}>
+          <Typography sx={{ color: isDark ? '#eef4ff' : '#0e1a2e', fontSize: '2rem', fontWeight: 800, mt: 0.5 }}>
             Create your account
           </Typography>
-          <Typography sx={{ color: '#8793a7', fontSize: '0.98rem', mt: 0.5 }}>
+          <Typography sx={{ color: isDark ? '#9eb3cf' : '#8793a7', fontSize: '0.98rem', mt: 0.5 }}>
             Join GymPro today
           </Typography>
         </Box>
@@ -203,7 +217,7 @@ function RegisterPage() {
 
           <Box sx={{ textAlign: 'center', mt: 3.4 }}>
             <Typography sx={{ color: '#7f8ba0', fontSize: '0.95rem' }}>
-            Already have an account?
+              Already have an account?
               {' '}
               <Box
                 component="button"
