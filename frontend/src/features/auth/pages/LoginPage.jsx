@@ -56,6 +56,13 @@ function LoginPage() {
   const location = useLocation();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const heroTitleColor = isDark ? '#eaf2ff' : '#0e1a2e';
+  const heroBodyColor = isDark ? '#b7c8df' : '#6b768a';
+  const featureCardBg = isDark ? '#13284a' : '#ffffff';
+  const featureCardBorder = isDark ? '#2d4770' : '#e8edf5';
+  const featureTitleColor = isDark ? '#ecf3ff' : '#1c2738';
+  const featureSubtitleColor = isDark ? '#a8bdd8' : '#6c7688';
+  const communityTextColor = isDark ? '#9eb5d3' : '#5f6e83';
 
   const [form, setForm] = useState({ identifier: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
@@ -146,7 +153,7 @@ function LoginPage() {
                 fontSize: { xs: '2rem', sm: '2.5rem', md: '3.35rem' },
                 lineHeight: 1.05,
                 fontWeight: 800,
-                color: '#0e1a2e',
+                color: heroTitleColor,
                 maxWidth: 520,
                 mb: 2,
               }}
@@ -159,7 +166,7 @@ function LoginPage() {
             </Typography>
             <Typography
               sx={{
-                color: '#6b768a',
+                color: heroBodyColor,
                 fontSize: { xs: '1rem', md: '1.1rem' },
                 maxWidth: 510,
                 lineHeight: 1.6,
@@ -189,8 +196,8 @@ function LoginPage() {
                     sx={{
                       p: 2,
                       borderRadius: 2.5,
-                      border: '1px solid #e8edf5',
-                      backgroundColor: '#ffffff',
+                      border: `1px solid ${featureCardBorder}`,
+                      backgroundColor: featureCardBg,
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: 1.3,
@@ -212,10 +219,10 @@ function LoginPage() {
                       <Icon sx={{ fontSize: 17 }} />
                     </Box>
                     <Box>
-                      <Typography sx={{ fontWeight: 700, color: '#1c2738', fontSize: '1rem' }}>
+                      <Typography sx={{ fontWeight: 700, color: featureTitleColor, fontSize: '1rem' }}>
                         {card.title}
                       </Typography>
-                      <Typography sx={{ fontSize: '0.85rem', color: '#6c7688' }}>
+                      <Typography sx={{ fontSize: '0.85rem', color: featureSubtitleColor }}>
                         {card.subtitle}
                       </Typography>
                     </Box>
@@ -253,7 +260,7 @@ function LoginPage() {
                   </Box>
                 ))}
               </Box>
-              <Typography sx={{ color: '#5f6e83', fontSize: '0.96rem' }}>
+              <Typography sx={{ color: communityTextColor, fontSize: '0.96rem' }}>
                 +2k Join our active community
               </Typography>
             </MotionBox>
@@ -474,8 +481,8 @@ function LoginPage() {
 
       <Box
         sx={{
-          borderTop: '1px solid #e9eef6',
-          backgroundColor: '#ffffff',
+          borderTop: `1px solid ${isDark ? '#1d355a' : '#e9eef6'}`,
+          backgroundColor: isDark ? '#0b1b38' : '#ffffff',
           py: 1.6,
           px: { xs: 2, md: 4 },
         }}
@@ -491,26 +498,26 @@ function LoginPage() {
             gridTemplateColumns: { xs: '1fr', md: '1fr auto 1fr' },
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#7c8799' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: isDark ? '#a9bbd3' : '#7c8799' }}>
             <FitnessCenterIcon sx={{ fontSize: 18 }} />
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>Muscle Lab</Typography>
           </Box>
           <Typography
             sx={{
               justifySelf: 'center',
-              color: '#97a2b4',
+              color: isDark ? '#98adc9' : '#97a2b4',
               fontSize: '0.9rem',
               textAlign: 'center',
             }}
           >
             {new Date().getFullYear()} FitPulse Gym. All rights reserved.
           </Typography>
-          <Box
+            <Box
             sx={{
               justifySelf: { xs: 'center', md: 'end' },
               display: 'flex',
               gap: 1.1,
-              color: '#9aa5b6',
+              color: isDark ? '#9db0cc' : '#9aa5b6',
             }}
           >
             <InstagramIcon sx={{ fontSize: 20 }} />
