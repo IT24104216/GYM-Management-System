@@ -437,6 +437,8 @@ function UserCoaches() {
 
       const notes = [
         `Coach: ${selectedCoach?.name || ''}`,
+        `User Name: ${bookingForm.userName || user?.name || ''}`,
+        `User Email: ${bookingForm.userEmail || user?.email || ''}`,
         `Appointment Type: ${bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online'}`,
         `Goal: ${bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing'}`,
         bookingForm.description ? `Description: ${bookingForm.description}` : '',
