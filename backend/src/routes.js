@@ -1,0 +1,26 @@
+import { Router } from 'express';
+import { healthRouter } from './modules/health/health.routes.js';
+import { authRouter } from './modules/auth/auth.routes.js';
+import { usersRouter } from './modules/users/users.routes.js';
+import { adminRouter } from './modules/admin/admin.routes.js';
+import { coachRouter } from './modules/coach/coach.routes.js';
+import { dietitianRouter } from './modules/dietitian/dietitian.routes.js';
+import { appointmentsRouter } from './modules/appointments/appointments.routes.js';
+import { notificationsRouter } from './modules/notifications/notifications.routes.js';
+import { workoutsRouter } from './modules/workouts/workouts.routes.js';
+import { mealPlansRouter } from './modules/mealPlans/mealPlans.routes.js';
+
+const router = Router();
+
+router.use('/health', healthRouter);
+router.use('/auth', authRouter);
+router.use('/users', usersRouter);
+router.use('/admin', adminRouter);
+router.use('/coach', coachRouter);
+router.use('/dietitian', dietitianRouter);
+router.use('/appointments', appointmentsRouter);
+router.use('/notifications', notificationsRouter);
+router.use('/workouts', workoutsRouter);
+router.use('/meal-plans', mealPlansRouter);
+
+export { router as apiRouter };
