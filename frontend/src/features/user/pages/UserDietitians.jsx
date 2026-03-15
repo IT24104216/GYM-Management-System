@@ -25,9 +25,16 @@ import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import RestaurantMenuRoundedIcon from '@mui/icons-material/RestaurantMenuRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  bookDietitianAppointment,
+  getPublicDietitians,
+  getUserAppointments,
+  updateAppointmentStatus,
+  updateUserAppointment,
+} from '@/features/user/api/user.api';
 import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
@@ -83,56 +90,11 @@ const DIETITIANS = [
   },
 ];
 
-const BOOKINGS = [
-  {
-    id: 'db1',
-    dietitianName: 'Olivia Martin',
-    date: '2026-03-08',
-    fromTime: '09:00',
-    toTime: '10:00',
-    appointmentType: 'In-person',
-    goal: 'Meal Planning',
-    status: 'upcoming',
-    progressStatus: 'confirmed',
-  },
-  {
-    id: 'db2',
-    dietitianName: 'Daniel Perera',
-    date: '2026-03-19',
-    fromTime: '16:00',
-    toTime: '17:00',
-    appointmentType: 'Online',
-    goal: 'Health Consultation',
-    status: 'upcoming',
-    progressStatus: 'pending',
-  },
-  {
-    id: 'db3',
-    dietitianName: 'Ayesha Fernando',
-    date: '2026-02-21',
-    fromTime: '10:00',
-    toTime: '11:00',
-    appointmentType: 'In-person',
-    goal: 'Meal Planning',
-    status: 'past',
-    progressStatus: 'completed',
-  },
-  {
-    id: 'db4',
-    dietitianName: 'Michael Silva',
-    date: '2026-02-14',
-    fromTime: '17:00',
-    toTime: '18:00',
-    appointmentType: 'Online',
-    goal: 'Health Consultation',
-    status: 'past',
-    progressStatus: 'cancelled',
-  },
-];
+const BOOKINGS = [];
 
-const buildInitialDietitianStats = () => {
+const buildInitialDietitianStats = (dietitians = []) => {
   const stats = {};
-  DIETITIANS.forEach((dietitian) => {
+  dietitians.forEach((dietitian) => {
     stats[dietitian.id] = { average: dietitian.rating, count: 0 };
   });
   return stats;
@@ -195,16 +157,28 @@ const toDisplayTime = (time24h) => {
   return `${String(h12).padStart(2, '0')}:${String(mRaw).padStart(2, '0')} ${meridiem}`;
 };
 
-const getDietitianSlotRange = (dietitian) => {
+const getDietitianSlotRanges = (dietitian) => {
+  if (Array.isArray(dietitian?.slotRanges) && dietitian.slotRanges.length > 0) {
+    return dietitian.slotRanges.map((range) => ({
+      start: normalizeTimeTo24h(range?.startTime),
+      end: normalizeTimeTo24h(range?.endTime),
+    }));
+  }
   const slotPart = dietitian?.slots?.split(',')?.[1]?.trim() || '';
   const [startRaw, endRaw] = slotPart.split('-').map((t) => t.trim());
-  return {
+  const fallbackRange = {
     start: normalizeTimeTo24h(startRaw),
     end: normalizeTimeTo24h(endRaw),
   };
+  if (!fallbackRange.start || !fallbackRange.end) return [];
+  return [fallbackRange];
 };
 
 const isDateWithinDietitianSchedule = (dietitian, dateValue) => {
+  if (dietitian?.slotDate) {
+    return dateValue === dietitian.slotDate;
+  }
+
   if (!dietitian?.slots || !dateValue) return false;
 
   const dayPart = dietitian.slots.split(',')?.[0]?.trim() || '';
@@ -222,11 +196,30 @@ const isDateWithinDietitianSchedule = (dietitian, dateValue) => {
   return selectedDay >= fromIndex || selectedDay <= toIndex;
 };
 
+const isWithinAnyDietitianRange = (ranges, fromMinutes, toMinutes) =>
+  ranges.some((range) => {
+    const slotStart = toMinuteValue(range.start);
+    const slotEnd = toMinuteValue(range.end);
+    return (
+      !Number.isNaN(slotStart)
+      && !Number.isNaN(slotEnd)
+      && fromMinutes >= slotStart
+      && toMinutes <= slotEnd
+    );
+  });
+
 const isBookingCompletedByTime = (booking) => {
   if (!booking?.date || !booking?.toTime) return false;
   const bookingEnd = new Date(`${booking.date}T${booking.toTime}:00`);
   if (Number.isNaN(bookingEnd.getTime())) return false;
   return Date.now() >= bookingEnd.getTime();
+};
+
+const getNoteValue = (notes, key) => {
+  if (!notes) return '';
+  const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+  const match = notes.match(pattern);
+  return match?.[1]?.trim() || '';
 };
 
 function UserDietitians() {
@@ -239,7 +232,8 @@ function UserDietitians() {
   const [selectedDietitian, setSelectedDietitian] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
   const [bookings, setBookings] = useState(BOOKINGS);
-  const [dietitianStats, setDietitianStats] = useState(buildInitialDietitianStats);
+  const [dietitians, setDietitians] = useState([]);
+  const [dietitianStats, setDietitianStats] = useState({});
   const [editingBookingId, setEditingBookingId] = useState(null);
   const [availabilityError, setAvailabilityError] = useState('');
   const [toastState, setToastState] = useState({ open: false, message: '' });
@@ -262,13 +256,94 @@ function UserDietitians() {
     medicalConditions: '',
   });
 
+  const loadDietitians = async () => {
+    try {
+      const { data } = await getPublicDietitians();
+      const items = Array.isArray(data?.data) ? data.data : [];
+      setDietitians(items);
+      setDietitianStats(buildInitialDietitianStats(items));
+    } catch {
+      setDietitians(DIETITIANS);
+      setDietitianStats(buildInitialDietitianStats(DIETITIANS));
+    }
+  };
+
+  const mapAppointmentToBooking = (item) => {
+    const startsAt = new Date(item.startsAt);
+    const endsAt = new Date(item.endsAt);
+    const date = Number.isNaN(startsAt.getTime())
+      ? getTodayDate()
+      : startsAt.toISOString().split('T')[0];
+    const fromTime = Number.isNaN(startsAt.getTime())
+      ? ''
+      : `${String(startsAt.getHours()).padStart(2, '0')}:${String(startsAt.getMinutes()).padStart(2, '0')}`;
+    const toTime = Number.isNaN(endsAt.getTime())
+      ? ''
+      : `${String(endsAt.getHours()).padStart(2, '0')}:${String(endsAt.getMinutes()).padStart(2, '0')}`;
+
+    const dietitian = dietitians.find((row) => String(row.id) === String(item.coachId));
+    const statusMap = {
+      pending: 'pending',
+      approved: 'confirmed',
+      completed: 'completed',
+      cancelled: 'cancelled',
+      rejected: 'cancelled',
+    };
+    const progressStatus = statusMap[item.status] || 'pending';
+    const status = endsAt.getTime() < Date.now() || progressStatus === 'completed' ? 'past' : 'upcoming';
+
+    return {
+      id: item._id,
+      dietitianId: item.coachId,
+      dietitianName: dietitian?.name || getNoteValue(item.notes, 'Dietitian') || String(item.coachId),
+      date,
+      fromTime,
+      toTime,
+      appointmentType: getNoteValue(item.notes, 'Appointment Type') || 'In-person',
+      goal: getNoteValue(item.notes, 'Goal') || 'Meal Planning',
+      description: getNoteValue(item.notes, 'Description') || '',
+      medicalConditions: getNoteValue(item.notes, 'Medical') || '',
+      status,
+      progressStatus,
+      rawStatus: item.status,
+    };
+  };
+
+  const loadBookings = async () => {
+    if (!user?.id) return;
+    try {
+      const { data } = await getUserAppointments({
+        userId: String(user.id),
+        sessionType: 'nutrition',
+        page: 1,
+        limit: 100,
+      });
+      const items = Array.isArray(data?.data) ? data.data.map(mapAppointmentToBooking) : [];
+      setBookings(items);
+    } catch {
+      setBookings(BOOKINGS);
+    }
+  };
+
+  useEffect(() => {
+    loadDietitians();
+    const interval = setInterval(loadDietitians, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    loadBookings();
+    const interval = setInterval(loadBookings, 15000);
+    return () => clearInterval(interval);
+  }, [user?.id, dietitians]);
+
   const handleOpenBooking = (dietitian) => {
     setSelectedDietitian(dietitian);
     setBookingForm({
       userName: user?.name || '',
       userEmail: user?.email || '',
       mobileNumber: user?.mobileNumber || user?.mobile || user?.phone || '',
-      date: getTodayDate(),
+      date: dietitian?.slotDate || getTodayDate(),
       fromTime: '',
       toTime: '',
       appointmentType: '',
@@ -282,7 +357,9 @@ function UserDietitians() {
   };
 
   const handleEditBooking = (booking) => {
-    const dietitian = DIETITIANS.find((item) => item.name === booking.dietitianName) || null;
+    const dietitian = dietitians.find((item) => String(item.id) === String(booking.dietitianId))
+      || dietitians.find((item) => item.name === booking.dietitianName)
+      || null;
     setSelectedDietitian(dietitian);
     setBookingForm({
       userName: user?.name || '',
@@ -312,7 +389,7 @@ function UserDietitians() {
     setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const handleSubmitBooking = (event) => {
+  const handleSubmitBooking = async (event) => {
     event.preventDefault();
 
     const isDateAvailable = isDateWithinDietitianSchedule(selectedDietitian, bookingForm.date);
@@ -328,54 +405,70 @@ function UserDietitians() {
       return;
     }
 
-    const selectedRange = getDietitianSlotRange(selectedDietitian);
-    const slotStart = toMinuteValue(selectedRange.start);
-    const slotEnd = toMinuteValue(selectedRange.end);
-    const isWithinSlot = (
-      !Number.isNaN(slotStart)
-      && !Number.isNaN(slotEnd)
-      && fromMinutes >= slotStart
-      && toMinutes <= slotEnd
-    );
+    const selectedRanges = getDietitianSlotRanges(selectedDietitian);
+    const isWithinSlot = isWithinAnyDietitianRange(selectedRanges, fromMinutes, toMinutes);
 
     if (!isWithinSlot) {
       setAvailabilityError('Unavailable at selected time. Please choose another available time slot.');
       return;
     }
 
-    const nextPayload = {
-      dietitianName: selectedDietitian?.name || '',
-      date: bookingForm.date,
-      fromTime: bookingForm.fromTime,
-      toTime: bookingForm.toTime,
-      appointmentType: bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online',
-      goal: bookingForm.goal === 'health-consultation' ? 'Health Consultation' : 'Meal Planning',
-      description: bookingForm.description,
-      medicalConditions: bookingForm.medicalConditions,
-      status: 'upcoming',
-      progressStatus: 'pending',
-    };
+    try {
+      const startsAt = new Date(`${bookingForm.date}T${bookingForm.fromTime}:00`);
+      const endsAt = new Date(`${bookingForm.date}T${bookingForm.toTime}:00`);
+      const notes = [
+        `Dietitian: ${selectedDietitian?.name || ''}`,
+        `User Name: ${bookingForm.userName || user?.name || ''}`,
+        `User Email: ${bookingForm.userEmail || user?.email || ''}`,
+        `Appointment Type: ${bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online'}`,
+        `Goal: ${bookingForm.goal === 'health-consultation' ? 'Health Consultation' : 'Meal Planning'}`,
+        bookingForm.description ? `Description: ${bookingForm.description}` : '',
+        bookingForm.medicalConditions ? `Medical: ${bookingForm.medicalConditions}` : '',
+        bookingForm.mobileNumber ? `Mobile: ${bookingForm.mobileNumber}` : '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
 
-    if (editingBookingId) {
-      setBookings((prev) => prev.map((item) => (
-        item.id === editingBookingId ? { ...item, ...nextPayload } : item
-      )));
-    } else {
-      setBookings((prev) => [{ id: `db${Date.now()}`, ...nextPayload }, ...prev]);
+      if (editingBookingId) {
+        await updateUserAppointment(editingBookingId, {
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          sessionType: 'nutrition',
+          notes,
+        });
+      } else {
+        await bookDietitianAppointment({
+          userId: String(user?.id || bookingForm.userEmail || bookingForm.userName || 'guest-user'),
+          coachId: String(selectedDietitian?.id || selectedDietitian?.name || 'unknown-dietitian'),
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          sessionType: 'nutrition',
+          notes,
+        });
+      }
+
+      await loadBookings();
+      setAvailabilityError('');
+      handleCloseBooking();
+      setToastState({
+        open: true,
+        message: editingBookingId ? 'Dietitian booking updated successfully' : 'Dietitian appointment booked successfully',
+      });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to save booking. Please try again.';
+      setToastState({ open: true, message });
     }
-
-    setAvailabilityError('');
-    handleCloseBooking();
-    setToastState({
-      open: true,
-      message: editingBookingId ? 'Dietitian booking updated successfully' : 'Dietitian appointment booked successfully',
-    });
   };
 
-  const handleCancelBooking = (bookingId) => {
-    setBookings((prev) => prev.map((item) => (
-      item.id === bookingId ? { ...item, progressStatus: 'cancelled' } : item
-    )));
+  const handleCancelBooking = async (bookingId) => {
+    try {
+      await updateAppointmentStatus(bookingId, { status: 'cancelled' });
+      await loadBookings();
+      setToastState({ open: true, message: 'Dietitian booking cancelled successfully' });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to cancel booking. Please try again.';
+      setToastState({ open: true, message });
+    }
   };
 
   const handleOpenFeedback = (booking) => {
@@ -425,7 +518,7 @@ function UserDietitians() {
       }),
     );
 
-    const targetDietitian = DIETITIANS.find((item) => item.name === feedbackTarget?.dietitianName);
+    const targetDietitian = dietitians.find((item) => item.name === feedbackTarget?.dietitianName);
     if (targetDietitian) {
       setDietitianStats((prev) => {
         const current = prev[targetDietitian.id] || { average: targetDietitian.rating, count: 0 };
@@ -485,7 +578,7 @@ function UserDietitians() {
             gap: 3,
           }}
         >
-          {DIETITIANS.map((dietitian, index) => {
+          {dietitians.map((dietitian, index) => {
             const dietitianStat = dietitianStats[dietitian.id] || { average: dietitian.rating, count: 0 };
 
             return (
@@ -1036,3 +1129,4 @@ function UserDietitians() {
 }
 
 export default UserDietitians;
+
