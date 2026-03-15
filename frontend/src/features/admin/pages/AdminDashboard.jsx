@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Avatar,
@@ -20,6 +20,7 @@ import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
+import { getAllUsers, getPlatformStats } from '@/features/admin/api/admin.api';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
@@ -79,14 +80,6 @@ const stats = [
   },
 ];
 
-const users = [
-  { id: 1, name: 'Alex Johnson', email: 'alex@example.com', role: 'Member', status: 'Active', joined: 'Jan 15, 2025', avatar: 'AJ' },
-  { id: 2, name: 'Coach Marcus', email: 'marcus@example.com', role: 'Coach', status: 'Active', joined: 'Mar 2, 2024', avatar: 'CM' },
-  { id: 3, name: 'Dr. Sarah Mitchell', email: 'sarah@example.com', role: 'Dietician', status: 'Active', joined: 'Feb 10, 2024', avatar: 'SM' },
-  { id: 4, name: 'Tom Bradley', email: 'tom@example.com', role: 'Member', status: 'Inactive', joined: 'Nov 5, 2024', avatar: 'TB' },
-  { id: 5, name: 'Lisa Chen', email: 'lisa@example.com', role: 'Coach', status: 'Active', joined: 'Apr 18, 2024', avatar: 'LC' },
-];
-
 const roleStyles = {
   Member: { bg: 'rgba(132, 204, 22, 0.14)', color: '#65A30D' },
   Coach: { bg: 'rgba(13, 148, 136, 0.14)', color: '#0F766E' },
@@ -100,18 +93,47 @@ const statusStyles = {
   Suspended: { color: '#EF4444', dot: '#EF4444' },
 };
 
+const filterToRole = {
+  Members: 'Member',
+  Coaches: 'Coach',
+  Dieticians: 'Dietician',
+  Admins: 'Admin',
+};
+
 function AdminDashboard() {
+  const [users, setUsers] = useState([]);
+  const [statsData, setStatsData] = useState(null);
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
 
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [statsResponse, usersResponse] = await Promise.all([
+          getPlatformStats(),
+          getAllUsers(),
+        ]);
+
+        setStatsData(statsResponse?.data?.data || null);
+        const userRows = Array.isArray(usersResponse?.data?.data) ? usersResponse.data.data : [];
+        setUsers(userRows);
+      } catch {
+        setStatsData(null);
+        setUsers([]);
+      }
+    };
+
+    loadData();
+  }, []);
+
   const filteredUsers = useMemo(() => users.filter((user) => {
-    const roleMatch = filter === 'All' ? true : user.role === filter.slice(0, -1);
+    const roleMatch = filter === 'All' ? true : user.role === filterToRole[filter];
     const query = search.trim().toLowerCase();
     const searchMatch = !query
       || user.name.toLowerCase().includes(query)
       || user.email.toLowerCase().includes(query);
     return roleMatch && searchMatch;
-  }), [filter, search]);
+  }), [users, filter, search]);
 
   const filters = ['All', 'Members', 'Coaches', 'Dieticians', 'Admins'];
 
@@ -132,6 +154,14 @@ function AdminDashboard() {
       >
         {stats.map((item) => {
           const Icon = item.icon;
+          const liveValue = statsData
+            ? {
+              users: statsData.total,
+              coaches: statsData.activeCoaches,
+              mealPlans: statsData.mealPlans,
+              reviews: statsData.pendingReviews,
+            }[item.key]
+            : item.value;
           return (
             <MotionCard
               key={item.key}
@@ -164,7 +194,7 @@ function AdminDashboard() {
                   )}
                 </Stack>
 
-                <Typography sx={{ fontWeight: 900, fontSize: '2.05rem', lineHeight: 1.05 }}>{item.value}</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '2.05rem', lineHeight: 1.05 }}>{liveValue}</Typography>
                 <Typography sx={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.9)', mt: 0.3 }}>{item.label}</Typography>
                 <Typography sx={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.82)', mt: 0.45 }}>{item.change}</Typography>
               </CardContent>
@@ -224,7 +254,7 @@ function AdminDashboard() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredUsers.map((user, index) => {
+              {filteredUsers.slice(0, 5).map((user, index) => {
                 const role = roleStyles[user.role] || roleStyles.Member;
                 const status = statusStyles[user.status] || statusStyles.Inactive;
 

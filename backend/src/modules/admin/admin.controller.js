@@ -1,4 +1,6 @@
 import { User } from '../users/users.model.js';
+import mongoose from 'mongoose';
+import { Appointment } from '../appointments/appointments.model.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
@@ -145,12 +147,24 @@ export const deleteUser = asyncHandler(async (req, res) => {
 });
 
 export const getAdminStats = asyncHandler(async (_req, res) => {
-  const [total, staff, diet, verified] = await Promise.all([
+  const [total, staff, diet, verified, activeCoaches, pendingReviews] = await Promise.all([
     User.countDocuments({}),
     User.countDocuments({ role: { $in: ['coach', 'admin'] } }),
     User.countDocuments({ role: 'dietitian' }),
     User.countDocuments({ status: 'active' }),
+    User.countDocuments({ role: 'coach', status: 'active' }),
+    Appointment.countDocuments({ status: 'pending' }),
   ]);
+
+  let mealPlans = 0;
+  const db = mongoose.connection?.db;
+  if (db) {
+    try {
+      mealPlans = await db.collection('mealplans').countDocuments();
+    } catch {
+      mealPlans = 0;
+    }
+  }
 
   res.status(HTTP_STATUS.OK).json({
     data: {
@@ -158,6 +172,9 @@ export const getAdminStats = asyncHandler(async (_req, res) => {
       staff,
       diet,
       verified,
+      activeCoaches,
+      mealPlans,
+      pendingReviews,
     },
   });
 });
