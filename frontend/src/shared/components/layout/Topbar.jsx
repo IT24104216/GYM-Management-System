@@ -30,12 +30,16 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useAppTheme } from '@/shared/hooks/useAppTheme';
 import { ROUTES, ROLES } from '@/shared/utils/constants';
+import {
+  deleteCoachProfile as deleteCoachProfileApi,
+  getCoachProfile as getCoachProfileApi,
+  upsertCoachProfile as upsertCoachProfileApi,
+} from '@/features/coach/api/coach.api';
 import NotificationsDrawer from './NotificationsDrawer';
 
 const DRAWER_WIDTH = 240;
 const DIETITIAN_PROFILE_STORAGE_KEY = 'dietitian.profile.v1';
 const USER_PROFILE_STORAGE_KEY = 'user.profile.v1';
-const COACH_PROFILE_STORAGE_KEY = 'coach.profile.v1';
 
 const defaultDietitianProfile = {
   qualifications: '',
@@ -173,7 +177,6 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const isMemberUser = user?.role === ROLES.USER;
   const isCoach = user?.role === ROLES.COACH;
   const userProfileStorageKey = `${USER_PROFILE_STORAGE_KEY}.${user?.id || 'guest'}`;
-  const coachProfileStorageKey = `${COACH_PROFILE_STORAGE_KEY}.${user?.id || 'guest'}`;
 
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -201,11 +204,13 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     setUserProfileDetailsOpen(true);
   };
 
-  const openCoachProfile = () => {
+  const openCoachProfile = async () => {
     handleMenuClose();
     try {
-      const saved = localStorage.getItem(coachProfileStorageKey);
-      const parsed = saved ? { ...defaultCoachProfile, ...JSON.parse(saved) } : defaultCoachProfile;
+      const { data } = await getCoachProfileApi(String(user?.id || ''));
+      const parsed = data?.data?.profile
+        ? { ...defaultCoachProfile, ...data.data.profile, experienceYears: String(data.data.profile.experienceYears ?? '') }
+        : defaultCoachProfile;
       setCoachProfile(parsed);
     } catch {
       setCoachProfile(defaultCoachProfile);
@@ -285,19 +290,34 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     setCoachProfileFormOpen(false);
   };
 
-  const saveCoachProfile = () => {
-    setCoachProfile(editCoachProfile);
-    localStorage.setItem(coachProfileStorageKey, JSON.stringify(editCoachProfile));
-    setCoachProfileFormOpen(false);
-    setCoachProfileDetailsOpen(true);
-    setCoachFeedbackOpen(true);
+  const saveCoachProfile = async () => {
+    try {
+      const payload = {
+        ...editCoachProfile,
+        experienceYears: Number(editCoachProfile.experienceYears || 0),
+      };
+      const { data } = await upsertCoachProfileApi(String(user?.id || ''), payload);
+      const savedProfile = data?.data?.profile
+        ? { ...defaultCoachProfile, ...data.data.profile, experienceYears: String(data.data.profile.experienceYears ?? '') }
+        : editCoachProfile;
+      setCoachProfile(savedProfile);
+      setCoachProfileFormOpen(false);
+      setCoachProfileDetailsOpen(true);
+      setCoachFeedbackOpen(true);
+    } catch {
+      // keep existing UI behavior; fail silently like current dialogs
+    }
   };
 
-  const deleteCoachProfile = () => {
-    setCoachProfile(defaultCoachProfile);
-    setEditCoachProfile(defaultCoachProfile);
-    localStorage.removeItem(coachProfileStorageKey);
-    setCoachDeleteFeedbackOpen(true);
+  const deleteCoachProfile = async () => {
+    try {
+      await deleteCoachProfileApi(String(user?.id || ''));
+      setCoachProfile(defaultCoachProfile);
+      setEditCoachProfile(defaultCoachProfile);
+      setCoachDeleteFeedbackOpen(true);
+    } catch {
+      // keep existing UI behavior; fail silently like current dialogs
+    }
   };
 
   const unreadNotifications = notifications.filter((item) => !item.read).length;
