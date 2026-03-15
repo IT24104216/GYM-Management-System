@@ -39,6 +39,9 @@ export const appointmentQuerySchema = z.object({
   status: z
     .enum(['pending', 'approved', 'rejected', 'cancelled', 'completed'])
     .optional(),
+  sessionType: z
+    .enum(['consultation', 'training', 'assessment', 'nutrition', 'other'])
+    .optional(),
   date: z
     .string()
     .trim()
