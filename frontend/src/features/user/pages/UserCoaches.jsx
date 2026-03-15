@@ -30,6 +30,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
   bookCoachAppointment,
+  getPublicCoaches,
   getUserAppointments,
   updateAppointmentStatus,
   updateUserAppointment,
@@ -37,57 +38,6 @@ import {
 import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
-
-const COACHES = [
-  {
-    id: 'c1',
-    name: 'Emma Carter',
-    specialty: 'Strength and Conditioning',
-    experience: '8 years',
-    rating: 4.9,
-    slots: 'Mon - Fri, 6:00 AM - 10:00 AM',
-    qualification: 'BSc Sports Science',
-    certificates: 'NASM-CPT, TRX Certified',
-    avatar: 'EC',
-    tags: ['Fat Loss', 'Strength', 'Mobility'],
-  },
-  {
-    id: 'c2',
-    name: 'Noah Bennett',
-    specialty: 'Functional Training',
-    experience: '6 years',
-    rating: 4.8,
-    slots: 'Mon - Sat, 5:00 PM - 9:00 PM',
-    qualification: 'BSc Exercise Physiology',
-    certificates: 'ACE-CPT, Kettlebell L1',
-    avatar: 'NB',
-    tags: ['Athletic', 'Core', 'Endurance'],
-  },
-  {
-    id: 'c3',
-    name: 'Sophia Reed',
-    specialty: 'Beginner Transformation',
-    experience: '5 years',
-    rating: 4.7,
-    slots: 'Tue - Sun, 7:00 AM - 1:00 PM',
-    qualification: 'Diploma in Fitness Coaching',
-    certificates: 'ISSA CPT, Mobility Coach',
-    avatar: 'SR',
-    tags: ['Beginner', 'Weight Training', 'Form'],
-  },
-  {
-    id: 'c4',
-    name: 'Liam Hayes',
-    specialty: 'Power and Muscle Gain',
-    experience: '9 years',
-    rating: 5.0,
-    slots: 'Mon - Fri, 1:00 PM - 7:00 PM',
-    qualification: 'MSc Strength and Conditioning',
-    certificates: 'NSCA-CSCS, Nutrition Specialist',
-    avatar: 'LH',
-    tags: ['Bulking', 'Powerlifting', 'Nutrition'],
-  },
-];
 
 const BOOKINGS = [
   {
@@ -140,9 +90,9 @@ const BOOKINGS = [
   },
 ];
 
-const buildInitialCoachStats = () => {
+const buildInitialCoachStats = (coachList = []) => {
   const stats = {};
-  COACHES.forEach((coach) => {
+  coachList.forEach((coach) => {
     stats[coach.id] = { average: coach.rating, count: 0 };
   });
   return stats;
@@ -251,8 +201,9 @@ function UserCoaches() {
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
   const [toastState, setToastState] = useState({ open: false, message: '' });
+  const [coaches, setCoaches] = useState([]);
   const [bookings, setBookings] = useState([]);
-  const [coachStats, setCoachStats] = useState(buildInitialCoachStats);
+  const [coachStats, setCoachStats] = useState({});
   const [editingBookingId, setEditingBookingId] = useState(null);
   const [slotError, setSlotError] = useState('');
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
@@ -291,7 +242,7 @@ function UserCoaches() {
     const toTime = Number.isNaN(endsAt.getTime())
       ? ''
       : `${String(endsAt.getHours()).padStart(2, '0')}:${String(endsAt.getMinutes()).padStart(2, '0')}`;
-    const coach = COACHES.find((row) => String(row.id) === String(item.coachId));
+    const coach = coaches.find((row) => String(row.id) === String(item.coachId));
 
     const statusMap = {
       pending: 'pending',
@@ -337,11 +288,27 @@ function UserCoaches() {
     }
   };
 
+  const loadCoaches = async () => {
+    try {
+      const { data } = await getPublicCoaches();
+      const items = Array.isArray(data?.data) ? data.data : [];
+      setCoaches(items);
+      setCoachStats(buildInitialCoachStats(items));
+    } catch {
+      setCoaches([]);
+      setCoachStats({});
+    }
+  };
+
+  useEffect(() => {
+    loadCoaches();
+  }, []);
+
   useEffect(() => {
     loadBookings();
     const interval = setInterval(loadBookings, 15000);
     return () => clearInterval(interval);
-  }, [user?.id]);
+  }, [user?.id, coaches]);
 
   const handleOpenBooking = (coach) => {
     setSelectedCoach(coach);
@@ -363,7 +330,7 @@ function UserCoaches() {
   };
 
   const handleEditBooking = (booking) => {
-    const coach = COACHES.find((item) => item.name === booking.coachName) || null;
+    const coach = coaches.find((item) => item.name === booking.coachName) || null;
     setSelectedCoach(coach);
     setBookingForm({
       userName: user?.name || '',
@@ -541,7 +508,7 @@ function UserCoaches() {
       }),
     );
 
-    const targetCoach = COACHES.find((item) => item.name === feedbackTarget?.coachName);
+    const targetCoach = coaches.find((item) => item.name === feedbackTarget?.coachName);
     if (targetCoach) {
       setCoachStats((prev) => {
         const current = prev[targetCoach.id] || { average: targetCoach.rating, count: 0 };
@@ -607,7 +574,7 @@ function UserCoaches() {
             gap: 3,
           }}
         >
-          {COACHES.map((coach, index) => (
+          {coaches.map((coach, index) => (
             (() => {
               const coachStat = coachStats[coach.id] || { average: coach.rating, count: 0 };
 
