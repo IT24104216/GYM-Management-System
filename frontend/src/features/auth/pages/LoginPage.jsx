@@ -56,6 +56,24 @@ function resolveDashboardByRole(role) {
   return ROLE_HOME[role] || ROUTES.USER_DASHBOARD;
 }
 
+function resolvePostLoginPath(role, fromState) {
+  const fallback = resolveDashboardByRole(role);
+  const fromPath = fromState?.pathname || fromState;
+  if (typeof fromPath !== 'string') return fallback;
+
+  const normalizedRole = role === 'dietician' ? 'dietitian' : role;
+  const rolePrefixMap = {
+    user: '/user/',
+    admin: '/admin/',
+    coach: '/coach/',
+    dietitian: '/dietitian/',
+  };
+  const allowedPrefix = rolePrefixMap[normalizedRole];
+  if (!allowedPrefix) return fallback;
+
+  return fromPath.startsWith(allowedPrefix) ? fromPath : fallback;
+}
+
 function LoginPage() {
   const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
@@ -90,7 +108,7 @@ function LoginPage() {
 
   // Already logged in — redirect to role home
   if (isAuthenticated && user) {
-    const from = location.state?.from || resolveDashboardByRole(user.role);
+    const from = resolvePostLoginPath(user.role, location.state?.from);
     navigate(from, { replace: true });
     return null;
   }
@@ -104,7 +122,7 @@ function LoginPage() {
     setLoading(true);
     try {
       const loggedInUser = await login(form);
-      const from = location.state?.from || resolveDashboardByRole(loggedInUser?.role);
+      const from = resolvePostLoginPath(loggedInUser?.role, location.state?.from);
       navigate(from, { replace: true });
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Invalid username or password.');
@@ -551,5 +569,6 @@ function LoginPage() {
 }
 
 export default LoginPage;
+
 
 
