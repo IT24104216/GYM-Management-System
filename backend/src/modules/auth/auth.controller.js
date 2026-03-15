@@ -16,11 +16,17 @@ function parseOrThrow(schema, payload) {
 }
 
 function toPublicUser(userDoc) {
+  const normalizedRole = userDoc.role === 'dietician'
+    ? 'dietitian'
+    : userDoc.role === 'member'
+      ? 'user'
+      : userDoc.role;
+
   return {
     id: String(userDoc._id),
     name: userDoc.name,
     email: userDoc.email,
-    role: userDoc.role,
+    role: normalizedRole,
     status: userDoc.status,
   };
 }
