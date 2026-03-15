@@ -307,7 +307,11 @@ function UserCoaches() {
         page: 1,
         limit: 100,
       });
-      const items = Array.isArray(data?.data) ? data.data.map(mapAppointmentToBooking) : [];
+      const items = Array.isArray(data?.data)
+        ? data.data
+            .filter((item) => item.sessionType !== 'nutrition')
+            .map(mapAppointmentToBooking)
+        : [];
       setBookings(items);
     } catch {
       setBookings(BOOKINGS);
