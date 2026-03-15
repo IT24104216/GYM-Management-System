@@ -26,3 +26,9 @@ export const updateUserAppointment = (id, data) =>
 
 export const getPublicCoaches = () =>
   axiosClient.get('/coach/public');
+
+export const getPublicDietitians = () =>
+  axiosClient.get('/dietitian/public');
+
+export const bookDietitianAppointment = (data) =>
+  axiosClient.post('/appointments', data);
