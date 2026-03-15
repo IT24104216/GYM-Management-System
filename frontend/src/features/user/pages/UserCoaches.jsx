@@ -162,16 +162,29 @@ const toDisplayTime = (time24h) => {
   return `${String(h12).padStart(2, '0')}:${String(mRaw).padStart(2, '0')} ${meridiem}`;
 };
 
-const getCoachSlotRange = (coach) => {
+const getCoachSlotRanges = (coach) => {
+  if (Array.isArray(coach?.slotRanges) && coach.slotRanges.length > 0) {
+    return coach.slotRanges.map((range) => ({
+      start: normalizeTimeTo24h(range?.startTime),
+      end: normalizeTimeTo24h(range?.endTime),
+    }));
+  }
+
   const slotPart = coach?.slots?.split(',')?.[1]?.trim() || '';
   const [startRaw, endRaw] = slotPart.split('-').map((t) => t.trim());
-  return {
+  const fallbackRange = {
     start: normalizeTimeTo24h(startRaw),
     end: normalizeTimeTo24h(endRaw),
   };
+  if (!fallbackRange.start || !fallbackRange.end) return [];
+  return [fallbackRange];
 };
 
 const isDateWithinCoachSchedule = (coach, dateValue) => {
+  if (coach?.slotDate) {
+    return dateValue === coach.slotDate;
+  }
+
   if (!coach?.slots || !dateValue) return false;
 
   const dayPart = coach.slots.split(',')?.[0]?.trim() || '';
@@ -190,6 +203,19 @@ const isDateWithinCoachSchedule = (coach, dateValue) => {
 
   // Supports wrapped ranges like Fri - Mon
   return selectedDay >= fromIndex || selectedDay <= toIndex;
+};
+
+const isWithinAnyCoachRange = (ranges, fromMinutes, toMinutes) => {
+  return ranges.some((range) => {
+    const coachStart = toMinuteValue(range.start);
+    const coachEnd = toMinuteValue(range.end);
+    return (
+      !Number.isNaN(coachStart)
+      && !Number.isNaN(coachEnd)
+      && fromMinutes >= coachStart
+      && toMinutes <= coachEnd
+    );
+  });
 };
 
 function UserCoaches() {
@@ -302,6 +328,8 @@ function UserCoaches() {
 
   useEffect(() => {
     loadCoaches();
+    const interval = setInterval(loadCoaches, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -316,7 +344,7 @@ function UserCoaches() {
       userName: user?.name || '',
       userEmail: user?.email || '',
       mobileNumber: user?.mobileNumber || user?.mobile || user?.phone || '',
-      date: getTodayDate(),
+      date: coach?.slotDate || getTodayDate(),
       fromTime: '',
       toTime: '',
       appointmentType: '',
@@ -376,15 +404,8 @@ function UserCoaches() {
       return;
     }
 
-    const selectedRange = getCoachSlotRange(selectedCoach);
-    const coachStart = toMinuteValue(selectedRange.start);
-    const coachEnd = toMinuteValue(selectedRange.end);
-    const isWithinCoachRange = (
-      !Number.isNaN(coachStart)
-      && !Number.isNaN(coachEnd)
-      && fromMinutes >= coachStart
-      && toMinutes <= coachEnd
-    );
+    const selectedRanges = getCoachSlotRanges(selectedCoach);
+    const isWithinCoachRange = isWithinAnyCoachRange(selectedRanges, fromMinutes, toMinutes);
 
     if (!isWithinCoachRange) {
       setSlotError('Unavailable at that time. Please choose an available time slot.');
