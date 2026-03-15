@@ -35,3 +35,15 @@ export const getCoachAppointments = (params) =>
 
 export const updateCoachAppointmentStatus = (id, data) =>
   axiosClient.patch(`/appointments/${id}/status`, data);
+
+export const getCoachSchedulingSlots = (coachId) =>
+  axiosClient.get(`/coach/scheduling/${coachId}`);
+
+export const createCoachSchedulingSlot = (coachId, data) =>
+  axiosClient.post(`/coach/scheduling/${coachId}`, data);
+
+export const updateCoachSchedulingSlot = (coachId, slotId, data) =>
+  axiosClient.put(`/coach/scheduling/${coachId}/${slotId}`, data);
+
+export const deleteCoachSchedulingSlot = (coachId, slotId) =>
+  axiosClient.delete(`/coach/scheduling/${coachId}/${slotId}`);
