@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -50,6 +50,12 @@ const COMMUNITY_AVATARS = [
   { label: 'R', tone: '#0ea5e9' },
 ];
 
+function resolveDashboardByRole(role) {
+  if (!role) return ROUTES.USER_DASHBOARD;
+  if (role === 'dietician') return ROUTES.DIETITIAN_DASHBOARD;
+  return ROLE_HOME[role] || ROUTES.USER_DASHBOARD;
+}
+
 function LoginPage() {
   const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
@@ -70,10 +76,21 @@ function LoginPage() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState(location.state?.successMessage || '');
   const [loading, setLoading] = useState(false);
+  const identifierRef = useRef(null);
+
+  useEffect(() => {
+    setForm({ identifier: '', password: '' });
+    // Focus first field and select content for quick typing.
+    const timer = setTimeout(() => {
+      identifierRef.current?.focus();
+      identifierRef.current?.select?.();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Already logged in — redirect to role home
   if (isAuthenticated && user) {
-    const from = location.state?.from || ROLE_HOME[user.role];
+    const from = location.state?.from || resolveDashboardByRole(user.role);
     navigate(from, { replace: true });
     return null;
   }
@@ -87,7 +104,7 @@ function LoginPage() {
     setLoading(true);
     try {
       const loggedInUser = await login(form);
-      const from = location.state?.from || (loggedInUser?.role === 'user' ? ROUTES.USER_DASHBOARD : ROLE_HOME[loggedInUser.role]);
+      const from = location.state?.from || resolveDashboardByRole(loggedInUser?.role);
       navigate(from, { replace: true });
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Invalid username or password.');
@@ -325,7 +342,7 @@ function LoginPage() {
                 </Alert>
               )}
 
-              <Box component="form" onSubmit={handleSubmit} noValidate>
+              <Box component="form" onSubmit={handleSubmit} noValidate autoComplete="off">
                 <Typography sx={{ mb: 1, color: isDark ? '#c8d6eb' : '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
                   Username or Email
                 </Typography>
@@ -333,10 +350,12 @@ function LoginPage() {
                   placeholder="Enter username or email"
                   name="identifier"
                   type="text"
+                  inputRef={identifierRef}
                   value={form.identifier}
                   onChange={handleChange}
+                  onFocus={(event) => event.target.select()}
                   required
-                  autoComplete="username"
+                  autoComplete="off"
                   autoFocus
                   sx={{ mb: 2.2 }}
                   InputProps={{
@@ -367,8 +386,9 @@ function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={handleChange}
+                  onFocus={(event) => event.target.select()}
                   required
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   sx={{ mb: 1.2 }}
                   InputProps={{
                     startAdornment: (
@@ -531,4 +551,5 @@ function LoginPage() {
 }
 
 export default LoginPage;
+
 
