@@ -133,7 +133,7 @@ function AdminUsers() {
       || user.name.toLowerCase().includes(query)
       || user.email.toLowerCase().includes(query);
     return roleMatch && searchMatch;
-  }), [filter, search]);
+  }), [users, filter, search]);
 
   const pageSize = 6;
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
@@ -176,10 +176,12 @@ function AdminUsers() {
   const handleSaveRole = async () => {
     if (!editingUser) return;
     try {
-      await updateUserApi(editingUser.id, { role: displayToAuthRole[nextRole] || 'user' });
+      const { data } = await updateUserApi(editingUser.id, { role: displayToAuthRole[nextRole] || 'user' });
       await loadUsers();
       await loadStats();
-      setToast({ open: true, message: `${editingUser.name} updated to ${nextRole}.` });
+      const changedAt = data?.data?.roleChangedAtLabel;
+      const timeSuffix = changedAt ? ` at ${changedAt}` : '';
+      setToast({ open: true, message: `${editingUser.name} updated to ${nextRole}${timeSuffix}.` });
       setEditingUser(null);
     } catch (error) {
       setToast({ open: true, message: error?.response?.data?.message || 'Failed to update role' });

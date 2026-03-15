@@ -32,6 +32,10 @@ const userSchema = new mongoose.Schema(
       enum: ['active', 'inactive', 'suspended'],
       default: 'active',
     },
+    roleChangedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -20,6 +20,7 @@ const toUiStatus = {
 };
 
 function toUserDto(userDoc) {
+  const roleChangedAt = userDoc.roleChangedAt || null;
   return {
     id: String(userDoc._id),
     name: userDoc.name,
@@ -37,6 +38,16 @@ function toUserDto(userDoc) {
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase() || '')
       .join('') || 'U',
+    roleChangedAt,
+    roleChangedAtLabel: roleChangedAt
+      ? new Date(roleChangedAt).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      : null,
   };
 }
 
@@ -97,7 +108,10 @@ export const updateUser = asyncHandler(async (req, res) => {
     if (!ROLE_SET.has(nextRole)) {
       throw new AppError('Invalid role value', HTTP_STATUS.UNPROCESSABLE_ENTITY);
     }
-    user.role = nextRole;
+    if (user.role !== nextRole) {
+      user.role = nextRole;
+      user.roleChangedAt = new Date();
+    }
   }
 
   if (nextStatus) {
