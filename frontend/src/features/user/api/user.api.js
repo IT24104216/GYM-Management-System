@@ -23,3 +23,6 @@ export const updateAppointmentStatus = (id, data) =>
 
 export const updateUserAppointment = (id, data) =>
   axiosClient.patch(`/appointments/${id}`, data);
+
+export const getPublicCoaches = () =>
+  axiosClient.get('/coach/public');
