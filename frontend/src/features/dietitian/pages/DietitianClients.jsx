@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Autocomplete,
   Alert,
@@ -22,21 +22,8 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { loadDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
-
-const allClientsMock = [
-  { id: 1, name: 'John Doe', joinedDate: '2025-01-15', age: 28, weight: 75, height: 175, goal: 'Build muscle and increase strength' },
-  { id: 2, name: 'Jane Silva', joinedDate: '2026-03-16', age: 27, weight: 70, height: 170, goal: 'Muscle Gain Nutrition' },
-  { id: 3, name: 'Kavindu Perera', joinedDate: '2026-03-17', age: 31, weight: 82, height: 178, goal: 'Fat Loss Meal Plan' },
-  { id: 4, name: 'Mila Fernando', joinedDate: '2026-03-11', age: 25, weight: 61, height: 165, goal: 'Lean maintenance diet' },
-  { id: 5, name: 'Sahan Wickram', joinedDate: '2026-03-10', age: 34, weight: 89, height: 182, goal: 'Reduce body fat percentage' },
-  { id: 6, name: 'Rashmi De Alwis', joinedDate: '2026-03-08', age: 29, weight: 66, height: 168, goal: 'High-protein muscle support' },
-  { id: 7, name: 'Nadeesha Wijeratne', joinedDate: '2026-03-07', age: 30, weight: 71, height: 171, goal: 'Balanced fat-loss meal plan' },
-  { id: 8, name: 'Anjalika Senanayake', joinedDate: '2026-03-06', age: 26, weight: 58, height: 162, goal: 'Healthy weight gain and energy' },
-  { id: 9, name: 'Dilan Fernando', joinedDate: '2026-03-05', age: 33, weight: 84, height: 180, goal: 'Reduce sugar intake and cut fat' },
-  { id: 10, name: 'Hasini Perera', joinedDate: '2026-03-04', age: 24, weight: 55, height: 160, goal: 'Sports nutrition meal structure' },
-  { id: 11, name: 'Tharindu Mendis', joinedDate: '2026-03-03', age: 36, weight: 92, height: 183, goal: 'Macro based meal planning' },
-  { id: 12, name: 'Ishara Rodrigo', joinedDate: '2026-03-02', age: 28, weight: 63, height: 167, goal: 'Lean muscle nutrition strategy' },
-];
+import { useAuth } from '@/shared/hooks/useAuth';
+import { getDietitianAppointments } from '@/features/dietitian/api/dietitian.api';
 
 const CLIENTS_PER_PAGE = 6;
 
@@ -67,7 +54,9 @@ const createDietPlanForm = () => ({
 
 function DietitianClients() {
   const theme = useTheme();
+  const { user } = useAuth();
   const isDark = theme.palette.mode === 'dark';
+  const [allClients, setAllClients] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [dietPlanModal, setDietPlanModal] = useState({ open: false, client: null });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
@@ -76,6 +65,58 @@ function DietitianClients() {
   const [confirmDelete, setConfirmDelete] = useState({ open: false, client: null });
   const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
   const [page, setPage] = useState(1);
+
+  const getNoteValue = (notes, key) => {
+    if (!notes) return '';
+    const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+    const match = notes.match(pattern);
+    return match?.[1]?.trim() || '';
+  };
+
+  const loadApprovedClients = async () => {
+    if (!user?.id) return;
+    try {
+      const { data } = await getDietitianAppointments({
+        coachId: String(user.id),
+        sessionType: 'nutrition',
+        page: 1,
+        limit: 300,
+      });
+
+      const items = Array.isArray(data?.data) ? data.data : [];
+      const mapByUser = new Map();
+      items
+        .filter((item) => item.status === 'approved' || item.status === 'completed')
+        .forEach((item) => {
+          if (!mapByUser.has(item.userId)) {
+            const startsAt = new Date(item.startsAt);
+            mapByUser.set(item.userId, {
+              id: String(item.userId),
+              name: getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`,
+              joinedDate: Number.isNaN(startsAt.getTime())
+                ? new Date().toISOString().split('T')[0]
+                : startsAt.toISOString().split('T')[0],
+              age: 27,
+              weight: 70,
+              height: 170,
+              goal: getNoteValue(item.notes, 'Goal') || 'Meal Planning',
+            });
+          }
+        });
+
+      const approvedClients = Array.from(mapByUser.values());
+      // Dashboard shows first 3; clients page shows the remaining records.
+      setAllClients(approvedClients.slice(3));
+    } catch {
+      setAllClients([]);
+    }
+  };
+
+  useEffect(() => {
+    loadApprovedClients();
+    const interval = setInterval(loadApprovedClients, 15000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
@@ -86,10 +127,10 @@ function DietitianClients() {
 
   const visibleClients = useMemo(
     () =>
-      allClientsMock.filter((client) =>
+      allClients.filter((client) =>
         client.name.toLowerCase().includes(searchText.trim().toLowerCase()),
       ),
-    [searchText],
+    [allClients, searchText],
   );
 
   const totalPages = Math.max(1, Math.ceil(visibleClients.length / CLIENTS_PER_PAGE));
