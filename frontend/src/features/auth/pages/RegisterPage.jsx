@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -27,6 +27,15 @@ function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const nameRef = useRef(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      nameRef.current?.focus();
+      nameRef.current?.select?.();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const inputSx = {
     mb: 2,
@@ -149,8 +158,10 @@ function RegisterPage() {
           <TextField
             label="Full name"
             name="name"
+            inputRef={nameRef}
             value={form.name}
             onChange={handleChange}
+            onFocus={(event) => event.target.select()}
             required
             InputLabelProps={{ shrink: true }}
             sx={inputSx}
@@ -162,6 +173,7 @@ function RegisterPage() {
             type="email"
             value={form.email}
             onChange={handleChange}
+            onFocus={(event) => event.target.select()}
             required
             InputLabelProps={{ shrink: true }}
             sx={inputSx}
@@ -172,6 +184,7 @@ function RegisterPage() {
             type="password"
             value={form.password}
             onChange={handleChange}
+            onFocus={(event) => event.target.select()}
             required
             InputLabelProps={{ shrink: true }}
             helperText="Use at least 8 characters with uppercase, lowercase, and a number."
@@ -194,6 +207,7 @@ function RegisterPage() {
             type="password"
             value={form.confirmPassword}
             onChange={handleChange}
+            onFocus={(event) => event.target.select()}
             required
             InputLabelProps={{ shrink: true }}
             sx={{ ...inputSx, mb: 2.5 }}
