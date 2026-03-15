@@ -114,6 +114,13 @@ const displayToAuthRole = {
   Admin: 'admin',
 };
 
+const filterToRole = {
+  Members: 'Member',
+  Coaches: 'Coach',
+  Dieticians: 'Dietician',
+  Admins: 'Admin',
+};
+
 function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
@@ -127,7 +134,7 @@ function AdminUsers() {
   const filters = ['All', 'Members', 'Coaches', 'Dieticians', 'Admins'];
 
   const filteredUsers = useMemo(() => users.filter((user) => {
-    const roleMatch = filter === 'All' ? true : user.role === filter.slice(0, -1);
+    const roleMatch = filter === 'All' ? true : user.role === filterToRole[filter];
     const query = search.trim().toLowerCase();
     const searchMatch = !query
       || user.name.toLowerCase().includes(query)
