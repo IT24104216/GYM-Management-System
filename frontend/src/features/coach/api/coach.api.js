@@ -3,6 +3,18 @@ import axiosClient from '@/shared/api/axiosClient';
 export const getCoachClients = () =>
   axiosClient.get('/coach/clients');
 
+export const getCoachProfile = (coachId) =>
+  axiosClient.get(`/coach/profile/${coachId}`);
+
+export const upsertCoachProfile = (coachId, data) =>
+  axiosClient.put(`/coach/profile/${coachId}`, data);
+
+export const deleteCoachProfile = (coachId) =>
+  axiosClient.delete(`/coach/profile/${coachId}`);
+
+export const getPublicCoaches = () =>
+  axiosClient.get('/coach/public');
+
 export const getWorkoutPlans = () =>
   axiosClient.get('/coach/workout-plans');
 
