@@ -35,10 +35,14 @@ import {
   getCoachProfile as getCoachProfileApi,
   upsertCoachProfile as upsertCoachProfileApi,
 } from '@/features/coach/api/coach.api';
+import {
+  deleteDietitianProfile as deleteDietitianProfileApi,
+  getDietitianProfile as getDietitianProfileApi,
+  upsertDietitianProfile as upsertDietitianProfileApi,
+} from '@/features/dietitian/api/dietitian.api';
 import NotificationsDrawer from './NotificationsDrawer';
 
 const DRAWER_WIDTH = 240;
-const DIETITIAN_PROFILE_STORAGE_KEY = 'dietitian.profile.v1';
 const USER_PROFILE_STORAGE_KEY = 'user.profile.v1';
 
 const defaultDietitianProfile = {
@@ -159,14 +163,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [coachDeleteFeedbackOpen, setCoachDeleteFeedbackOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState(initialNotifications);
-  const [dietitianProfile, setDietitianProfile] = useState(() => {
-    try {
-      const saved = localStorage.getItem(DIETITIAN_PROFILE_STORAGE_KEY);
-      return saved ? { ...defaultDietitianProfile, ...JSON.parse(saved) } : defaultDietitianProfile;
-    } catch {
-      return defaultDietitianProfile;
-    }
-  });
+  const [dietitianProfile, setDietitianProfile] = useState(defaultDietitianProfile);
   const [editDietitianProfile, setEditDietitianProfile] = useState(defaultDietitianProfile);
   const [userProfile, setUserProfile] = useState(defaultUserProfile);
   const [editUserProfile, setEditUserProfile] = useState(defaultUserProfile);
@@ -187,8 +184,17 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     navigate(ROUTES.LOGIN, { replace: true });
   };
 
-  const openDietitianProfile = () => {
+  const openDietitianProfile = async () => {
     handleMenuClose();
+    try {
+      const { data } = await getDietitianProfileApi(String(user?.id || ''));
+      const parsed = data?.data?.profile
+        ? { ...defaultDietitianProfile, ...data.data.profile, experienceYears: String(data.data.profile.experienceYears ?? '') }
+        : defaultDietitianProfile;
+      setDietitianProfile(parsed);
+    } catch {
+      setDietitianProfile(defaultDietitianProfile);
+    }
     setProfileDetailsOpen(true);
   };
 
@@ -232,19 +238,34 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
     setProfileFormOpen(false);
   };
 
-  const saveDietitianProfile = () => {
-    setDietitianProfile(editDietitianProfile);
-    localStorage.setItem(DIETITIAN_PROFILE_STORAGE_KEY, JSON.stringify(editDietitianProfile));
-    setProfileFormOpen(false);
-    setProfileDetailsOpen(true);
-    setFeedbackOpen(true);
+  const saveDietitianProfile = async () => {
+    try {
+      const payload = {
+        ...editDietitianProfile,
+        experienceYears: Number(editDietitianProfile.experienceYears || 0),
+      };
+      const { data } = await upsertDietitianProfileApi(String(user?.id || ''), payload);
+      const savedProfile = data?.data?.profile
+        ? { ...defaultDietitianProfile, ...data.data.profile, experienceYears: String(data.data.profile.experienceYears ?? '') }
+        : editDietitianProfile;
+      setDietitianProfile(savedProfile);
+      setProfileFormOpen(false);
+      setProfileDetailsOpen(true);
+      setFeedbackOpen(true);
+    } catch {
+      // keep existing UI behavior
+    }
   };
 
-  const deleteDietitianProfile = () => {
-    setDietitianProfile(defaultDietitianProfile);
-    setEditDietitianProfile(defaultDietitianProfile);
-    localStorage.removeItem(DIETITIAN_PROFILE_STORAGE_KEY);
-    setDeleteFeedbackOpen(true);
+  const deleteDietitianProfile = async () => {
+    try {
+      await deleteDietitianProfileApi(String(user?.id || ''));
+      setDietitianProfile(defaultDietitianProfile);
+      setEditDietitianProfile(defaultDietitianProfile);
+      setDeleteFeedbackOpen(true);
+    } catch {
+      // keep existing UI behavior
+    }
   };
 
   const openUserProfileForm = () => {
