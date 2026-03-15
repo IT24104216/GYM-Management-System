@@ -4,6 +4,7 @@ import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { User } from '../users/users.model.js';
 import { CoachProfile } from './coachProfile.model.js';
+import { CoachScheduling } from './coachScheduling.model.js';
 
 const PHONE_REGEX = /^\+?[0-9]{7,15}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -90,7 +91,52 @@ const toTags = (preferredTrainingType = '', specialization = '') => {
     .slice(0, 3);
 };
 
-const toProfileDto = (userDoc, profileDoc) => ({
+const toLocalIsoDate = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const formatTimeTo12h = (time24h = '') => {
+  const [hoursRaw, minutesRaw] = time24h.split(':').map(Number);
+  if (Number.isNaN(hoursRaw) || Number.isNaN(minutesRaw)) return time24h;
+  const meridiem = hoursRaw >= 12 ? 'PM' : 'AM';
+  const hours12 = hoursRaw % 12 || 12;
+  return `${String(hours12).padStart(2, '0')}:${String(minutesRaw).padStart(2, '0')} ${meridiem}`;
+};
+
+const toDateLabel = (slotDate, todayIso) => {
+  if (slotDate === todayIso) return 'Today';
+
+  const date = new Date(`${slotDate}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return slotDate;
+
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const buildAvailabilityMap = (slots = []) => {
+  const perCoach = new Map();
+
+  slots.forEach((slot) => {
+    const coachId = String(slot.coachId);
+    if (!perCoach.has(coachId)) perCoach.set(coachId, new Map());
+    const byDate = perCoach.get(coachId);
+    if (!byDate.has(slot.date)) byDate.set(slot.date, []);
+    byDate.get(slot.date).push({
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+    });
+  });
+
+  return perCoach;
+};
+
+const toProfileDto = (userDoc, profileDoc, availability = {}) => ({
   id: String(userDoc._id),
   name: userDoc.name,
   email: userDoc.email,
@@ -98,7 +144,9 @@ const toProfileDto = (userDoc, profileDoc) => ({
   specialty: profileDoc.specialization || 'General Fitness',
   experience: `${profileDoc.experienceYears || 0} years`,
   rating: Number(profileDoc.rating || 4.8),
-  slots: profileDoc.slots || 'Mon - Fri, 6:00 AM - 10:00 AM',
+  slots: availability.slotsLabel || profileDoc.slots || 'No upcoming slots',
+  slotDate: availability.slotDate || '',
+  slotRanges: availability.slotRanges || [],
   qualification: profileDoc.preferredTrainingType || 'Certified Fitness Coach',
   certificates: profileDoc.certifications || '-',
   tags: toTags(profileDoc.preferredTrainingType, profileDoc.specialization),
@@ -191,20 +239,53 @@ export const deleteCoachProfile = asyncHandler(async (req, res) => {
 });
 
 export const getPublicCoaches = asyncHandler(async (_req, res) => {
+  const todayIso = toLocalIsoDate(new Date());
+
   const [coachUsers, profiles] = await Promise.all([
     User.find({ role: 'coach', status: 'active' }).sort({ createdAt: -1 }),
     CoachProfile.find({}).sort({ updatedAt: -1 }),
   ]);
 
+  const coachIds = coachUsers.map((coach) => String(coach._id));
+  const scheduleSlots = await CoachScheduling.find({
+    coachId: { $in: coachIds },
+    date: { $gte: todayIso },
+  }).sort({ date: 1, startTime: 1 });
+
   const profileByCoachId = new Map(
     profiles.map((profile) => [String(profile.coachId), profile]),
   );
+  const availabilityByCoachId = buildAvailabilityMap(scheduleSlots);
 
   const coaches = coachUsers
     .map((coachUser) => {
       const profile = profileByCoachId.get(String(coachUser._id));
       if (!profile) return null;
-      return toProfileDto(coachUser, profile);
+
+      const coachAvailability = availabilityByCoachId.get(String(coachUser._id));
+      let availability = {};
+
+      if (coachAvailability && coachAvailability.size > 0) {
+        const firstDate = Array.from(coachAvailability.keys()).sort()[0];
+        const slotRanges = (coachAvailability.get(firstDate) || []).sort(
+          (a, b) => a.startTime.localeCompare(b.startTime),
+        );
+
+        const firstRange = slotRanges[0];
+        const moreCount = Math.max(slotRanges.length - 1, 0);
+        const dateLabel = toDateLabel(firstDate, todayIso);
+        const timeLabel = firstRange
+          ? `${formatTimeTo12h(firstRange.startTime)} - ${formatTimeTo12h(firstRange.endTime)}`
+          : '';
+
+        availability = {
+          slotDate: firstDate,
+          slotRanges,
+          slotsLabel: `${dateLabel}, ${timeLabel}${moreCount ? ` (+${moreCount} more)` : ''}`,
+        };
+      }
+
+      return toProfileDto(coachUser, profile, availability);
     })
     .filter(Boolean);
 
