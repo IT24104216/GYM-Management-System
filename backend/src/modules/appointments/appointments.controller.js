@@ -53,6 +53,7 @@ export const getAppointments = asyncHandler(async (req, res) => {
   if (query.coachId) filter.coachId = query.coachId;
   if (query.userId) filter.userId = query.userId;
   if (query.status) filter.status = query.status;
+  if (query.sessionType) filter.sessionType = query.sessionType;
 
   if (query.date) {
     const { start, end } = buildDateRange(query.date);
