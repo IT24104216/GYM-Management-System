@@ -26,16 +26,23 @@ function buildDateRange(dateText) {
 
 export const createAppointment = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(createAppointmentSchema, req.body);
+  const providerField = payload.sessionType === 'nutrition' ? 'dietitianId' : 'coachId';
+  const providerValue = payload[providerField];
 
   const overlapping = await Appointment.findOne({
-    coachId: payload.coachId,
+    [providerField]: providerValue,
     status: { $in: ['pending', 'approved'] },
     startsAt: { $lt: payload.endsAt },
     endsAt: { $gt: payload.startsAt },
   });
 
   if (overlapping) {
-    throw new AppError('Coach already has a booking in this time range', HTTP_STATUS.CONFLICT);
+    throw new AppError(
+      payload.sessionType === 'nutrition'
+        ? 'Dietitian already has a booking in this time range'
+        : 'Coach already has a booking in this time range',
+      HTTP_STATUS.CONFLICT,
+    );
   }
 
   const created = await Appointment.create(payload);
@@ -51,6 +58,7 @@ export const getAppointments = asyncHandler(async (req, res) => {
 
   const filter = {};
   if (query.coachId) filter.coachId = query.coachId;
+  if (query.dietitianId) filter.dietitianId = query.dietitianId;
   if (query.userId) filter.userId = query.userId;
   if (query.status) filter.status = query.status;
   if (query.sessionType) filter.sessionType = query.sessionType;
@@ -120,9 +128,12 @@ export const updateAppointment = asyncHandler(async (req, res) => {
     throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
   }
 
+  const providerField = item.sessionType === 'nutrition' ? 'dietitianId' : 'coachId';
+  const providerValue = item[providerField];
+
   const overlapping = await Appointment.findOne({
     _id: { $ne: id },
-    coachId: item.coachId,
+    [providerField]: providerValue,
     status: { $in: ['pending', 'approved'] },
     startsAt: { $lt: payload.endsAt },
     endsAt: { $gt: payload.startsAt },
