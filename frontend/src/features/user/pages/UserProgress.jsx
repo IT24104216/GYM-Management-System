@@ -149,19 +149,6 @@ const findNearestChartHover = (cursor, points, threshold) => {
   return best && best.distance <= threshold ? best : null;
 };
 
-const createMockWeightHistory = () => {
-  const today = new Date();
-  const offsets = [-8, -7, -6, -5, -4, -3, -2, -1, 0];
-  const weights = [191, 190.8, 189.9, 188.6, 187.2, 185.8, 184.6, 182.8, 179];
-
-  return offsets.reduce((accumulator, offset, index) => {
-    const dateObj = new Date(today);
-    dateObj.setDate(today.getDate() + offset);
-    accumulator[toIsoDate(dateObj)] = weights[index];
-    return accumulator;
-  }, {});
-};
-
 const createPhotoSlots = () => Array.from({ length: 4 }, (_, index) => ({
   id: `slot-${index + 1}`,
   imageUrl: '',
@@ -229,32 +216,12 @@ function UserProgress() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const todayIso = getTodayIso();
-  const previousIso = new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-  const twoDaysAgoIso = new Date(Date.now() - (2 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
 
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [calendarAnchorEl, setCalendarAnchorEl] = useState(null);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(todayIso));
   const [photosByDate, setPhotosByDate] = useState(() => ({
     [todayIso]: createPhotoSlots(),
-    [previousIso]: [
-      {
-        id: `mock-${previousIso}-1`,
-        imageUrl: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?auto=format&fit=crop&w=900&q=80',
-      },
-      ...createPhotoSlots().slice(1),
-    ],
-    [twoDaysAgoIso]: [
-      {
-        id: `mock-${twoDaysAgoIso}-1`,
-        imageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=900&q=80',
-      },
-      {
-        id: `mock-${twoDaysAgoIso}-2`,
-        imageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=80',
-      },
-      ...createPhotoSlots().slice(2),
-    ],
   }));
   const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
   const [editingPhotoIndex, setEditingPhotoIndex] = useState(null);
@@ -270,30 +237,8 @@ function UserProgress() {
   const uploadInputRef = useRef(null);
   const chartSvgRef = useRef(null);
   const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
-  const [weightHistoryByDate, setWeightHistoryByDate] = useState(() => createMockWeightHistory());
-  const [measurementsByDate, setMeasurementsByDate] = useState(() => ({
-    [twoDaysAgoIso]: {
-      chest: 41.8,
-      waist: 33.5,
-      arms: 15.2,
-      thighs: 24.1,
-      bodyFat: 22.0,
-    },
-    [previousIso]: {
-      chest: 42.0,
-      waist: 33.2,
-      arms: 15.3,
-      thighs: 24.0,
-      bodyFat: 21.1,
-    },
-    [todayIso]: {
-      chest: 42.5,
-      waist: 32.0,
-      arms: 15.5,
-      thighs: 24.0,
-      bodyFat: 19.5,
-    },
-  }));
+  const [weightHistoryByDate, setWeightHistoryByDate] = useState({});
+  const [measurementsByDate, setMeasurementsByDate] = useState({});
   const [completionDate, setCompletionDate] = useState('');
   const [workoutCompletionDates, setWorkoutCompletionDates] = useState([]);
   const completionDateFull = completionDate ? formatIsoToFull(completionDate) : '';
@@ -316,12 +261,8 @@ function UserProgress() {
       const nextWeightHistory = payload.weightHistoryByDate || {};
       const nextMeasurements = payload.measurementsByDate || {};
 
-      if (Object.keys(nextWeightHistory).length) {
-        setWeightHistoryByDate(nextWeightHistory);
-      }
-      if (Object.keys(nextMeasurements).length) {
-        setMeasurementsByDate(nextMeasurements);
-      }
+      setWeightHistoryByDate(nextWeightHistory);
+      setMeasurementsByDate(nextMeasurements);
       setWorkoutCompletionDates(Array.isArray(payload.workoutCompletionDates) ? payload.workoutCompletionDates : []);
       setCompletionDate(payload.completionDate || '');
     } catch (error) {
