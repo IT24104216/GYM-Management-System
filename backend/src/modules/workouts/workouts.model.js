@@ -69,11 +69,26 @@ const workoutPlanSchema = new mongoose.Schema(
       maxlength: 1000,
       default: '',
     },
+    planDurationMinutes: {
+      type: Number,
+      min: 1,
+      max: 600,
+      default: 45,
+    },
     status: {
       type: String,
       enum: ['assigned', 'completed'],
       default: 'assigned',
       index: true,
+    },
+    isSubmitted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    submittedAt: {
+      type: Date,
+      default: null,
     },
     exercises: {
       type: [workoutExerciseSchema],
@@ -82,6 +97,34 @@ const workoutPlanSchema = new mongoose.Schema(
         message: 'At least one exercise is required',
       },
       default: [],
+    },
+    session: {
+      status: {
+        type: String,
+        enum: ['idle', 'ongoing', 'completed'],
+        default: 'idle',
+      },
+      startedAt: {
+        type: Date,
+        default: null,
+      },
+      completedAt: {
+        type: Date,
+        default: null,
+      },
+      elapsedSeconds: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
+      exerciseProgress: {
+        type: [{
+          index: { type: Number, min: 0, required: true },
+          done: { type: Boolean, default: false },
+          completedAt: { type: Date, default: null },
+        }],
+        default: [],
+      },
     },
   },
   {
