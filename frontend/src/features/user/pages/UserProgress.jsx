@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Box,
@@ -27,10 +27,10 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { getUserProgress, saveUserMeasurement } from '@/features/user/api/user.api';
 
 const MotionCard = motion(Card);
-const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
-const WORKOUT_COMPLETION_HISTORY_KEY = 'gympro_workout_completion_history';
 
 const getTodayIso = () => new Date().toISOString().split('T')[0];
 const formatIsoToFull = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-US', {
@@ -224,6 +224,8 @@ const getConsecutiveWorkoutStreak = (completionDates, todayIso) => {
 };
 
 function UserProgress() {
+  const { user } = useAuth();
+  const userId = String(user?.id || user?._id || '');
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const todayIso = getTodayIso();
@@ -292,30 +294,47 @@ function UserProgress() {
       bodyFat: 19.5,
     },
   }));
-  const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
-  const workoutCompletionDates = useMemo(() => {
-    const rawHistory = localStorage.getItem(WORKOUT_COMPLETION_HISTORY_KEY);
-    if (!rawHistory) return [];
-
-    try {
-      const parsedHistory = JSON.parse(rawHistory);
-      if (!Array.isArray(parsedHistory)) return [];
-
-      return [...new Set(parsedHistory.filter((value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)))].sort();
-    } catch {
-      return [];
-    }
-  }, [completionDate]);
+  const [completionDate, setCompletionDate] = useState('');
+  const [workoutCompletionDates, setWorkoutCompletionDates] = useState([]);
+  const completionDateFull = completionDate ? formatIsoToFull(completionDate) : '';
   const selectedDateFull = formatIsoToFull(selectedDate);
   const selectedDateShort = formatIsoToShort(selectedDate);
   const visibleMonthLabel = visibleMonth.toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   });
-  const canUploadSelectedDate = Boolean(completionDate) && completionDate === selectedDateFull;
+  const canUploadSelectedDate = Boolean(completionDate) && completionDate === selectedDate;
   const selectedDatePhotos = photosByDate[selectedDate] || createPhotoSlots();
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const isCalendarOpen = Boolean(calendarAnchorEl);
+
+  const loadProgressData = async () => {
+    if (!userId) return;
+    try {
+      const { data } = await getUserProgress(userId);
+      const payload = data?.data || {};
+      const nextWeightHistory = payload.weightHistoryByDate || {};
+      const nextMeasurements = payload.measurementsByDate || {};
+
+      if (Object.keys(nextWeightHistory).length) {
+        setWeightHistoryByDate(nextWeightHistory);
+      }
+      if (Object.keys(nextMeasurements).length) {
+        setMeasurementsByDate(nextMeasurements);
+      }
+      setWorkoutCompletionDates(Array.isArray(payload.workoutCompletionDates) ? payload.workoutCompletionDates : []);
+      setCompletionDate(payload.completionDate || '');
+    } catch (error) {
+      setPhotoToast({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to load progress data.',
+      });
+    }
+  };
+
+  useEffect(() => {
+    loadProgressData();
+  }, [userId]);
 
   const chartData = useMemo(() => {
     const weightHistory = Object.entries(weightHistoryByDate)
@@ -328,6 +347,18 @@ function UserProgress() {
 
     const labels = weightHistory.map((item) => item.date);
     const values = weightHistory.map((item) => item.weight);
+    if (!values.length) {
+      return {
+        weightHistory: [],
+        points: [],
+        labels: [],
+        yTop: 0,
+        yMiddle: 0,
+        yBottom: 0,
+        linePath: '',
+        areaPath: '',
+      };
+    }
     const maxValue = Math.max(...values);
     const minValue = Math.min(...values);
     const yTop = Math.ceil(maxValue + 2);
@@ -498,7 +529,7 @@ function UserProgress() {
     setMeasurementForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const handleSubmitMeasurements = (event) => {
+  const handleSubmitMeasurements = async (event) => {
     event.preventDefault();
 
     const chestValue = Number(measurementForm.chest);
@@ -529,6 +560,31 @@ function UserProgress() {
       [selectedDate]: weightValue,
     }));
 
+    if (userId) {
+      try {
+        const { data } = await saveUserMeasurement(userId, {
+          date: selectedDate,
+          chest: chestValue,
+          waist: waistValue,
+          arms: armsValue,
+          thighs: thighsValue,
+          bodyFat: bodyFatValue,
+          weight: weightValue,
+        });
+        const payload = data?.data || {};
+        if (payload.weightHistoryByDate) setWeightHistoryByDate(payload.weightHistoryByDate);
+        if (payload.measurementsByDate) setMeasurementsByDate(payload.measurementsByDate);
+        if (Array.isArray(payload.workoutCompletionDates)) setWorkoutCompletionDates(payload.workoutCompletionDates);
+        if (typeof payload.completionDate === 'string') setCompletionDate(payload.completionDate);
+      } catch (error) {
+        setPhotoToast({
+          open: true,
+          message: error?.response?.data?.message || 'Failed to save progress data.',
+        });
+        return;
+      }
+    }
+
     setIsMeasurementDialogOpen(false);
     setPhotoToast({ open: true, message: `Measurements, body fat, and weight saved for ${selectedDateFull}.` });
   };
@@ -539,7 +595,7 @@ function UserProgress() {
       return;
     }
     if (!canUploadSelectedDate) {
-      setPhotoToast({ open: true, message: `Photo upload is available on completion day (${completionDate}).` });
+      setPhotoToast({ open: true, message: `Photo upload is available on completion day (${completionDateFull || completionDate}).` });
       return;
     }
     uploadInputRef.current?.click();
@@ -988,7 +1044,7 @@ function UserProgress() {
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1.2}>
               <Chip
-                label={completionDate ? `Workout Completion Date: ${completionDate}` : 'Workout Completion Date: Not available yet'}
+                label={completionDate ? `Workout Completion Date: ${completionDateFull}` : 'Workout Completion Date: Not available yet'}
                 sx={{ fontWeight: 700 }}
               />
               <Chip
