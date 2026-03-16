@@ -12,6 +12,9 @@ export const getUserWorkouts = () =>
 export const getWorkoutById = (id) =>
   axiosClient.get(`/user/workouts/${id}`);
 
+export const getUserWorkoutPlans = (userId) =>
+  axiosClient.get('/workouts/plans', { params: { userId } });
+
 export const bookCoachAppointment = (data) =>
   axiosClient.post('/appointments', data);
 
