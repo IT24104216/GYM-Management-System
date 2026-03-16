@@ -13,12 +13,20 @@ import {
   Tooltip,
 } from 'recharts';
 import {
+  Autocomplete,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -31,7 +39,14 @@ import IcecreamRoundedIcon from '@mui/icons-material/IcecreamRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getUserDietitianMealPlan } from '../api/user.api';
+import {
+  createUserFoodLog,
+  deleteUserFoodLog,
+  getUserDietitianMealPlan,
+  getUserFoodLogs,
+  searchNutritionFoods,
+  updateUserFoodLog,
+} from '../api/user.api';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
@@ -69,6 +84,7 @@ const fallbackWeeklyCals = [
 
 const fallbackMeals = [
   {
+    key: 'breakfast',
     type: 'Breakfast',
     icon: FreeBreakfastRoundedIcon,
     tone: '#d97706',
@@ -80,6 +96,7 @@ const fallbackMeals = [
     total: 470,
   },
   {
+    key: 'lunch',
     type: 'Lunch',
     icon: LunchDiningRoundedIcon,
     tone: '#059669',
@@ -91,6 +108,7 @@ const fallbackMeals = [
     total: 545,
   },
   {
+    key: 'dinner',
     type: 'Dinner',
     icon: DinnerDiningRoundedIcon,
     tone: '#2563eb',
@@ -102,6 +120,7 @@ const fallbackMeals = [
     total: 740,
   },
   {
+    key: 'snacks',
     type: 'Snacks',
     icon: IcecreamRoundedIcon,
     tone: '#7c3aed',
@@ -114,6 +133,14 @@ const fallbackMeals = [
 ];
 
 const yAxisTicks = [650, 1300, 1950, 2600];
+
+const mealSectionConfig = {
+  breakfast: { label: 'Breakfast', icon: FreeBreakfastRoundedIcon, tone: '#d97706', bg: '#fef3c7' },
+  lunch: { label: 'Lunch', icon: LunchDiningRoundedIcon, tone: '#059669', bg: '#d1fae5' },
+  dinner: { label: 'Dinner', icon: DinnerDiningRoundedIcon, tone: '#2563eb', bg: '#dbeafe' },
+  snacks: { label: 'Snacks', icon: IcecreamRoundedIcon, tone: '#7c3aed', bg: '#ede9fe' },
+};
+const mealSectionOrder = ['breakfast', 'lunch', 'dinner', 'snacks'];
 
 function CalorieTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -148,6 +175,22 @@ function UserMealPlan() {
   const [dietitianPlan, setDietitianPlan] = useState(null);
   const [planError, setPlanError] = useState('');
   const [isPlanLoading, setIsPlanLoading] = useState(false);
+  const [foodLogs, setFoodLogs] = useState([]);
+  const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
+  const [editingLogId, setEditingLogId] = useState(null);
+  const [logForm, setLogForm] = useState({
+    mealType: 'breakfast',
+    name: '',
+    calories: '',
+    protein: '',
+    carbs: '',
+    fat: '',
+    notes: '',
+  });
+  const [nutritionOptions, setNutritionOptions] = useState([]);
+  const [isNutritionLoading, setIsNutritionLoading] = useState(false);
+
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   useEffect(() => {
     const loadDietitianPlan = async () => {
@@ -168,47 +211,116 @@ function UserMealPlan() {
     loadDietitianPlan();
   }, [userId]);
 
+  useEffect(() => {
+    const loadFoodLogs = async () => {
+      if (!userId) return;
+      try {
+        const { data } = await getUserFoodLogs(userId, todayIso);
+        setFoodLogs(Array.isArray(data?.data) ? data.data : []);
+      } catch (_error) {
+        setFoodLogs([]);
+      }
+    };
+
+    loadFoodLogs();
+  }, [todayIso, userId]);
+
+  useEffect(() => {
+    if (!isLogDialogOpen) return;
+    const query = String(logForm.name || '').trim();
+    if (query.length < 2) {
+      setNutritionOptions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsNutritionLoading(true);
+        const { data } = await searchNutritionFoods(query);
+        setNutritionOptions(Array.isArray(data?.data) ? data.data : []);
+      } catch (_error) {
+        setNutritionOptions([]);
+      } finally {
+        setIsNutritionLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [isLogDialogOpen, logForm.name]);
+
   const meals = useMemo(() => {
-    if (!dietitianPlan?.sections?.length) return [];
-    const iconMap = {
-      Breakfast: FreeBreakfastRoundedIcon,
-      Lunch: LunchDiningRoundedIcon,
-      Dinner: DinnerDiningRoundedIcon,
-      Snacks: IcecreamRoundedIcon,
-    };
-    const colorMap = {
-      Breakfast: { tone: '#d97706', bg: '#fef3c7' },
-      Lunch: { tone: '#059669', bg: '#d1fae5' },
-      Dinner: { tone: '#2563eb', bg: '#dbeafe' },
-      Snacks: { tone: '#7c3aed', bg: '#ede9fe' },
-    };
-    return dietitianPlan.sections.map((section) => ({
-      type: section.type,
-      icon: iconMap[section.type] || RestaurantRoundedIcon,
-      tone: colorMap[section.type]?.tone || '#2563eb',
-      bg: colorMap[section.type]?.bg || '#dbeafe',
-      items: Array.isArray(section.items) ? section.items : [],
-      total: Number(section.total || 0),
-    }));
-  }, [dietitianPlan]);
+    const sectionByKey = new Map();
+    (dietitianPlan?.sections || []).forEach((section) => {
+      const key = String(section?.key || '').toLowerCase();
+      if (!mealSectionOrder.includes(key)) return;
+      sectionByKey.set(key, Array.isArray(section.items) ? section.items : []);
+    });
+
+    return mealSectionOrder.map((mealType) => {
+      const config = mealSectionConfig[mealType];
+      const planItems = (sectionByKey.get(mealType) || []).map((item) => ({
+        name: item.name,
+        cals: Number(item.cals || 0),
+        p: Number(item.p || 0),
+        c: Number(item.c || 0),
+        f: Number(item.f || 0),
+        notes: item.description || '',
+        isLogged: false,
+      }));
+      const logItems = foodLogs
+        .filter((log) => log.mealType === mealType)
+        .map((log) => ({
+          id: String(log._id),
+          name: log.name,
+          cals: Number(log.calories || 0),
+          p: Number(log.protein || 0),
+          c: Number(log.carbs || 0),
+          f: Number(log.fat || 0),
+          notes: log.notes || '',
+          isLogged: true,
+        }));
+      const items = [...planItems, ...logItems];
+
+      return {
+        key: mealType,
+        type: config.label,
+        icon: config.icon || RestaurantRoundedIcon,
+        tone: config.tone,
+        bg: config.bg,
+        items,
+        total: items.reduce((sum, item) => sum + Number(item.cals || 0), 0),
+      };
+    });
+  }, [dietitianPlan, foodLogs]);
 
   const macroData = useMemo(() => {
-    if (!dietitianPlan?.summary) {
+    if (!meals.length) {
       return [
         { name: 'Protein', value: 0, color: '#0D9488' },
         { name: 'Carbs', value: 0, color: '#F59E0B' },
         { name: 'Fat', value: 0, color: '#8B5CF6' },
       ];
     }
+    const totals = meals.reduce(
+      (acc, meal) => {
+        meal.items.forEach((item) => {
+          acc.protein += Number(item.p || 0);
+          acc.carbs += Number(item.c || 0);
+          acc.fat += Number(item.f || 0);
+        });
+        return acc;
+      },
+      { protein: 0, carbs: 0, fat: 0 },
+    );
     return [
-      { name: 'Protein', value: Number(dietitianPlan.summary.protein || 0), color: '#0D9488' },
-      { name: 'Carbs', value: Number(dietitianPlan.summary.carbs || 0), color: '#F59E0B' },
-      { name: 'Fat', value: Number(dietitianPlan.summary.fat || 0), color: '#8B5CF6' },
+      { name: 'Protein', value: Number(totals.protein || 0), color: '#0D9488' },
+      { name: 'Carbs', value: Number(totals.carbs || 0), color: '#F59E0B' },
+      { name: 'Fat', value: Number(totals.fat || 0), color: '#8B5CF6' },
     ];
-  }, [dietitianPlan]);
+  }, [meals]);
 
   const weeklyCals = useMemo(() => {
-    const total = Number(dietitianPlan?.summary?.totalCalories || 0);
+    const total = meals.reduce((sum, meal) => sum + Number(meal.total || 0), 0);
     if (!total) {
       return [
         { day: 'M', cals: 0 },
@@ -230,7 +342,7 @@ function UserMealPlan() {
       { day: 'S', cals: Math.max(0, base + 120) },
       { day: 'S', cals: Math.max(0, base - 30) },
     ];
-  }, [dietitianPlan]);
+  }, [meals]);
 
   const displayMeals = planMode === 'dietitian' ? meals : fallbackMeals;
   const displayMacroData = planMode === 'dietitian' ? macroData : fallbackMacroData;
@@ -240,6 +352,110 @@ function UserMealPlan() {
     () => displayMeals.reduce((sum, meal) => sum + Number(meal.total || 0), 0),
     [displayMeals],
   );
+
+  const resetLogForm = (mealType = 'breakfast') => {
+    setLogForm({
+      mealType,
+      name: '',
+      calories: '',
+      protein: '',
+      carbs: '',
+      fat: '',
+      notes: '',
+    });
+    setEditingLogId(null);
+    setNutritionOptions([]);
+  };
+
+  const openCreateLogDialog = (mealType = 'breakfast') => {
+    resetLogForm(mealType);
+    setIsLogDialogOpen(true);
+  };
+
+  const openEditLogDialog = (logItem, mealType) => {
+    setEditingLogId(logItem.id);
+    setLogForm({
+      mealType,
+      name: logItem.name || '',
+      calories: String(logItem.cals ?? ''),
+      protein: String(logItem.p ?? ''),
+      carbs: String(logItem.c ?? ''),
+      fat: String(logItem.f ?? ''),
+      notes: logItem.notes || '',
+    });
+    setIsLogDialogOpen(true);
+  };
+
+  const closeLogDialog = () => {
+    setIsLogDialogOpen(false);
+    resetLogForm();
+  };
+
+  const handleLogFormChange = (field) => (event) => {
+    setLogForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleNutritionSelect = (_event, option) => {
+    if (!option) return;
+    setLogForm((prev) => ({
+      ...prev,
+      name: option.name || prev.name,
+      calories: String(Number(option.calories || 0)),
+      protein: String(Number(option.protein || 0)),
+      carbs: String(Number(option.carbs || 0)),
+      fat: String(Number(option.fat || 0)),
+      notes: option.notes || prev.notes || '',
+    }));
+  };
+
+  const refreshFoodLogs = async () => {
+    if (!userId) return;
+    const { data } = await getUserFoodLogs(userId, todayIso);
+    setFoodLogs(Array.isArray(data?.data) ? data.data : []);
+  };
+
+  const handleSaveLog = async () => {
+    try {
+      if (!String(logForm.name || '').trim()) {
+        setPlanError('Food name is required');
+        return;
+      }
+      const payload = {
+        userId,
+        logDate: todayIso,
+        mealType: logForm.mealType,
+        name: logForm.name.trim(),
+        calories: Number(logForm.calories || 0),
+        protein: Number(logForm.protein || 0),
+        carbs: Number(logForm.carbs || 0),
+        fat: Number(logForm.fat || 0),
+        notes: String(logForm.notes || '').trim(),
+      };
+
+      if (editingLogId) {
+        await updateUserFoodLog(editingLogId, userId, payload);
+      } else {
+        await createUserFoodLog(payload);
+      }
+
+      await refreshFoodLogs();
+      closeLogDialog();
+      setPlanError('');
+    } catch (error) {
+      setPlanError(error?.response?.data?.message || 'Failed to save food log');
+    }
+  };
+
+  const handleDeleteLog = async (logId) => {
+    if (!logId || !userId) return;
+    try {
+      await deleteUserFoodLog(logId, userId);
+      await refreshFoodLogs();
+      setPlanError('');
+    } catch (error) {
+      setPlanError(error?.response?.data?.message || 'Failed to delete food log');
+    }
+  };
 
   return (
     <MotionBox
@@ -500,6 +716,7 @@ function UserMealPlan() {
             <Button
               variant="contained"
               startIcon={<AddRoundedIcon />}
+              onClick={() => openCreateLogDialog('breakfast')}
               sx={{
                 borderRadius: 2,
                 textTransform: 'none',
@@ -544,10 +761,15 @@ function UserMealPlan() {
                   </Box>
 
                   <Box sx={{ p: 1.2 }}>
-                    {meal.items.map((item) => (
-                      <Stack key={item.name} direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1.2, borderRadius: 1.5, '&:hover': { bgcolor: isDark ? '#13233a' : '#f8fafc' } }}>
+                    {meal.items.map((item, idx) => (
+                      <Stack key={`${item.name}-${idx}`} direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1.2, borderRadius: 1.5, '&:hover': { bgcolor: isDark ? '#13233a' : '#f8fafc' } }}>
                         <Box>
-                          <Typography sx={{ fontWeight: 700 }}>{item.name}</Typography>
+                          <Stack direction="row" spacing={0.8} alignItems="center">
+                            <Typography sx={{ fontWeight: 700 }}>{item.name}</Typography>
+                            {item.isLogged && (
+                              <Chip label="Logged" size="small" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700 }} />
+                            )}
+                          </Stack>
                           <Stack direction="row" spacing={0.9} sx={{ mt: 0.3 }}>
                             <Typography sx={{ color: theme.palette.text.secondary }}>{item.cals} kcal</Typography>
                             <Typography sx={{ color: '#9ca3af' }}>•</Typography>
@@ -556,13 +778,34 @@ function UserMealPlan() {
                             <Typography sx={{ color: '#8B5CF6' }}>{item.f}g F</Typography>
                           </Stack>
                         </Box>
-                        <ChevronRightRoundedIcon sx={{ color: '#9ca3af' }} />
+                        {item.isLogged ? (
+                          <Stack direction="row" spacing={0.6}>
+                            <Button
+                              size="small"
+                              onClick={() => openEditLogDialog(item, meal.key)}
+                              sx={{ minWidth: 0, px: 1, textTransform: 'none', fontWeight: 700 }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="small"
+                              color="error"
+                              onClick={() => handleDeleteLog(item.id)}
+                              sx={{ minWidth: 0, px: 1, textTransform: 'none', fontWeight: 700 }}
+                            >
+                              Delete
+                            </Button>
+                          </Stack>
+                        ) : (
+                          <ChevronRightRoundedIcon sx={{ color: '#9ca3af' }} />
+                        )}
                       </Stack>
                     ))}
 
                     <Button
                       fullWidth
                       startIcon={<AddRoundedIcon />}
+                      onClick={() => openCreateLogDialog(meal.key)}
                       sx={{
                         mt: 0.6,
                         color: '#64748b',
@@ -583,6 +826,155 @@ function UserMealPlan() {
             })}
           </Stack>
         </MotionBox>
+
+        <Dialog
+          open={isLogDialogOpen}
+          onClose={closeLogDialog}
+          fullWidth
+          maxWidth="sm"
+          PaperProps={{
+            sx: {
+              borderRadius: 2.2,
+              border: `1px solid ${isDark ? '#314764' : '#d5deea'}`,
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1, fontWeight: 900 }}>
+            {editingLogId ? 'Edit Food Log' : 'Add Food Log'}
+          </DialogTitle>
+          <DialogContent sx={{ pt: 1 }}>
+            <Stack spacing={1.25} sx={{ mt: 0.5 }}>
+              <TextField
+                select
+                label="Meal Type"
+                value={logForm.mealType}
+                onChange={handleLogFormChange('mealType')}
+                fullWidth
+                size="small"
+              >
+                {mealSectionOrder.map((mealType) => (
+                  <MenuItem key={mealType} value={mealType}>
+                    {mealSectionConfig[mealType].label}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <Autocomplete
+                freeSolo
+                options={nutritionOptions}
+                loading={isNutritionLoading}
+                noOptionsText="No suggestions found"
+                loadingText="Loading suggestions..."
+                getOptionLabel={(option) => (typeof option === 'string' ? option : option?.name || '')}
+                renderOption={(props, option) => {
+                  if (typeof option === 'string') {
+                    return (
+                      <Box component="li" {...props} sx={{ width: '100%' }}>
+                        <Typography sx={{ fontSize: '0.92rem' }}>{option}</Typography>
+                      </Box>
+                    );
+                  }
+                  return (
+                    <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Typography sx={{ fontSize: '0.92rem' }}>{option?.name || ''}</Typography>
+                      <Chip
+                        size="small"
+                        label="USDA"
+                        sx={{
+                          ml: 1,
+                          height: 20,
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          bgcolor: '#dcfce7',
+                          color: '#166534',
+                        }}
+                      />
+                    </Box>
+                  );
+                }}
+                filterOptions={(x) => x}
+                inputValue={logForm.name}
+                onInputChange={(_event, value) => {
+                  setLogForm((prev) => ({ ...prev, name: value }));
+                }}
+                onChange={handleNutritionSelect}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Food Name"
+                    fullWidth
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {isNutritionLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
+                <TextField
+                  label="Calories"
+                  type="number"
+                  value={logForm.calories}
+                  onChange={handleLogFormChange('calories')}
+                  fullWidth
+                  size="small"
+                />
+                <TextField
+                  label="Protein (g)"
+                  type="number"
+                  value={logForm.protein}
+                  onChange={handleLogFormChange('protein')}
+                  fullWidth
+                  size="small"
+                />
+              </Stack>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
+                <TextField
+                  label="Carbs (g)"
+                  type="number"
+                  value={logForm.carbs}
+                  onChange={handleLogFormChange('carbs')}
+                  fullWidth
+                  size="small"
+                />
+                <TextField
+                  label="Fat (g)"
+                  type="number"
+                  value={logForm.fat}
+                  onChange={handleLogFormChange('fat')}
+                  fullWidth
+                  size="small"
+                />
+              </Stack>
+              <TextField
+                label="Notes"
+                value={logForm.notes}
+                onChange={handleLogFormChange('notes')}
+                multiline
+                minRows={2}
+                fullWidth
+                size="small"
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2.5 }}>
+            <Button onClick={closeLogDialog} sx={{ textTransform: 'none', fontWeight: 700 }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveLog}
+              variant="contained"
+              sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.8 }}
+            >
+              {editingLogId ? 'Update Food' : 'Add Food'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </MotionBox>
   );

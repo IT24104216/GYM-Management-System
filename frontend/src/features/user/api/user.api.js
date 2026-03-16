@@ -38,6 +38,32 @@ export const getUserAppointments = (params) =>
 export const getUserDietitianMealPlan = (userId) =>
   axiosClient.get('/meal-plans/user-plan', { params: { userId } });
 
+export const searchNutritionFoods = (query) =>
+  axiosClient.get('/meal-plans/nutrition/search', {
+    params: { q: query },
+  });
+
+export const getUserFoodLogs = (userId, logDate) =>
+  axiosClient.get('/meal-plans/food-logs', {
+    params: {
+      userId,
+      ...(logDate ? { logDate } : {}),
+    },
+  });
+
+export const createUserFoodLog = (data) =>
+  axiosClient.post('/meal-plans/food-logs', data);
+
+export const updateUserFoodLog = (id, userId, data) =>
+  axiosClient.put(`/meal-plans/food-logs/${id}`, data, {
+    params: { userId },
+  });
+
+export const deleteUserFoodLog = (id, userId) =>
+  axiosClient.delete(`/meal-plans/food-logs/${id}`, {
+    params: { userId },
+  });
+
 export const updateAppointmentStatus = (id, data) =>
   axiosClient.patch(`/appointments/${id}/status`, data);
 
