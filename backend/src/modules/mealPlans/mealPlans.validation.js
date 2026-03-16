@@ -59,6 +59,10 @@ export const planQuerySchema = z.object({
     .optional(),
 });
 
+export const userPlanQuerySchema = z.object({
+  userId: idSchema,
+});
+
 const mealOptionSchema = z.object({
   mealName: z.string().trim().max(140).optional().default(''),
   description: z.string().trim().max(600).optional().default(''),
@@ -106,4 +110,3 @@ export const idParamSchema = z.object({
 export const ownerQuerySchema = z.object({
   dietitianId: idSchema,
 });
-
