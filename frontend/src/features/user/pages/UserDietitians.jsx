@@ -281,7 +281,8 @@ function UserDietitians() {
       ? ''
       : `${String(endsAt.getHours()).padStart(2, '0')}:${String(endsAt.getMinutes()).padStart(2, '0')}`;
 
-    const dietitian = dietitians.find((row) => String(row.id) === String(item.coachId));
+    const providerId = item.dietitianId || item.coachId;
+    const dietitian = dietitians.find((row) => String(row.id) === String(providerId));
     const statusMap = {
       pending: 'pending',
       approved: 'confirmed',
@@ -294,8 +295,8 @@ function UserDietitians() {
 
     return {
       id: item._id,
-      dietitianId: item.coachId,
-      dietitianName: dietitian?.name || getNoteValue(item.notes, 'Dietitian') || String(item.coachId),
+      dietitianId: providerId,
+      dietitianName: dietitian?.name || getNoteValue(item.notes, 'Dietitian') || String(providerId),
       date,
       fromTime,
       toTime,
@@ -413,10 +414,17 @@ function UserDietitians() {
       return;
     }
 
+    const selectedDietitianId = selectedDietitian?.id || selectedDietitian?._id;
+    if (!selectedDietitianId) {
+      setAvailabilityError('Selected dietitian is unavailable. Please refresh and try again.');
+      return;
+    }
+
     try {
       const startsAt = new Date(`${bookingForm.date}T${bookingForm.fromTime}:00`);
       const endsAt = new Date(`${bookingForm.date}T${bookingForm.toTime}:00`);
       const notes = [
+        `DietitianId: ${selectedDietitianId}`,
         `Dietitian: ${selectedDietitian?.name || ''}`,
         `User Name: ${bookingForm.userName || user?.name || ''}`,
         `User Email: ${bookingForm.userEmail || user?.email || ''}`,
@@ -439,7 +447,7 @@ function UserDietitians() {
       } else {
         await bookDietitianAppointment({
           userId: String(user?.id || bookingForm.userEmail || bookingForm.userName || 'guest-user'),
-          coachId: String(selectedDietitian?.id || selectedDietitian?.name || 'unknown-dietitian'),
+          dietitianId: String(selectedDietitianId),
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
           sessionType: 'nutrition',
