@@ -394,6 +394,11 @@ function UserCoaches() {
 
   const handleSubmitBooking = async (event) => {
     event.preventDefault();
+    const selectedCoachId = selectedCoach?.id || selectedCoach?._id;
+    if (!selectedCoachId) {
+      setSlotError('Selected coach is unavailable. Please refresh and try again.');
+      return;
+    }
 
     const isDateAvailable = isDateWithinCoachSchedule(selectedCoach, bookingForm.date);
     if (!isDateAvailable) {
@@ -428,6 +433,7 @@ function UserCoaches() {
       };
 
       const notes = [
+        `CoachId: ${selectedCoachId}`,
         `Coach: ${selectedCoach?.name || ''}`,
         `User Name: ${bookingForm.userName || user?.name || ''}`,
         `User Email: ${bookingForm.userEmail || user?.email || ''}`,
@@ -450,7 +456,7 @@ function UserCoaches() {
       } else {
         await bookCoachAppointment({
           userId: String(user?.id || bookingForm.userEmail || bookingForm.userName || 'guest-user'),
-          coachId: String(selectedCoach?.id || selectedCoach?.name || 'unknown-coach'),
+          coachId: String(selectedCoachId),
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
           sessionType: sessionTypeMap[bookingForm.appointmentType] || 'consultation',
