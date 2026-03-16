@@ -21,9 +21,15 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
-import { loadDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getDietitianAppointments } from '@/features/dietitian/api/dietitian.api';
+import {
+  deleteMealPlan,
+  getDietitianAppointments,
+  getDietitianClientPlans,
+  getMealLibraryItems,
+  submitMealPlan,
+  upsertDietitianClientPlan,
+} from '@/features/dietitian/api/dietitian.api';
 
 const CLIENTS_PER_PAGE = 6;
 
@@ -63,9 +69,9 @@ function DietitianClients() {
   const [dietPlanModal, setDietPlanModal] = useState({ open: false, client: null });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
   const [savedPlans, setSavedPlans] = useState({});
-  const [feedback, setFeedback] = useState({ open: false, message: '' });
+  const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   const [confirmDelete, setConfirmDelete] = useState({ open: false, client: null });
-  const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
+  const [mealSuggestions, setMealSuggestions] = useState([]);
   const [page, setPage] = useState(1);
 
   const getNoteValue = (notes, key) => {
@@ -131,6 +137,43 @@ function DietitianClients() {
     return () => clearInterval(interval);
   }, [dietitianId, dietitianName]);
 
+  const loadDietitianMealsAndPlans = async () => {
+    if (!dietitianId) return;
+    try {
+      const [{ data: mealsData }, { data: plansData }] = await Promise.all([
+        getMealLibraryItems({ dietitianId }),
+        getDietitianClientPlans({ dietitianId }),
+      ]);
+      const meals = Array.isArray(mealsData?.data) ? mealsData.data : [];
+      setMealSuggestions(meals);
+
+      const plans = Array.isArray(plansData?.data) ? plansData.data : [];
+      const planMap = {};
+      plans.forEach((plan) => {
+        if (!plan?.userId) return;
+        planMap[String(plan.userId)] = {
+          id: String(plan._id),
+          isSubmitted: Boolean(plan.isSubmitted),
+          data: {
+            breakfast: Array.isArray(plan.breakfast) ? plan.breakfast : [createMealOption(), createMealOption(), createMealOption()],
+            lunch: Array.isArray(plan.lunch) ? plan.lunch : [createMealOption(), createMealOption(), createMealOption()],
+            dinner: Array.isArray(plan.dinner) ? plan.dinner : [createMealOption(), createMealOption(), createMealOption()],
+            snacks: Array.isArray(plan.snacks) ? plan.snacks : [createMealOption(), createMealOption(), createMealOption()],
+            additionalNotes: plan.additionalNotes || '',
+          },
+        };
+      });
+      setSavedPlans(planMap);
+    } catch {
+      setMealSuggestions([]);
+      setSavedPlans({});
+    }
+  };
+
+  useEffect(() => {
+    loadDietitianMealsAndPlans();
+  }, [dietitianId]);
+
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
   const mutedText = isDark ? '#88a1c7' : '#607aa5';
@@ -155,8 +198,8 @@ function DietitianClients() {
   }, [visibleClients, currentPage]);
 
   const openDietPlanModal = (client) => {
-    setMealSuggestions(loadDietitianMeals());
-    setDietPlanForm(savedPlans[client.id] || createDietPlanForm());
+    const existing = savedPlans[client.id]?.data;
+    setDietPlanForm(existing || createDietPlanForm());
     setDietPlanModal({ open: true, client });
   };
 
@@ -202,24 +245,54 @@ function DietitianClients() {
     return Math.round(calories.reduce((sum, value) => sum + value, 0) / calories.length);
   };
 
-  const saveDietPlan = () => {
+  const saveDietPlan = async () => {
     const clientId = dietPlanModal.client?.id;
     if (!clientId) return;
-    setSavedPlans((prev) => ({ ...prev, [clientId]: dietPlanForm }));
-    setDietPlanModal({ open: false, client: null });
-    setFeedback({ open: true, message: 'Diet plan saved successfully.' });
+    try {
+      const payload = {
+        dietitianId,
+        userId: clientId,
+        memberName: dietPlanModal.client?.name || '',
+        breakfast: dietPlanForm.breakfast,
+        lunch: dietPlanForm.lunch,
+        dinner: dietPlanForm.dinner,
+        snacks: dietPlanForm.snacks,
+        additionalNotes: dietPlanForm.additionalNotes,
+      };
+      const { data } = await upsertDietitianClientPlan(payload);
+      const plan = data?.data;
+      if (plan?._id) {
+        await submitMealPlan(String(plan._id), dietitianId, true);
+      }
+      await loadDietitianMealsAndPlans();
+      setDietPlanModal({ open: false, client: null });
+      setFeedback({ open: true, message: 'Diet plan saved successfully.', severity: 'success' });
+    } catch (error) {
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to save diet plan.',
+        severity: 'error',
+      });
+    }
   };
 
-  const deleteDietPlan = () => {
+  const deleteDietPlan = async () => {
     const clientId = confirmDelete.client?.id;
     if (!clientId) return;
-    setSavedPlans((prev) => {
-      const copy = { ...prev };
-      delete copy[clientId];
-      return copy;
-    });
-    setConfirmDelete({ open: false, client: null });
-    setFeedback({ open: true, message: 'Diet plan deleted successfully.' });
+    try {
+      const planId = savedPlans[clientId]?.id;
+      if (!planId) return;
+      await deleteMealPlan(planId, dietitianId);
+      await loadDietitianMealsAndPlans();
+      setConfirmDelete({ open: false, client: null });
+      setFeedback({ open: true, message: 'Diet plan deleted successfully.', severity: 'success' });
+    } catch (error) {
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to delete diet plan.',
+        severity: 'error',
+      });
+    }
   };
 
   return (
@@ -647,7 +720,7 @@ function DietitianClients() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert
-          severity="success"
+          severity={feedback.severity || 'success'}
           variant="filled"
           onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
           sx={{ width: '100%' }}
