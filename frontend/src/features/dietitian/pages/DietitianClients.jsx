@@ -55,6 +55,8 @@ const createDietPlanForm = () => ({
 function DietitianClients() {
   const theme = useTheme();
   const { user } = useAuth();
+  const dietitianId = String(user?.id || user?._id || '');
+  const dietitianName = String(user?.name || '').trim().toLowerCase();
   const isDark = theme.palette.mode === 'dark';
   const [allClients, setAllClients] = useState([]);
   const [searchText, setSearchText] = useState('');
@@ -74,18 +76,29 @@ function DietitianClients() {
   };
 
   const loadApprovedClients = async () => {
-    if (!user?.id) return;
+    if (!dietitianId) return;
+    const getNoteValue = (notes, key) => {
+      if (!notes) return '';
+      const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+      const match = notes.match(pattern);
+      return match?.[1]?.trim() || '';
+    };
     try {
       const { data } = await getDietitianAppointments({
-        coachId: String(user.id),
         sessionType: 'nutrition',
         page: 1,
         limit: 300,
       });
 
       const items = Array.isArray(data?.data) ? data.data : [];
+      const ownItems = items.filter((item) => {
+        const byId = String(item.dietitianId || '') === dietitianId;
+        const byNoteId = String(getNoteValue(item.notes, 'DietitianId') || '') === dietitianId;
+        const byName = getNoteValue(item.notes, 'Dietitian').trim().toLowerCase() === dietitianName;
+        return byId || byNoteId || byName;
+      });
       const mapByUser = new Map();
-      items
+      ownItems
         .filter((item) => item.status === 'approved' || item.status === 'completed')
         .forEach((item) => {
           if (!mapByUser.has(item.userId)) {
@@ -116,7 +129,7 @@ function DietitianClients() {
     loadApprovedClients();
     const interval = setInterval(loadApprovedClients, 15000);
     return () => clearInterval(interval);
-  }, [user?.id]);
+  }, [dietitianId, dietitianName]);
 
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
