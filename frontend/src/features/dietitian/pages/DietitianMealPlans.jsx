@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -25,6 +26,7 @@ import {
   createMealLibraryItem,
   deleteMealLibraryItem,
   getMealLibraryItems,
+  searchNutritionFoods,
   updateMealLibraryItem,
 } from '../api/dietitian.api';
 
@@ -66,13 +68,30 @@ function DietitianMealPlans() {
   const [deleteState, setDeleteState] = useState({ open: false, meal: null });
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   const [isLoading, setIsLoading] = useState(false);
+  const [nutritionOptions, setNutritionOptions] = useState([]);
+  const [isNutritionLoading, setIsNutritionLoading] = useState(false);
 
   const mealsByCategory = useMemo(
     () => meals.filter((meal) => meal.category === activeCategory),
     [meals, activeCategory],
   );
 
-  const mealSuggestionLibrary = useMemo(() => meals, [meals]);
+  const mealSuggestionLibrary = useMemo(() => nutritionOptions, [nutritionOptions]);
+
+  const normalizeSuggestion = (selected) => {
+    if (!selected) return null;
+    const mealName = selected.mealName || selected.name || '';
+    return {
+      mealName,
+      category: selected.category,
+      calories: selected.calories ?? 0,
+      protein: selected.protein ?? 0,
+      carbs: selected.carbs ?? 0,
+      lipids: selected.lipids ?? selected.fat ?? 0,
+      vitamins: selected.vitamins ?? '',
+      description: selected.description ?? selected.notes ?? '',
+    };
+  };
 
   const loadMeals = async () => {
     if (!dietitianId) return;
@@ -94,6 +113,47 @@ function DietitianMealPlans() {
   useEffect(() => {
     loadMeals();
   }, [dietitianId]);
+
+  useEffect(() => {
+    const query = String(mealForm.mealName || '').trim();
+    if (query.length < 2) {
+      setNutritionOptions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsNutritionLoading(true);
+        const { data } = await searchNutritionFoods(query);
+        setNutritionOptions(Array.isArray(data?.data) ? data.data : []);
+      } catch (_error) {
+        setNutritionOptions([]);
+      } finally {
+        setIsNutritionLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [mealForm.mealName]);
+
+  useEffect(() => {
+    const query = String(editState.meal?.mealName || '').trim();
+    if (!editState.open || query.length < 2) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsNutritionLoading(true);
+        const { data } = await searchNutritionFoods(query);
+        setNutritionOptions(Array.isArray(data?.data) ? data.data : []);
+      } catch (_error) {
+        setNutritionOptions([]);
+      } finally {
+        setIsNutritionLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [editState.meal?.mealName, editState.open]);
 
   const handleAddMeal = async () => {
     if (!dietitianId) {
@@ -137,34 +197,36 @@ function DietitianMealPlans() {
   };
 
   const applySuggestionToAddForm = (selected) => {
-    if (!selected) return;
+    const suggestion = normalizeSuggestion(selected);
+    if (!suggestion) return;
     setMealForm((prev) => ({
       ...prev,
-      mealName: selected.mealName,
-      category: selected.category || prev.category,
-      calories: selected.calories,
-      protein: selected.protein,
-      carbs: selected.carbs,
-      lipids: selected.lipids,
-      vitamins: selected.vitamins,
-      description: selected.description,
+      mealName: suggestion.mealName,
+      category: suggestion.category || prev.category,
+      calories: suggestion.calories,
+      protein: suggestion.protein,
+      carbs: suggestion.carbs,
+      lipids: suggestion.lipids,
+      vitamins: suggestion.vitamins,
+      description: suggestion.description,
     }));
   };
 
   const applySuggestionToEditForm = (selected) => {
-    if (!selected || !editState.meal) return;
+    const suggestion = normalizeSuggestion(selected);
+    if (!suggestion || !editState.meal) return;
     setEditState((prev) => ({
       ...prev,
       meal: {
         ...prev.meal,
-        mealName: selected.mealName,
-        category: selected.category || prev.meal.category,
-        calories: selected.calories,
-        protein: selected.protein,
-        carbs: selected.carbs,
-        lipids: selected.lipids,
-        vitamins: selected.vitamins,
-        description: selected.description,
+        mealName: suggestion.mealName,
+        category: suggestion.category || prev.meal.category,
+        calories: suggestion.calories,
+        protein: suggestion.protein,
+        carbs: suggestion.carbs,
+        lipids: suggestion.lipids,
+        vitamins: suggestion.vitamins,
+        description: suggestion.description,
       },
     }));
   };
@@ -270,16 +332,59 @@ function DietitianMealPlans() {
           <Autocomplete
             freeSolo
             options={mealSuggestionLibrary}
+            loading={isNutritionLoading}
+            noOptionsText="No suggestions found"
+            loadingText="Loading suggestions..."
             getOptionLabel={(option) =>
-              typeof option === 'string' ? option : option.mealName || ''
+              typeof option === 'string' ? option : option.mealName || option.name || ''
             }
+            renderOption={(props, option) => {
+              if (typeof option === 'string') {
+                return (
+                  <Box component="li" {...props} sx={{ width: '100%' }}>
+                    <Typography sx={{ fontSize: '0.92rem' }}>{option}</Typography>
+                  </Box>
+                );
+              }
+              const name = option?.mealName || option?.name || '';
+              return (
+                <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <Typography sx={{ fontSize: '0.92rem' }}>{name}</Typography>
+                  <Chip
+                    size="small"
+                    label="USDA"
+                    sx={{
+                      ml: 1,
+                      height: 20,
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      bgcolor: '#dcfce7',
+                      color: '#166534',
+                    }}
+                  />
+                </Box>
+              );
+            }}
             value={mealForm.mealName}
             onInputChange={(_, value) =>
               setMealForm((prev) => ({ ...prev, mealName: value }))
             }
             onChange={(_, selected) => applySuggestionToAddForm(selected)}
             renderInput={(params) => (
-              <TextField {...params} label="Meal Name" size="small" />
+              <TextField
+                {...params}
+                label="Meal Name"
+                size="small"
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {isNutritionLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                }}
+              />
             )}
           />
           <TextField
@@ -431,16 +536,59 @@ function DietitianMealPlans() {
             <Autocomplete
               freeSolo
               options={mealSuggestionLibrary}
+              loading={isNutritionLoading}
+              noOptionsText="No suggestions found"
+              loadingText="Loading suggestions..."
               getOptionLabel={(option) =>
-                typeof option === 'string' ? option : option.mealName || ''
+                typeof option === 'string' ? option : option.mealName || option.name || ''
               }
+              renderOption={(props, option) => {
+                if (typeof option === 'string') {
+                  return (
+                    <Box component="li" {...props} sx={{ width: '100%' }}>
+                      <Typography sx={{ fontSize: '0.92rem' }}>{option}</Typography>
+                    </Box>
+                  );
+                }
+                const name = option?.mealName || option?.name || '';
+                return (
+                  <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <Typography sx={{ fontSize: '0.92rem' }}>{name}</Typography>
+                    <Chip
+                      size="small"
+                      label="USDA"
+                      sx={{
+                        ml: 1,
+                        height: 20,
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        bgcolor: '#dcfce7',
+                        color: '#166534',
+                      }}
+                    />
+                  </Box>
+                );
+              }}
               value={editState.meal?.mealName || ''}
               onInputChange={(_, value) =>
                 setEditState((prev) => ({ ...prev, meal: { ...prev.meal, mealName: value } }))
               }
               onChange={(_, selected) => applySuggestionToEditForm(selected)}
               renderInput={(params) => (
-                <TextField {...params} label="Meal Name" size="small" />
+                <TextField
+                  {...params}
+                  label="Meal Name"
+                  size="small"
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {isNutritionLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
               )}
             />
             <TextField

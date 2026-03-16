@@ -30,6 +30,11 @@ export const submitMealPlan = (id, dietitianId, submitted = true) =>
 export const getMealLibraryItems = (params) =>
   axiosClient.get('/meal-plans/library', { params });
 
+export const searchNutritionFoods = (query) =>
+  axiosClient.get('/meal-plans/nutrition/search', {
+    params: { q: query },
+  });
+
 export const createMealLibraryItem = (data) =>
   axiosClient.post('/meal-plans/library', data);
 
