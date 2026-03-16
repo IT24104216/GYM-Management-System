@@ -84,7 +84,8 @@ function DietitianDashboard() {
   const navigate = useNavigate();
   const theme = useTheme();
   const { user } = useAuth();
-  const dietitianId = user?.id;
+  const dietitianId = String(user?.id || user?._id || '');
+  const dietitianName = String(user?.name || '').trim().toLowerCase();
   const isDark = theme.palette.mode === 'dark';
   const [activeTab, setActiveTab] = useState('Members');
   const [searchText, setSearchText] = useState('');
@@ -179,13 +180,18 @@ function DietitianDashboard() {
     if (!dietitianId) return;
     try {
       const { data } = await getDietitianAppointments({
-        coachId: String(dietitianId),
         sessionType: 'nutrition',
         page: 1,
-        limit: 200,
+        limit: 500,
       });
 
-      const items = Array.isArray(data?.data) ? data.data : [];
+      const allNutritionItems = Array.isArray(data?.data) ? data.data : [];
+      const items = allNutritionItems.filter((item) => {
+        const byId = String(item.dietitianId || '') === String(dietitianId);
+        const byNoteId = String(getNoteValue(item.notes, 'DietitianId') || '') === String(dietitianId);
+        const byName = getNoteValue(item.notes, 'Dietitian').trim().toLowerCase() === dietitianName;
+        return byId || byNoteId || byName;
+      });
       const mapped = items.map(mapAppointmentRow);
       setAppointments(mapped);
 
@@ -207,9 +213,10 @@ function DietitianDashboard() {
         });
 
       setMembers(Array.from(approvedMembersMap.values()));
-    } catch {
+    } catch (error) {
       setAppointments(mockAppointments);
       setMembers(mockMembers);
+      setSlotError(error?.response?.data?.message || 'Failed to load dietitian appointments.');
     }
   };
 
