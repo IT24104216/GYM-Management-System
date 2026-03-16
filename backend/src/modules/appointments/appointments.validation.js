@@ -14,7 +14,8 @@ const dateSchema = z.coerce.date({
 export const createAppointmentSchema = z
   .object({
     userId: idSchema,
-    coachId: idSchema,
+    coachId: idSchema.optional(),
+    dietitianId: idSchema.optional(),
     startsAt: dateSchema,
     endsAt: dateSchema,
     sessionType: z
@@ -31,10 +32,27 @@ export const createAppointmentSchema = z
         message: 'must be later than startsAt',
       });
     }
+
+    if (data.sessionType === 'nutrition' && !data.dietitianId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dietitianId'],
+        message: 'is required for nutrition appointments',
+      });
+    }
+
+    if (data.sessionType !== 'nutrition' && !data.coachId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['coachId'],
+        message: 'is required for coach appointments',
+      });
+    }
   });
 
 export const appointmentQuerySchema = z.object({
   coachId: idSchema.optional(),
+  dietitianId: idSchema.optional(),
   userId: idSchema.optional(),
   status: z
     .enum(['pending', 'approved', 'rejected', 'cancelled', 'completed'])
@@ -48,7 +66,7 @@ export const appointmentQuerySchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
     .optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+  limit: z.coerce.number().int().min(1).max(1000).optional().default(20),
 });
 
 export const appointmentIdParamsSchema = z.object({
