@@ -10,8 +10,12 @@ import {
   createCategorySchema,
   createWorkoutPlanSchema,
   planIdParamsSchema,
+  submitWorkoutPlanSchema,
   updateCategorySchema,
   updateWorkoutPlanSchema,
+  workoutSessionFinishSchema,
+  workoutSessionProgressSchema,
+  workoutSessionStartSchema,
   workoutQuerySchema,
 } from './workouts.validation.js';
 
@@ -72,8 +76,20 @@ export const getWorkoutRequests = asyncHandler(async (req, res) => {
     .sort({ updatedAt: -1, startsAt: -1 })
     .limit(1000);
 
-  const plans = await WorkoutPlan.find({ coachId: query.coachId }).select('userId');
-  const plannedUserIds = new Set(plans.map((item) => String(item.userId)));
+  const plans = await WorkoutPlan.find({ coachId: query.coachId }).select('userId isSubmitted');
+  const plansByUser = new Map();
+  plans.forEach((item) => {
+    const userId = String(item.userId);
+    if (!plansByUser.has(userId)) {
+      plansByUser.set(userId, { hasPlan: true, hasSubmittedPlan: Boolean(item.isSubmitted) });
+      return;
+    }
+    const prev = plansByUser.get(userId);
+    plansByUser.set(userId, {
+      hasPlan: true,
+      hasSubmittedPlan: prev.hasSubmittedPlan || Boolean(item.isSubmitted),
+    });
+  });
 
   const dedupByUser = new Map();
 
@@ -106,7 +122,8 @@ export const getWorkoutRequests = asyncHandler(async (req, res) => {
       requestedOn: appointment.createdAt.toISOString().slice(0, 10),
       sessionsPerWeek,
       notes: getNoteValue(appointment.notes, 'Description') || appointment.notes || '',
-      hasPlan: plannedUserIds.has(userId),
+      hasPlan: plansByUser.has(userId),
+      hasSubmittedPlan: plansByUser.get(userId)?.hasSubmittedPlan || false,
     };
   });
 
@@ -120,6 +137,7 @@ export const getWorkoutPlans = asyncHandler(async (req, res) => {
   const filter = {};
   if (query.coachId) filter.coachId = query.coachId;
   if (query.userId) filter.userId = query.userId;
+  if (typeof query.submitted === 'boolean') filter.isSubmitted = query.submitted;
 
   const plans = await WorkoutPlan.find(filter)
     .sort({ createdAt: -1 })
@@ -159,6 +177,9 @@ export const updateWorkoutPlan = asyncHandler(async (req, res) => {
   if (!plan) {
     throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
   }
+  if (plan.isSubmitted) {
+    throw new AppError('Submitted workout plan cannot be edited', HTTP_STATUS.CONFLICT);
+  }
 
   Object.assign(plan, payload);
   await plan.save();
@@ -171,7 +192,13 @@ export const updateWorkoutPlan = asyncHandler(async (req, res) => {
 
 export const deleteWorkoutPlan = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(planIdParamsSchema, req.params);
-
+  const plan = await WorkoutPlan.findById(id);
+  if (!plan) {
+    throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
+  }
+  if (plan.isSubmitted) {
+    throw new AppError('Submitted workout plan cannot be deleted', HTTP_STATUS.CONFLICT);
+  }
   const deleted = await WorkoutPlan.findByIdAndDelete(id);
   if (!deleted) {
     throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
@@ -179,6 +206,174 @@ export const deleteWorkoutPlan = asyncHandler(async (req, res) => {
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Workout plan deleted successfully',
+  });
+});
+
+export const submitWorkoutPlan = asyncHandler(async (req, res) => {
+  const { id } = parseOrThrow(planIdParamsSchema, req.params);
+  const payload = parseOrThrow(submitWorkoutPlanSchema, req.body || {});
+
+  const plan = await WorkoutPlan.findById(id);
+  if (!plan) {
+    throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
+  }
+  if (plan.isSubmitted) {
+    return res.status(HTTP_STATUS.OK).json({
+      message: 'Workout plan already submitted',
+      data: plan,
+    });
+  }
+
+  plan.isSubmitted = Boolean(payload.submitted);
+  plan.submittedAt = plan.isSubmitted ? new Date() : null;
+  await plan.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Workout plan submitted successfully',
+    data: plan,
+  });
+});
+
+export const startWorkoutSession = asyncHandler(async (req, res) => {
+  const { id } = parseOrThrow(planIdParamsSchema, req.params);
+  const payload = parseOrThrow(workoutSessionStartSchema, req.body || {});
+
+  const plan = await WorkoutPlan.findById(id);
+  if (!plan) {
+    throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
+  }
+  if (!plan.isSubmitted) {
+    throw new AppError('Workout plan is not submitted yet', HTTP_STATUS.CONFLICT);
+  }
+  if (String(plan.userId) !== payload.userId) {
+    throw new AppError('Workout plan does not belong to this user', HTTP_STATUS.FORBIDDEN);
+  }
+  if (plan.session?.status === 'completed') {
+    throw new AppError('Workout session is already completed', HTTP_STATUS.CONFLICT);
+  }
+
+  if (plan.session?.status !== 'ongoing') {
+    plan.session = {
+      ...(plan.session?.toObject ? plan.session.toObject() : plan.session || {}),
+      status: 'ongoing',
+      startedAt: plan.session?.startedAt || new Date(),
+      completedAt: null,
+      elapsedSeconds: Number(plan.session?.elapsedSeconds || 0),
+      exerciseProgress: Array.isArray(plan.session?.exerciseProgress)
+        ? plan.session.exerciseProgress
+        : [],
+    };
+    await plan.save();
+  }
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Workout session started',
+    data: plan,
+  });
+});
+
+export const updateWorkoutSessionProgress = asyncHandler(async (req, res) => {
+  const { id } = parseOrThrow(planIdParamsSchema, req.params);
+  const payload = parseOrThrow(workoutSessionProgressSchema, req.body || {});
+
+  const plan = await WorkoutPlan.findById(id);
+  if (!plan) {
+    throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
+  }
+  if (!plan.isSubmitted) {
+    throw new AppError('Workout plan is not submitted yet', HTTP_STATUS.CONFLICT);
+  }
+  if (String(plan.userId) !== payload.userId) {
+    throw new AppError('Workout plan does not belong to this user', HTTP_STATUS.FORBIDDEN);
+  }
+  if (plan.session?.status === 'completed') {
+    throw new AppError('Workout session is already completed', HTTP_STATUS.CONFLICT);
+  }
+  if (!Array.isArray(plan.exercises) || payload.exerciseIndex >= plan.exercises.length) {
+    throw new AppError('Exercise index is invalid', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const nextSession = {
+    ...(plan.session?.toObject ? plan.session.toObject() : plan.session || {}),
+    status: 'ongoing',
+    startedAt: plan.session?.startedAt || new Date(),
+    completedAt: null,
+    elapsedSeconds: Number.isFinite(payload.elapsedSeconds)
+      ? payload.elapsedSeconds
+      : Number(plan.session?.elapsedSeconds || 0),
+    exerciseProgress: Array.isArray(plan.session?.exerciseProgress)
+      ? [...plan.session.exerciseProgress]
+      : [],
+  };
+
+  const progressIndex = nextSession.exerciseProgress.findIndex(
+    (item) => Number(item.index) === payload.exerciseIndex,
+  );
+  const nextProgressItem = {
+    index: payload.exerciseIndex,
+    done: payload.done,
+    completedAt: payload.done ? new Date() : null,
+  };
+
+  if (progressIndex === -1) {
+    nextSession.exerciseProgress.push(nextProgressItem);
+  } else {
+    nextSession.exerciseProgress[progressIndex] = nextProgressItem;
+  }
+
+  plan.session = nextSession;
+  await plan.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Workout progress updated',
+    data: plan,
+  });
+});
+
+export const finishWorkoutSession = asyncHandler(async (req, res) => {
+  const { id } = parseOrThrow(planIdParamsSchema, req.params);
+  const payload = parseOrThrow(workoutSessionFinishSchema, req.body || {});
+
+  const plan = await WorkoutPlan.findById(id);
+  if (!plan) {
+    throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
+  }
+  if (!plan.isSubmitted) {
+    throw new AppError('Workout plan is not submitted yet', HTTP_STATUS.CONFLICT);
+  }
+  if (String(plan.userId) !== payload.userId) {
+    throw new AppError('Workout plan does not belong to this user', HTTP_STATUS.FORBIDDEN);
+  }
+  if (plan.session?.status === 'completed') {
+    return res.status(HTTP_STATUS.OK).json({
+      message: 'Workout session already completed',
+      data: plan,
+    });
+  }
+
+  const progressMap = new Map(
+    (Array.isArray(plan.session?.exerciseProgress) ? plan.session.exerciseProgress : [])
+      .map((item) => [Number(item.index), Boolean(item.done)]),
+  );
+  const incompleteExists = plan.exercises.some((_, index) => !progressMap.get(index));
+  if (incompleteExists) {
+    throw new AppError('Complete all exercises before finishing', HTTP_STATUS.CONFLICT);
+  }
+
+  plan.session = {
+    ...(plan.session?.toObject ? plan.session.toObject() : plan.session || {}),
+    status: 'completed',
+    completedAt: new Date(),
+    elapsedSeconds: Number.isFinite(payload.elapsedSeconds)
+      ? payload.elapsedSeconds
+      : Number(plan.session?.elapsedSeconds || 0),
+  };
+  plan.status = 'completed';
+  await plan.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Workout session completed',
+    data: plan,
   });
 });
 
