@@ -30,6 +30,7 @@ import {
   getCoachExerciseCategories,
   getCoachWorkoutPlans,
   getCoachWorkoutRequests,
+  submitCoachWorkoutPlan,
   updateCoachExerciseCategory,
   updateCoachWorkoutPlan,
 } from '../api/coach.api';
@@ -59,7 +60,14 @@ function CoachWorkoutPlans() {
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   const [page, setPage] = useState(1);
   const [openPlan, setOpenPlan] = useState(null);
-  const [planForm, setPlanForm] = useState({ id: '', appointmentId: '', planTitle: '', planNote: '', exercises: [blankExercise()] });
+  const [planForm, setPlanForm] = useState({
+    id: '',
+    appointmentId: '',
+    planTitle: '',
+    planNote: '',
+    planDurationMinutes: 45,
+    exercises: [blankExercise()],
+  });
   const [drafts, setDrafts] = useState({ weightGain: blankExercise(), weightLoss: blankExercise() });
   const [editCategory, setEditCategory] = useState({ open: false, id: '', categoryKey: '', name: '', amount: '', description: '' });
 
@@ -124,9 +132,20 @@ function CoachWorkoutPlans() {
 
   const openPlanDialog = (request) => {
     const existing = plansByUser[String(request.userId)];
+    if (existing?.isSubmitted) {
+      showToast('Submitted plans are locked and cannot be edited', 'info');
+      return;
+    }
     setOpenPlan(request);
     if (!existing) {
-      setPlanForm({ id: '', appointmentId: String(request.appointmentId || ''), planTitle: '', planNote: '', exercises: [blankExercise()] });
+      setPlanForm({
+        id: '',
+        appointmentId: String(request.appointmentId || ''),
+        planTitle: '',
+        planNote: '',
+        planDurationMinutes: 45,
+        exercises: [blankExercise()],
+      });
       return;
     }
     setPlanForm({
@@ -134,6 +153,7 @@ function CoachWorkoutPlans() {
       appointmentId: String(existing.appointmentId || request.appointmentId || ''),
       planTitle: existing.planTitle || '',
       planNote: existing.planNote || '',
+      planDurationMinutes: Number(existing.planDurationMinutes) > 0 ? Number(existing.planDurationMinutes) : 45,
       exercises: Array.isArray(existing.exercises) && existing.exercises.length ? existing.exercises : [blankExercise()],
     });
   };
@@ -141,6 +161,9 @@ function CoachWorkoutPlans() {
   const savePlan = async () => {
     if (!openPlan) return;
     if (!planForm.planTitle.trim()) return showToast('Plan title is required', 'warning');
+    if (!Number(planForm.planDurationMinutes) || Number(planForm.planDurationMinutes) < 1) {
+      return showToast('Assigned time must be at least 1 minute', 'warning');
+    }
     if (planForm.exercises.some((x) => !x.name?.trim() || !x.amount?.trim())) return showToast('Exercise name and amount are required', 'warning');
 
     const payload = {
@@ -149,6 +172,7 @@ function CoachWorkoutPlans() {
       appointmentId: String(planForm.appointmentId || openPlan.appointmentId || ''),
       planTitle: planForm.planTitle.trim(),
       planNote: planForm.planNote.trim(),
+      planDurationMinutes: Number(planForm.planDurationMinutes) || 45,
       exercises: planForm.exercises.map((x) => ({ ...x, name: x.name.trim(), amount: x.amount.trim(), description: (x.description || '').trim() })),
     };
 
@@ -166,12 +190,32 @@ function CoachWorkoutPlans() {
   const removePlan = async (request) => {
     const existing = plansByUser[String(request.userId)];
     if (!existing?._id) return;
+    if (existing?.isSubmitted) {
+      showToast('Submitted plans cannot be deleted', 'warning');
+      return;
+    }
     try {
       await deleteCoachWorkoutPlan(String(existing._id));
       showToast('Workout plan deleted');
       await loadData();
     } catch (error) {
       showToast(error?.response?.data?.message || 'Failed to delete workout plan', 'error');
+    }
+  };
+
+  const submitPlan = async (request) => {
+    const existing = plansByUser[String(request.userId)];
+    if (!existing?._id) return;
+    if (existing?.isSubmitted) {
+      showToast('Workout plan already submitted', 'info');
+      return;
+    }
+    try {
+      await submitCoachWorkoutPlan(String(existing._id));
+      showToast('Workout plan submitted successfully');
+      await loadData();
+    } catch (error) {
+      showToast(error?.response?.data?.message || 'Failed to submit workout plan', 'error');
     }
   };
 
@@ -227,7 +271,9 @@ function CoachWorkoutPlans() {
         <>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' }, gap: 2 }}>
             {currentItems.map((request) => {
-              const hasPlan = Boolean(plansByUser[String(request.userId)]);
+              const existingPlan = plansByUser[String(request.userId)];
+              const hasPlan = Boolean(existingPlan);
+              const isSubmitted = Boolean(existingPlan?.isSubmitted);
               return (
                 <Box key={request.appointmentId || request.userId} sx={{ background: panelBg, border: '1px solid', borderColor: panelBorder, borderRadius: 2.5, p: 2.5, minHeight: 250, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }}>
@@ -240,15 +286,18 @@ function CoachWorkoutPlans() {
                     </Stack>
                     <Stack direction="row" spacing={1}>
                       <Chip size="small" label={`${request.priority} Priority`} />
-                      {hasPlan && <Chip size="small" label="Plan Ready" icon={<AssignmentTurnedInRoundedIcon />} />}
+                      {hasPlan && <Chip size="small" label={isSubmitted ? 'Plan Submitted' : 'Plan Ready'} icon={<AssignmentTurnedInRoundedIcon />} />}
                     </Stack>
                   </Stack>
                   <Typography sx={{ mt: 1.2, color: mutedText, fontSize: '0.86rem' }}>Request note: {request.notes || '-'}</Typography>
                   <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="center" sx={{ mt: 1.2 }}>
                     <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>Requested on: {request.requestedOn}</Typography>
                     <Stack direction="row" spacing={1}>
-                      <Button variant="contained" onClick={() => openPlanDialog(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>{hasPlan ? 'Edit Workout Plan' : 'Create Workout Plan'}</Button>
-                      {hasPlan && <Button variant="outlined" color="error" onClick={() => removePlan(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>Delete</Button>}
+                      {!isSubmitted && (
+                        <Button variant="contained" onClick={() => openPlanDialog(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>{hasPlan ? 'Edit Workout Plan' : 'Create Workout Plan'}</Button>
+                      )}
+                      {hasPlan && !isSubmitted && <Button variant="outlined" color="error" onClick={() => removePlan(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>Delete</Button>}
+                      {hasPlan && !isSubmitted && <Button variant="contained" color="success" onClick={() => submitPlan(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>Submit</Button>}
                     </Stack>
                   </Stack>
                 </Box>
@@ -301,6 +350,20 @@ function CoachWorkoutPlans() {
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <TextField label="Plan Title" value={planForm.planTitle} onChange={(e) => setPlanForm((prev) => ({ ...prev, planTitle: e.target.value }))} fullWidth />
             <TextField label="Plan Notes" value={planForm.planNote} onChange={(e) => setPlanForm((prev) => ({ ...prev, planNote: e.target.value }))} fullWidth multiline minRows={2} />
+            <TextField
+              label="Assigned Time (minutes)"
+              type="number"
+              value={planForm.planDurationMinutes}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setPlanForm((prev) => ({
+                  ...prev,
+                  planDurationMinutes: Number.isNaN(value) ? '' : Math.max(1, Math.min(600, value)),
+                }));
+              }}
+              inputProps={{ min: 1, max: 600 }}
+              fullWidth
+            />
             {planForm.exercises.map((exercise, index) => (
               <Box key={`exercise-${index}`} sx={{ p: 1.5, border: '1px solid', borderColor: panelBorder, borderRadius: 2 }}>
                 <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
