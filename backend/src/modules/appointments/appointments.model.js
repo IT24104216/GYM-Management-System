@@ -10,7 +10,13 @@ const appointmentSchema = new mongoose.Schema(
     },
     coachId: {
       type: String,
-      required: true,
+      required: false,
+      trim: true,
+      index: true,
+    },
+    dietitianId: {
+      type: String,
+      required: false,
       trim: true,
       index: true,
     },
@@ -50,6 +56,7 @@ const appointmentSchema = new mongoose.Schema(
 );
 
 appointmentSchema.index({ coachId: 1, startsAt: 1, endsAt: 1 });
+appointmentSchema.index({ dietitianId: 1, startsAt: 1, endsAt: 1 });
 appointmentSchema.index({ userId: 1, coachId: 1, startsAt: -1 });
 
 export const Appointment = mongoose.model('Appointment', appointmentSchema);
