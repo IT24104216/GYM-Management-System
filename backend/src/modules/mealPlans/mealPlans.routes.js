@@ -1,13 +1,18 @@
 import { Router } from 'express';
 import {
+  createUserFoodLog,
   createMealLibraryItem,
+  deleteUserFoodLog,
   deleteDietPlan,
   deleteMealLibraryItem,
   getDietPlans,
+  getUserFoodLogs,
   getMealLibraryItems,
   getmealPlansStatus,
   getUserActiveDietPlan,
+  searchNutritionFoods,
   submitDietPlan,
+  updateUserFoodLog,
   updateDietPlan,
   updateMealLibraryItem,
   upsertDietPlan,
@@ -17,6 +22,11 @@ const router = Router();
 
 router.get('/', getmealPlansStatus);
 router.get('/user-plan', getUserActiveDietPlan);
+router.get('/nutrition/search', searchNutritionFoods);
+router.get('/food-logs', getUserFoodLogs);
+router.post('/food-logs', createUserFoodLog);
+router.put('/food-logs/:id', updateUserFoodLog);
+router.delete('/food-logs/:id', deleteUserFoodLog);
 
 router.get('/library', getMealLibraryItems);
 router.post('/library', createMealLibraryItem);

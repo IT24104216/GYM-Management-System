@@ -9,5 +9,5 @@ export const env = {
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || '',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || '',
   CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+  USDA_API_KEY: process.env.USDA_API_KEY || '',
 };
-

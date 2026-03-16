@@ -110,3 +110,46 @@ export const idParamSchema = z.object({
 export const ownerQuerySchema = z.object({
   dietitianId: idSchema,
 });
+
+const dateSchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/);
+const mealTypeSchema = z.enum(['breakfast', 'lunch', 'dinner', 'snacks']);
+
+export const foodLogQuerySchema = z.object({
+  userId: idSchema,
+  logDate: dateSchema.optional(),
+});
+
+export const createFoodLogSchema = z.object({
+  userId: idSchema,
+  logDate: dateSchema,
+  mealType: mealTypeSchema,
+  name: z.string().trim().min(1, 'name is required').max(140),
+  calories: numberLikeSchema,
+  protein: numberLikeSchema,
+  carbs: numberLikeSchema,
+  fat: numberLikeSchema,
+  notes: z.string().trim().max(500).optional().default(''),
+});
+
+export const updateFoodLogSchema = z
+  .object({
+    logDate: dateSchema.optional(),
+    mealType: mealTypeSchema.optional(),
+    name: z.string().trim().min(1).max(140).optional(),
+    calories: numberLikeSchema,
+    protein: numberLikeSchema,
+    carbs: numberLikeSchema,
+    fat: numberLikeSchema,
+    notes: z.string().trim().max(500).optional(),
+  })
+  .refine((payload) => Object.keys(payload).length > 0, {
+    message: 'At least one field is required',
+  });
+
+export const foodLogOwnerQuerySchema = z.object({
+  userId: idSchema,
+});
+
+export const nutritionSearchQuerySchema = z.object({
+  q: z.string().trim().min(2, 'q must be at least 2 characters').max(120),
+});

@@ -1,16 +1,22 @@
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
+import { env } from '../../config/env.js';
 import { User } from '../users/users.model.js';
 import { DietitianProfile } from '../dietitian/dietitianProfile.model.js';
-import { DietPlan, MealLibraryItem } from './mealPlans.model.js';
+import { DietPlan, FoodLog, MealLibraryItem } from './mealPlans.model.js';
 import {
+  createFoodLogSchema,
   createMealLibrarySchema,
+  foodLogOwnerQuerySchema,
+  foodLogQuerySchema,
   idParamSchema,
   mealLibraryQuerySchema,
+  nutritionSearchQuerySchema,
   ownerQuerySchema,
   planQuerySchema,
   submitDietPlanSchema,
+  updateFoodLogSchema,
   updateDietPlanSchema,
   updateMealLibrarySchema,
   userPlanQuerySchema,
@@ -338,4 +344,108 @@ export const getUserActiveDietPlan = asyncHandler(async (req, res) => {
       sections: sectionData,
     },
   });
+});
+
+export const getUserFoodLogs = asyncHandler(async (req, res) => {
+  const { userId, logDate } = parseOrThrow(foodLogQuerySchema, req.query || {});
+  await ensureUserExists(userId);
+
+  const filter = { userId };
+  if (logDate) filter.logDate = logDate;
+
+  const logs = await FoodLog.find(filter).sort({ mealType: 1, createdAt: 1 });
+
+  res.status(HTTP_STATUS.OK).json({
+    data: logs,
+  });
+});
+
+export const createUserFoodLog = asyncHandler(async (req, res) => {
+  const payload = parseOrThrow(createFoodLogSchema, req.body || {});
+  await ensureUserExists(payload.userId);
+
+  const created = await FoodLog.create(payload);
+
+  res.status(HTTP_STATUS.CREATED).json({
+    message: 'Food log added successfully',
+    data: created,
+  });
+});
+
+export const updateUserFoodLog = asyncHandler(async (req, res) => {
+  const { id } = parseOrThrow(idParamSchema, req.params);
+  const { userId } = parseOrThrow(foodLogOwnerQuerySchema, req.query || {});
+  const payload = parseOrThrow(updateFoodLogSchema, req.body || {});
+  await ensureUserExists(userId);
+
+  const log = await FoodLog.findOne({ _id: id, userId });
+  if (!log) {
+    throw new AppError('Food log not found', HTTP_STATUS.NOT_FOUND);
+  }
+
+  Object.assign(log, payload);
+  await log.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Food log updated successfully',
+    data: log,
+  });
+});
+
+export const deleteUserFoodLog = asyncHandler(async (req, res) => {
+  const { id } = parseOrThrow(idParamSchema, req.params);
+  const { userId } = parseOrThrow(foodLogOwnerQuerySchema, req.query || {});
+  await ensureUserExists(userId);
+
+  const deleted = await FoodLog.findOneAndDelete({ _id: id, userId });
+  if (!deleted) {
+    throw new AppError('Food log not found', HTTP_STATUS.NOT_FOUND);
+  }
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Food log deleted successfully',
+  });
+});
+
+export const searchNutritionFoods = asyncHandler(async (req, res) => {
+  const { q } = parseOrThrow(nutritionSearchQuerySchema, req.query || {});
+  const query = q.trim();
+
+  if (!env.USDA_API_KEY) {
+    throw new AppError('USDA API key is missing', HTTP_STATUS.SERVICE_UNAVAILABLE);
+  }
+
+  const usdaUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&pageSize=12&api_key=${encodeURIComponent(env.USDA_API_KEY)}`;
+  let externalResults = [];
+
+  try {
+    const response = await fetch(usdaUrl, { method: 'GET' });
+
+    if (response.ok) {
+      const json = await response.json();
+      externalResults = (json?.foods || []).map((food) => {
+        const nutrients = Array.isArray(food.foodNutrients) ? food.foodNutrients : [];
+        const getNutrient = (names) => {
+          const hit = nutrients.find((n) =>
+            names.some((name) => String(n?.nutrientName || '').toLowerCase() === name.toLowerCase()));
+          return Number(hit?.value || 0);
+        };
+
+        return {
+          source: 'usda',
+          id: String(food.fdcId || ''),
+          name: String(food.description || '').trim(),
+          calories: getNutrient(['Energy', 'Energy (Atwater General Factors)', 'Energy (Atwater Specific Factors)']),
+          protein: getNutrient(['Protein']),
+          carbs: getNutrient(['Carbohydrate, by difference']),
+          fat: getNutrient(['Total lipid (fat)']),
+          notes: '',
+          vitamins: '',
+        };
+      }).filter((item) => item.name);
+    }
+  } catch (_error) {
+    throw new AppError('USDA lookup failed', HTTP_STATUS.BAD_GATEWAY);
+  }
+  res.status(HTTP_STATUS.OK).json({ data: externalResults.slice(0, 12) });
 });

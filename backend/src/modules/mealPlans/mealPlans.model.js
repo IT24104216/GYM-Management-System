@@ -172,6 +172,68 @@ const dietPlanSchema = new mongoose.Schema(
 
 dietPlanSchema.index({ dietitianId: 1, userId: 1 }, { unique: true });
 
+const foodLogSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+    logDate: {
+      type: String,
+      required: true,
+      trim: true,
+      match: /^\d{4}-\d{2}-\d{2}$/,
+      index: true,
+    },
+    mealType: {
+      type: String,
+      enum: ['breakfast', 'lunch', 'dinner', 'snacks'],
+      required: true,
+      index: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 140,
+    },
+    calories: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    protein: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    carbs: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    fat: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: '',
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: false,
+  },
+);
+
+foodLogSchema.index({ userId: 1, logDate: 1, mealType: 1, createdAt: -1 });
+
 export const MealLibraryItem = mongoose.model('MealLibraryItem', mealLibrarySchema);
 export const DietPlan = mongoose.model('DietPlan', dietPlanSchema);
-
+export const FoodLog = mongoose.model('FoodLog', foodLogSchema);
