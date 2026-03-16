@@ -35,6 +35,9 @@ export const bookCoachAppointment = (data) =>
 export const getUserAppointments = (params) =>
   axiosClient.get('/appointments', { params });
 
+export const getUserDietitianMealPlan = (userId) =>
+  axiosClient.get('/meal-plans/user-plan', { params: { userId } });
+
 export const updateAppointmentStatus = (id, data) =>
   axiosClient.patch(`/appointments/${id}/status`, data);
 
