@@ -93,6 +93,7 @@ function CircularScore({ score, id, isDark }) {
 function CoachClients() {
   const theme = useTheme();
   const { user } = useAuth();
+  const coachId = String(user?.id || user?._id || '');
   const isDark = theme.palette.mode === 'dark';
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
   const panelBorder = isDark ? '#24344f' : '#e5e7eb';
@@ -126,7 +127,7 @@ function CoachClients() {
   };
 
   const loadAppointments = async () => {
-    if (!user?.id) return;
+    if (!coachId) return;
     try {
       const { data } = await getCoachAppointments({
         page: 1,
@@ -135,13 +136,15 @@ function CoachClients() {
       const all = Array.isArray(data?.data) ? data.data : [];
       const coachName = String(user?.name || '').trim().toLowerCase();
       const mine = all.filter((item) => {
-        const byId = String(item.coachId) === String(user.id);
+        const byId = String(item.coachId || '') === coachId;
+        const byNoteId = String(getNoteValue(item.notes, 'CoachId') || '') === coachId;
         const noteCoach = getNoteValue(item.notes, 'Coach').toLowerCase();
         const byName = coachName && noteCoach && noteCoach === coachName;
-        return byId || byName;
+        const isCoachBooking = item.sessionType !== 'nutrition';
+        return isCoachBooking && (byId || byNoteId || byName);
       });
 
-      setAppointments(mine.length ? mine : all);
+      setAppointments(mine);
     } catch (error) {
       setAppointments([]);
       const message = error?.response?.data?.message || 'Failed to load appointments';
@@ -153,7 +156,7 @@ function CoachClients() {
     loadAppointments();
     const interval = setInterval(loadAppointments, 15000);
     return () => clearInterval(interval);
-  }, [user?.id]);
+  }, [coachId]);
 
   const pendingRows = useMemo(
     () => appointments.filter((item) => item.status === 'pending').map(mapAppointmentRow),
