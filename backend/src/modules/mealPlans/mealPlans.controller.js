@@ -2,6 +2,7 @@ import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { User } from '../users/users.model.js';
+import { DietitianProfile } from '../dietitian/dietitianProfile.model.js';
 import { DietPlan, MealLibraryItem } from './mealPlans.model.js';
 import {
   createMealLibrarySchema,
@@ -12,6 +13,7 @@ import {
   submitDietPlanSchema,
   updateDietPlanSchema,
   updateMealLibrarySchema,
+  userPlanQuerySchema,
   upsertDietPlanSchema,
 } from './mealPlans.validation.js';
 
@@ -250,5 +252,90 @@ export const deleteDietPlan = asyncHandler(async (req, res) => {
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Diet plan deleted successfully',
+  });
+});
+
+const toNumber = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+};
+
+const sectionMap = [
+  { key: 'breakfast', label: 'Breakfast' },
+  { key: 'lunch', label: 'Lunch' },
+  { key: 'dinner', label: 'Dinner' },
+  { key: 'snacks', label: 'Snacks' },
+];
+
+export const getUserActiveDietPlan = asyncHandler(async (req, res) => {
+  const { userId } = parseOrThrow(userPlanQuerySchema, req.query || {});
+  await ensureUserExists(userId);
+
+  const plan = await DietPlan.findOne({ userId, isSubmitted: true })
+    .sort({ submittedAt: -1, updatedAt: -1, createdAt: -1 });
+
+  if (!plan) {
+    return res.status(HTTP_STATUS.OK).json({ data: null });
+  }
+
+  const [dietitianUser, dietitianProfile] = await Promise.all([
+    User.findById(plan.dietitianId).select('name email'),
+    DietitianProfile.findOne({ dietitianId: plan.dietitianId }).select('specialization experienceYears'),
+  ]);
+
+  const sectionData = sectionMap.map((section) => {
+    const rawItems = Array.isArray(plan[section.key]) ? plan[section.key] : [];
+    const items = rawItems
+      .filter((item) => String(item?.mealName || '').trim().length > 0)
+      .map((item) => ({
+        name: item.mealName,
+        description: item.description || '',
+        cals: toNumber(item.calories),
+        p: toNumber(item.protein),
+        c: toNumber(item.carbs),
+        f: toNumber(item.lipids),
+        vitamins: item.vitamins || '',
+      }));
+
+    return {
+      key: section.key,
+      type: section.label,
+      items,
+      total: items.reduce((sum, item) => sum + item.cals, 0),
+    };
+  });
+
+  const summary = sectionData.reduce(
+    (acc, section) => {
+      section.items.forEach((item) => {
+        acc.totalCalories += item.cals;
+        acc.protein += item.p;
+        acc.carbs += item.c;
+        acc.fat += item.f;
+      });
+      return acc;
+    },
+    { totalCalories: 0, protein: 0, carbs: 0, fat: 0 },
+  );
+
+  res.status(HTTP_STATUS.OK).json({
+    data: {
+      planId: String(plan._id),
+      userId: String(plan.userId),
+      memberName: plan.memberName || '',
+      additionalNotes: plan.additionalNotes || '',
+      isSubmitted: Boolean(plan.isSubmitted),
+      submittedAt: plan.submittedAt,
+      updatedAt: plan.updatedAt,
+      dietitian: {
+        id: String(plan.dietitianId),
+        name: dietitianUser?.name || 'Dietitian',
+        email: dietitianUser?.email || '',
+        specialization: dietitianProfile?.specialization || 'Nutrition',
+        experienceYears: Number(dietitianProfile?.experienceYears || 0),
+      },
+      summary,
+      sections: sectionData,
+    },
   });
 });
