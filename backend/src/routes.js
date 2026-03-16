@@ -9,6 +9,7 @@ import { appointmentsRouter } from './modules/appointments/appointments.routes.j
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 import { workoutsRouter } from './modules/workouts/workouts.routes.js';
 import { mealPlansRouter } from './modules/mealPlans/mealPlans.routes.js';
+import { progressRouter } from './modules/progress/progress.routes.js';
 
 const router = Router();
 
@@ -22,5 +23,6 @@ router.use('/appointments', appointmentsRouter);
 router.use('/notifications', notificationsRouter);
 router.use('/workouts', workoutsRouter);
 router.use('/meal-plans', mealPlansRouter);
+router.use('/progress', progressRouter);
 
 export { router as apiRouter };
