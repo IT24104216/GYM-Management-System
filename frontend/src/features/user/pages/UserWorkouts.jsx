@@ -24,6 +24,8 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
 import FlipRoundedIcon from '@mui/icons-material/FlipRounded';
 import { ROUTES } from '@/shared/utils/constants';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { getUserWorkoutPlans } from '@/features/user/api/user.api';
 
 const MotionBox = motion(Box);
 const SESSION_LIMIT_SECONDS = 60 * 60;
@@ -145,6 +147,56 @@ const EXERCISE_LIBRARY = MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({
   },
 }));
 
+const PLAN_GRADIENTS = [
+  'linear-gradient(135deg, #65a30d 0%, #0ea5a5 100%)',
+  'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
+  'linear-gradient(135deg, #0f766e 0%, #0284c7 100%)',
+  'linear-gradient(135deg, #b45309 0%, #ea580c 100%)',
+];
+
+const mapPlansToWorkouts = (plans = []) => {
+  const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const result = [];
+
+  plans.forEach((plan, planIdx) => {
+    const planExercises = Array.isArray(plan.exercises) ? plan.exercises : [];
+    const baseDate = new Date(plan.createdAt || Date.now());
+    const scheduledDate = Number.isNaN(baseDate.getTime())
+      ? todayLabel
+      : baseDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    planExercises.forEach((exercise, exIdx) => {
+      result.push({
+        id: `${plan._id || `plan-${planIdx}`}-${exIdx}`,
+        sourcePlanId: String(plan._id || `plan-${planIdx}`),
+        title: exercise.name || plan.planTitle || 'Workout Exercise',
+        muscles: plan.planTitle || 'Coach Assigned Plan',
+        workoutDate: scheduledDate,
+        duration: exercise.amount || '45 min',
+        level: 'Coach Plan',
+        rating: 4.7,
+        gradient: PLAN_GRADIENTS[(planIdx + exIdx) % PLAN_GRADIENTS.length],
+        done: plan.status === 'completed',
+        planExercises: planExercises.map((item, itemIdx) => ({
+          id: `${plan._id || `plan-${planIdx}`}-session-${itemIdx}`,
+          name: item.name || 'Exercise',
+          setsReps: item.amount || '',
+          focusArea: plan.planTitle || 'Workout',
+          instruction: item.description || 'Follow the coach instructions.',
+          done: false,
+          flipped: false,
+        })),
+        sessionExerciseMeta: {
+          setsReps: exercise.amount || '',
+          instruction: exercise.description || '',
+        },
+      });
+    });
+  });
+
+  return result.length ? result : EXERCISE_LIBRARY;
+};
+
 function ExerciseCard({ workout, index }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -251,6 +303,7 @@ function ExerciseCard({ workout, index }) {
 
 function UserWorkouts() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const today = new Date();
@@ -264,6 +317,21 @@ function UserWorkouts() {
   const [sessionExercises, setSessionExercises] = useState(
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
   );
+
+  useEffect(() => {
+    const loadAssignedPlans = async () => {
+      if (!user?.id) return;
+      try {
+        const { data } = await getUserWorkoutPlans(String(user.id));
+        const plans = Array.isArray(data?.data) ? data.data : [];
+        setWorkouts(mapPlansToWorkouts(plans));
+      } catch {
+        setWorkouts(EXERCISE_LIBRARY);
+      }
+    };
+
+    loadAssignedPlans();
+  }, [user?.id]);
 
   const upcomingExercises = workouts
     .filter((item) => !item.done)
@@ -312,7 +380,10 @@ function UserWorkouts() {
     setElapsedSessionSeconds(0);
     setSessionStarted(false);
     setSessionStatus('idle');
-    setSessionExercises(MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })));
+    const workoutSessionExercises = Array.isArray(todayWorkout.planExercises) && todayWorkout.planExercises.length
+      ? todayWorkout.planExercises
+      : MOCK_WORKOUT_SESSION.exercises;
+    setSessionExercises(workoutSessionExercises.map((exercise) => ({ ...exercise, done: false, flipped: false })));
     setIsWorkoutSessionOpen(true);
   };
 
@@ -349,10 +420,10 @@ function UserWorkouts() {
     const normalizedHistory = Array.isArray(existingHistory) ? existingHistory : [];
     const nextHistory = Array.from(new Set([...normalizedHistory, completionIsoDate])).sort();
 
-    const finishedWorkoutId = activeSessionWorkout?.id || todayWorkout?.id;
-    if (finishedWorkoutId) {
+    const sourcePlanId = activeSessionWorkout?.sourcePlanId || todayWorkout?.sourcePlanId;
+    if (sourcePlanId) {
       setWorkouts((prev) => prev.map((item) => (
-        item.id === finishedWorkoutId
+        item.sourcePlanId === sourcePlanId
           ? {
             ...item,
             done: true,
@@ -561,7 +632,7 @@ function UserWorkouts() {
                 {activeSessionWorkout?.title || MOCK_WORKOUT_SESSION.title}
               </Typography>
               <Typography sx={{ color: theme.palette.text.secondary, mt: 0.4, fontSize: '0.98rem' }}>
-                {MOCK_WORKOUT_SESSION.exercises.length} exercises • ~{MOCK_WORKOUT_SESSION.estimatedDurationMinutes} min
+                {sessionExercises.length} exercises • ~{activeSessionDurationMinutes} min
               </Typography>
             </Box>
 
