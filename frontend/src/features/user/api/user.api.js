@@ -12,8 +12,22 @@ export const getUserWorkouts = () =>
 export const getWorkoutById = (id) =>
   axiosClient.get(`/user/workouts/${id}`);
 
-export const getUserWorkoutPlans = (userId) =>
-  axiosClient.get('/workouts/plans', { params: { userId } });
+export const getUserWorkoutPlans = (userId, options = {}) =>
+  axiosClient.get('/workouts/plans', {
+    params: {
+      userId,
+      ...(options?.submitted !== undefined ? { submitted: options.submitted } : {}),
+    },
+  });
+
+export const startUserWorkoutSession = (planId, data) =>
+  axiosClient.post(`/workouts/plans/${planId}/session/start`, data);
+
+export const updateUserWorkoutSessionProgress = (planId, data) =>
+  axiosClient.patch(`/workouts/plans/${planId}/session/progress`, data);
+
+export const finishUserWorkoutSession = (planId, data) =>
+  axiosClient.patch(`/workouts/plans/${planId}/session/finish`, data);
 
 export const bookCoachAppointment = (data) =>
   axiosClient.post('/appointments', data);
