@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ResponsiveContainer,
@@ -28,6 +28,10 @@ import FreeBreakfastRoundedIcon from '@mui/icons-material/FreeBreakfastRounded';
 import LunchDiningRoundedIcon from '@mui/icons-material/LunchDiningRounded';
 import DinnerDiningRoundedIcon from '@mui/icons-material/DinnerDiningRounded';
 import IcecreamRoundedIcon from '@mui/icons-material/IcecreamRounded';
+import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
+import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { getUserDietitianMealPlan } from '../api/user.api';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
@@ -47,13 +51,13 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 },
 };
 
-const macroData = [
+const fallbackMacroData = [
   { name: 'Protein', value: 140, color: '#0D9488' },
   { name: 'Carbs', value: 220, color: '#F59E0B' },
   { name: 'Fat', value: 65, color: '#8B5CF6' },
 ];
 
-const weeklyCals = [
+const fallbackWeeklyCals = [
   { day: 'M', cals: 2100 },
   { day: 'T', cals: 2300 },
   { day: 'W', cals: 1950 },
@@ -63,7 +67,7 @@ const weeklyCals = [
   { day: 'S', cals: 2200 },
 ];
 
-const meals = [
+const fallbackMeals = [
   {
     type: 'Breakfast',
     icon: FreeBreakfastRoundedIcon,
@@ -138,9 +142,104 @@ function CalorieTooltip({ active, payload, label }) {
 function UserMealPlan() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const { user } = useAuth();
+  const userId = String(user?.id || user?._id || '');
   const [planMode, setPlanMode] = useState('dietitian');
+  const [dietitianPlan, setDietitianPlan] = useState(null);
+  const [planError, setPlanError] = useState('');
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
 
-  const totalConsumed = useMemo(() => meals.reduce((sum, meal) => sum + meal.total, 0), []);
+  useEffect(() => {
+    const loadDietitianPlan = async () => {
+      if (!userId) return;
+      try {
+        setIsPlanLoading(true);
+        setPlanError('');
+        const { data } = await getUserDietitianMealPlan(userId);
+        setDietitianPlan(data?.data || null);
+      } catch (error) {
+        setDietitianPlan(null);
+        setPlanError(error?.response?.data?.message || 'Failed to load dietitian plan');
+      } finally {
+        setIsPlanLoading(false);
+      }
+    };
+
+    loadDietitianPlan();
+  }, [userId]);
+
+  const meals = useMemo(() => {
+    if (!dietitianPlan?.sections?.length) return [];
+    const iconMap = {
+      Breakfast: FreeBreakfastRoundedIcon,
+      Lunch: LunchDiningRoundedIcon,
+      Dinner: DinnerDiningRoundedIcon,
+      Snacks: IcecreamRoundedIcon,
+    };
+    const colorMap = {
+      Breakfast: { tone: '#d97706', bg: '#fef3c7' },
+      Lunch: { tone: '#059669', bg: '#d1fae5' },
+      Dinner: { tone: '#2563eb', bg: '#dbeafe' },
+      Snacks: { tone: '#7c3aed', bg: '#ede9fe' },
+    };
+    return dietitianPlan.sections.map((section) => ({
+      type: section.type,
+      icon: iconMap[section.type] || RestaurantRoundedIcon,
+      tone: colorMap[section.type]?.tone || '#2563eb',
+      bg: colorMap[section.type]?.bg || '#dbeafe',
+      items: Array.isArray(section.items) ? section.items : [],
+      total: Number(section.total || 0),
+    }));
+  }, [dietitianPlan]);
+
+  const macroData = useMemo(() => {
+    if (!dietitianPlan?.summary) {
+      return [
+        { name: 'Protein', value: 0, color: '#0D9488' },
+        { name: 'Carbs', value: 0, color: '#F59E0B' },
+        { name: 'Fat', value: 0, color: '#8B5CF6' },
+      ];
+    }
+    return [
+      { name: 'Protein', value: Number(dietitianPlan.summary.protein || 0), color: '#0D9488' },
+      { name: 'Carbs', value: Number(dietitianPlan.summary.carbs || 0), color: '#F59E0B' },
+      { name: 'Fat', value: Number(dietitianPlan.summary.fat || 0), color: '#8B5CF6' },
+    ];
+  }, [dietitianPlan]);
+
+  const weeklyCals = useMemo(() => {
+    const total = Number(dietitianPlan?.summary?.totalCalories || 0);
+    if (!total) {
+      return [
+        { day: 'M', cals: 0 },
+        { day: 'T', cals: 0 },
+        { day: 'W', cals: 0 },
+        { day: 'T', cals: 0 },
+        { day: 'F', cals: 0 },
+        { day: 'S', cals: 0 },
+        { day: 'S', cals: 0 },
+      ];
+    }
+    const base = Math.round(total);
+    return [
+      { day: 'M', cals: Math.max(0, base - 180) },
+      { day: 'T', cals: Math.max(0, base - 60) },
+      { day: 'W', cals: Math.max(0, base - 220) },
+      { day: 'T', cals: Math.max(0, base + 40) },
+      { day: 'F', cals: Math.max(0, base - 80) },
+      { day: 'S', cals: Math.max(0, base + 120) },
+      { day: 'S', cals: Math.max(0, base - 30) },
+    ];
+  }, [dietitianPlan]);
+
+  const displayMeals = planMode === 'dietitian' ? meals : fallbackMeals;
+  const displayMacroData = planMode === 'dietitian' ? macroData : fallbackMacroData;
+  const displayWeeklyCals = planMode === 'dietitian' ? weeklyCals : fallbackWeeklyCals;
+
+  const totalConsumed = useMemo(
+    () => displayMeals.reduce((sum, meal) => sum + Number(meal.total || 0), 0),
+    [displayMeals],
+  );
 
   return (
     <MotionBox
@@ -211,7 +310,7 @@ function UserMealPlan() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={macroData}
+                        data={displayMacroData}
                         dataKey="value"
                         nameKey="name"
                         innerRadius={62}
@@ -221,7 +320,7 @@ function UserMealPlan() {
                         isAnimationActive
                         animationDuration={900}
                       >
-                        {macroData.map((item) => (
+                        {displayMacroData.map((item) => (
                           <Cell key={item.name} fill={item.color} />
                         ))}
                       </Pie>
@@ -265,7 +364,7 @@ function UserMealPlan() {
                     gap: 1,
                   }}
                 >
-                  {macroData.map((item) => (
+                  {displayMacroData.map((item) => (
                     <Stack key={item.name} alignItems="center" spacing={0.3} sx={{ minWidth: 0 }}>
                       <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: item.color }} />
                       <Typography sx={{ fontWeight: 800, fontSize: '0.9rem' }}>{item.name}</Typography>
@@ -287,7 +386,7 @@ function UserMealPlan() {
               <Box sx={{ width: '100%', overflowX: 'auto' }}>
                 <Box sx={{ width: '100%', height: 240 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={weeklyCals} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <BarChart data={displayWeeklyCals} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                       <CartesianGrid vertical={false} strokeDasharray="3 4" stroke="#cbd5e1" />
                       <XAxis
                         dataKey="day"
@@ -324,6 +423,75 @@ function UserMealPlan() {
           </MotionCard>
         </Box>
 
+        {planMode === 'dietitian' && (
+          <MotionCard
+            variants={itemVariants}
+            sx={{
+              mb: 2.2,
+              borderRadius: 2.2,
+              border: `1px solid ${isDark ? '#27384f' : '#e7edf6'}`,
+              background: isDark
+                ? 'linear-gradient(135deg, #13213a 0%, #0f1b31 100%)'
+                : 'linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%)',
+            }}
+          >
+            <CardContent>
+              <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.4}>
+                <Stack direction="row" spacing={1.1} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      bgcolor: '#84cc16',
+                      color: '#0f172a',
+                      display: 'grid',
+                      placeItems: 'center',
+                    }}
+                  >
+                    <VerifiedRoundedIcon sx={{ fontSize: 22 }} />
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontWeight: 900, fontSize: '1.05rem' }}>Dietitian Plan</Typography>
+                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.9rem' }}>
+                      {dietitianPlan
+                        ? `Assigned by ${dietitianPlan?.dietitian?.name || 'Dietitian'}`
+                        : 'No submitted plan yet'}
+                    </Typography>
+                  </Box>
+                </Stack>
+                {dietitianPlan && (
+                  <Chip
+                    label={`${Number(dietitianPlan?.summary?.totalCalories || 0)} kcal/day`}
+                    sx={{ borderRadius: 2, fontWeight: 800, bgcolor: '#84cc16', color: '#0f172a' }}
+                  />
+                )}
+              </Stack>
+
+              {!dietitianPlan && (
+                <Typography sx={{ mt: 1.1, color: planError ? '#ef4444' : theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                  {isPlanLoading
+                    ? 'Loading dietitian plan...'
+                    : (planError || 'Your dietitian has not submitted a meal plan yet.')}
+                </Typography>
+              )}
+
+              {dietitianPlan && (
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2.4} sx={{ mt: 1.2 }}>
+                  <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                    Focus: <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>{dietitianPlan?.dietitian?.specialization || 'Nutrition'}</Box>
+                  </Typography>
+                  <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                    Updated: <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>
+                      {dietitianPlan?.submittedAt ? new Date(dietitianPlan.submittedAt).toLocaleDateString() : '-'}
+                    </Box>
+                  </Typography>
+                </Stack>
+              )}
+            </CardContent>
+          </MotionCard>
+        )}
+
         <MotionBox variants={itemVariants}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.3}>
             <Typography sx={{ fontSize: '1.45rem', fontWeight: 900, color: theme.palette.text.primary }}>
@@ -345,7 +513,16 @@ function UserMealPlan() {
           </Stack>
 
           <Stack spacing={1.3}>
-            {meals.map((meal, index) => {
+            {planMode === 'dietitian' && !isPlanLoading && displayMeals.length === 0 && (
+              <MotionCard variants={itemVariants} sx={{ borderRadius: 2.2, border: `1px solid ${isDark ? '#27384f' : '#e7edf6'}` }}>
+                <Box sx={{ p: 2 }}>
+                  <Typography sx={{ color: theme.palette.text.secondary }}>
+                    No dietitian meals available yet.
+                  </Typography>
+                </Box>
+              </MotionCard>
+            )}
+            {displayMeals.map((meal, index) => {
               const Icon = meal.icon;
               return (
                 <MotionCard
