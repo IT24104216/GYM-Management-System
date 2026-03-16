@@ -47,3 +47,30 @@ export const updateCoachSchedulingSlot = (coachId, slotId, data) =>
 
 export const deleteCoachSchedulingSlot = (coachId, slotId) =>
   axiosClient.delete(`/coach/scheduling/${coachId}/${slotId}`);
+
+export const getCoachWorkoutRequests = (coachId) =>
+  axiosClient.get('/workouts/requests', { params: { coachId } });
+
+export const getCoachWorkoutPlans = (coachId) =>
+  axiosClient.get('/workouts/plans', { params: { coachId } });
+
+export const createCoachWorkoutPlan = (data) =>
+  axiosClient.post('/workouts/plans', data);
+
+export const updateCoachWorkoutPlan = (id, data) =>
+  axiosClient.put(`/workouts/plans/${id}`, data);
+
+export const deleteCoachWorkoutPlan = (id) =>
+  axiosClient.delete(`/workouts/plans/${id}`);
+
+export const getCoachExerciseCategories = (coachId) =>
+  axiosClient.get('/workouts/categories', { params: { coachId } });
+
+export const createCoachExerciseCategory = (data) =>
+  axiosClient.post('/workouts/categories', data);
+
+export const updateCoachExerciseCategory = (id, data) =>
+  axiosClient.put(`/workouts/categories/${id}`, data);
+
+export const deleteCoachExerciseCategory = (id) =>
+  axiosClient.delete(`/workouts/categories/${id}`);
