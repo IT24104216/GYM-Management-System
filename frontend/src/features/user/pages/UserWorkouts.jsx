@@ -25,12 +25,14 @@ import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUnch
 import FlipRoundedIcon from '@mui/icons-material/FlipRounded';
 import { ROUTES } from '@/shared/utils/constants';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getUserWorkoutPlans } from '@/features/user/api/user.api';
+import {
+  finishUserWorkoutSession,
+  getUserWorkoutPlans,
+  startUserWorkoutSession,
+  updateUserWorkoutSessionProgress,
+} from '@/features/user/api/user.api';
 
 const MotionBox = motion(Box);
-const SESSION_LIMIT_SECONDS = 60 * 60;
-const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
-const WORKOUT_COMPLETION_HISTORY_KEY = 'gympro_workout_completion_history';
 const TODAY_MOCK_DATE = new Date().toLocaleDateString('en-US', {
   month: 'short',
   day: 'numeric',
@@ -160,7 +162,17 @@ const mapPlansToWorkouts = (plans = []) => {
 
   plans.forEach((plan, planIdx) => {
     const planExercises = Array.isArray(plan.exercises) ? plan.exercises : [];
+    const session = plan.session || {};
+    const progressMap = new Map(
+      (Array.isArray(session.exerciseProgress) ? session.exerciseProgress : [])
+        .map((item) => [Number(item.index), Boolean(item.done)]),
+    );
+    const isCompleted = session.status === 'completed' || plan.status === 'completed';
     const baseDate = new Date(plan.createdAt || Date.now());
+    const completedDate = session.completedAt ? new Date(session.completedAt) : null;
+    const completedDateLabel = completedDate && !Number.isNaN(completedDate.getTime())
+      ? completedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : null;
     const scheduledDate = Number.isNaN(baseDate.getTime())
       ? todayLabel
       : baseDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -171,20 +183,22 @@ const mapPlansToWorkouts = (plans = []) => {
         sourcePlanId: String(plan._id || `plan-${planIdx}`),
         title: exercise.name || plan.planTitle || 'Workout Exercise',
         muscles: plan.planTitle || 'Coach Assigned Plan',
-        workoutDate: scheduledDate,
-        duration: exercise.amount || '45 min',
+        workoutDate: isCompleted ? (completedDateLabel || scheduledDate) : scheduledDate,
+        duration: `${Number(plan.planDurationMinutes) > 0 ? Number(plan.planDurationMinutes) : 45} min`,
+        assignedDurationMinutes: Number(plan.planDurationMinutes) > 0 ? Number(plan.planDurationMinutes) : 45,
         level: 'Coach Plan',
         rating: 4.7,
         gradient: PLAN_GRADIENTS[(planIdx + exIdx) % PLAN_GRADIENTS.length],
-        done: plan.status === 'completed',
+        done: isCompleted,
         planExercises: planExercises.map((item, itemIdx) => ({
           id: `${plan._id || `plan-${planIdx}`}-session-${itemIdx}`,
           name: item.name || 'Exercise',
           setsReps: item.amount || '',
           focusArea: plan.planTitle || 'Workout',
           instruction: item.description || 'Follow the coach instructions.',
-          done: false,
+          done: isCompleted ? true : Boolean(progressMap.get(itemIdx)),
           flipped: false,
+          exerciseIndex: itemIdx,
         })),
         sessionExerciseMeta: {
           setsReps: exercise.amount || '',
@@ -194,7 +208,7 @@ const mapPlansToWorkouts = (plans = []) => {
     });
   });
 
-  return result.length ? result : EXERCISE_LIBRARY;
+  return result;
 };
 
 function ExerciseCard({ workout, index }) {
@@ -313,25 +327,26 @@ function UserWorkouts() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [sessionStatus, setSessionStatus] = useState('idle');
   const [sessionToast, setSessionToast] = useState({ open: false, message: '' });
-  const [workouts, setWorkouts] = useState(EXERCISE_LIBRARY);
+  const [workouts, setWorkouts] = useState([]);
   const [sessionExercises, setSessionExercises] = useState(
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
   );
+  const userId = String(user?.id || '');
+
+  const loadAssignedPlans = async () => {
+    if (!userId) return;
+    try {
+      const { data } = await getUserWorkoutPlans(userId, { submitted: true });
+      const plans = Array.isArray(data?.data) ? data.data : [];
+      setWorkouts(mapPlansToWorkouts(plans));
+    } catch {
+      setWorkouts([]);
+    }
+  };
 
   useEffect(() => {
-    const loadAssignedPlans = async () => {
-      if (!user?.id) return;
-      try {
-        const { data } = await getUserWorkoutPlans(String(user.id));
-        const plans = Array.isArray(data?.data) ? data.data : [];
-        setWorkouts(mapPlansToWorkouts(plans));
-      } catch {
-        setWorkouts(EXERCISE_LIBRARY);
-      }
-    };
-
     loadAssignedPlans();
-  }, [user?.id]);
+  }, [userId]);
 
   const upcomingExercises = workouts
     .filter((item) => !item.done)
@@ -368,10 +383,12 @@ function UserWorkouts() {
     ? upcomingExercises.filter((item) => item.id !== todayWorkout.id)
     : upcomingExercises;
 
-  const activeSessionDurationMinutes = getDurationInMinutes(
-    activeSessionWorkout?.duration,
-    MOCK_WORKOUT_SESSION.estimatedDurationMinutes,
-  );
+  const activeSessionDurationMinutes = Number(activeSessionWorkout?.assignedDurationMinutes) > 0
+    ? Number(activeSessionWorkout.assignedDurationMinutes)
+    : getDurationInMinutes(
+      activeSessionWorkout?.duration,
+      MOCK_WORKOUT_SESSION.estimatedDurationMinutes,
+    );
   const activeSessionLimitSeconds = activeSessionDurationMinutes * 60;
 
   const handleOpenWorkoutSession = () => {
@@ -383,7 +400,7 @@ function UserWorkouts() {
     const workoutSessionExercises = Array.isArray(todayWorkout.planExercises) && todayWorkout.planExercises.length
       ? todayWorkout.planExercises
       : MOCK_WORKOUT_SESSION.exercises;
-    setSessionExercises(workoutSessionExercises.map((exercise) => ({ ...exercise, done: false, flipped: false })));
+    setSessionExercises(workoutSessionExercises.map((exercise) => ({ ...exercise, done: Boolean(exercise.done), flipped: false })));
     setIsWorkoutSessionOpen(true);
   };
 
@@ -407,43 +424,26 @@ function UserWorkouts() {
       return;
     }
 
-    setSessionStarted(false);
-    setSessionStatus('finished');
-    const completionDate = new Date().toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const completionIsoDate = new Date().toISOString().split('T')[0];
-    const existingHistoryRaw = localStorage.getItem(WORKOUT_COMPLETION_HISTORY_KEY);
-    const existingHistory = existingHistoryRaw ? JSON.parse(existingHistoryRaw) : [];
-    const normalizedHistory = Array.isArray(existingHistory) ? existingHistory : [];
-    const nextHistory = Array.from(new Set([...normalizedHistory, completionIsoDate])).sort();
+    const sourcePlanId = activeSessionWorkout?.sourcePlanId || todayWorkout?.sourcePlanId || '';
+    if (!sourcePlanId || !userId) return;
 
-    const sourcePlanId = activeSessionWorkout?.sourcePlanId || todayWorkout?.sourcePlanId;
-    if (sourcePlanId) {
-      setWorkouts((prev) => prev.map((item) => (
-        item.sourcePlanId === sourcePlanId
-          ? {
-            ...item,
-            done: true,
-            workoutDate: completionDate,
-            sessionRuntime: {
-              ...item.sessionRuntime,
-              completed: true,
-            },
-          }
-          : item
-      )));
-    }
-
-    localStorage.setItem(PROGRESS_COMPLETION_DATE_KEY, completionDate);
-    localStorage.setItem(WORKOUT_COMPLETION_HISTORY_KEY, JSON.stringify(nextHistory));
-    setSessionToast({ open: true, message: 'Workout session marked as finished. Redirecting to progress tracking...' });
-    setTimeout(() => {
-      handleCloseWorkoutSession();
-      navigate(ROUTES.USER_PROGRESS);
-    }, 700);
+    finishUserWorkoutSession(sourcePlanId, {
+      userId,
+      elapsedSeconds: elapsedSessionSeconds,
+    })
+      .then(() => loadAssignedPlans())
+      .then(() => {
+        setSessionStarted(false);
+        setSessionStatus('finished');
+        setSessionToast({ open: true, message: 'Workout session marked as finished. Redirecting to progress tracking...' });
+        setTimeout(() => {
+          handleCloseWorkoutSession();
+          navigate(ROUTES.USER_PROGRESS);
+        }, 700);
+      })
+      .catch((error) => {
+        setSessionToast({ open: true, message: error?.response?.data?.message || 'Failed to finish workout session.' });
+      });
   };
 
   const handleCloseSessionToast = (_, reason) => {
@@ -452,11 +452,28 @@ function UserWorkouts() {
   };
 
   const handleToggleExerciseDone = (exerciseId) => {
+    const target = sessionExercises.find((exercise) => exercise.id === exerciseId);
+    if (!target) return;
+    const sourcePlanId = activeSessionWorkout?.sourcePlanId || todayWorkout?.sourcePlanId || '';
+    const nextDone = !target.done;
+
     setSessionExercises((prev) => prev.map((exercise) => (
-      exercise.id === exerciseId
-        ? { ...exercise, done: !exercise.done }
-        : exercise
+      exercise.id === exerciseId ? { ...exercise, done: nextDone } : exercise
     )));
+
+    if (!sourcePlanId || !userId || !Number.isInteger(target.exerciseIndex)) return;
+
+    updateUserWorkoutSessionProgress(sourcePlanId, {
+      userId,
+      exerciseIndex: target.exerciseIndex,
+      done: nextDone,
+      elapsedSeconds: elapsedSessionSeconds,
+    }).catch((error) => {
+      setSessionExercises((prev) => prev.map((exercise) => (
+        exercise.id === exerciseId ? { ...exercise, done: !nextDone } : exercise
+      )));
+      setSessionToast({ open: true, message: error?.response?.data?.message || 'Failed to update exercise progress.' });
+    });
   };
 
   const handleToggleExerciseFlip = (exerciseId) => {
@@ -481,6 +498,15 @@ function UserWorkouts() {
 
     return () => clearInterval(timerId);
   }, [isWorkoutSessionOpen, elapsedSessionSeconds, sessionStarted, activeSessionLimitSeconds]);
+
+  useEffect(() => {
+    if (!isWorkoutSessionOpen || !sessionStarted) return;
+    const sourcePlanId = activeSessionWorkout?.sourcePlanId || '';
+    if (!sourcePlanId || !userId) return;
+    startUserWorkoutSession(sourcePlanId, { userId }).catch((error) => {
+      setSessionToast({ open: true, message: error?.response?.data?.message || 'Failed to start workout session.' });
+    });
+  }, [isWorkoutSessionOpen, sessionStarted, activeSessionWorkout?.sourcePlanId, userId]);
 
   return (
     <Box
