@@ -6,6 +6,7 @@ import {
   getDietPlans,
   getMealLibraryItems,
   getmealPlansStatus,
+  getUserActiveDietPlan,
   submitDietPlan,
   updateDietPlan,
   updateMealLibraryItem,
@@ -15,6 +16,7 @@ import {
 const router = Router();
 
 router.get('/', getmealPlansStatus);
+router.get('/user-plan', getUserActiveDietPlan);
 
 router.get('/library', getMealLibraryItems);
 router.post('/library', createMealLibraryItem);
