@@ -4,19 +4,50 @@ export const getDietitianClients = () =>
   axiosClient.get('/dietitian/clients');
 
 export const getMealPlans = () =>
-  axiosClient.get('/dietitian/meal-plans');
+  axiosClient.get('/meal-plans/client-plans');
 
 export const getMealPlanById = (id) =>
-  axiosClient.get(`/dietitian/meal-plans/${id}`);
+  axiosClient.get('/meal-plans/client-plans', { params: { userId: id } });
 
 export const createMealPlan = (data) =>
-  axiosClient.post('/dietitian/meal-plans', data);
+  axiosClient.post('/meal-plans/client-plans', data);
 
 export const updateMealPlan = (id, data) =>
-  axiosClient.put(`/dietitian/meal-plans/${id}`, data);
+  axiosClient.put(`/meal-plans/client-plans/${id}`, data, {
+    params: { dietitianId: data?.dietitianId },
+  });
 
-export const deleteMealPlan = (id) =>
-  axiosClient.delete(`/dietitian/meal-plans/${id}`);
+export const deleteMealPlan = (id, dietitianId) =>
+  axiosClient.delete(`/meal-plans/client-plans/${id}`, {
+    params: { dietitianId },
+  });
+
+export const submitMealPlan = (id, dietitianId, submitted = true) =>
+  axiosClient.patch(`/meal-plans/client-plans/${id}/submit`, { submitted }, {
+    params: { dietitianId },
+  });
+
+export const getMealLibraryItems = (params) =>
+  axiosClient.get('/meal-plans/library', { params });
+
+export const createMealLibraryItem = (data) =>
+  axiosClient.post('/meal-plans/library', data);
+
+export const updateMealLibraryItem = (id, data, dietitianId) =>
+  axiosClient.put(`/meal-plans/library/${id}`, data, {
+    params: { dietitianId },
+  });
+
+export const deleteMealLibraryItem = (id, dietitianId) =>
+  axiosClient.delete(`/meal-plans/library/${id}`, {
+    params: { dietitianId },
+  });
+
+export const getDietitianClientPlans = (params) =>
+  axiosClient.get('/meal-plans/client-plans', { params });
+
+export const upsertDietitianClientPlan = (data) =>
+  axiosClient.post('/meal-plans/client-plans', data);
 
 export const getDietitianProfile = (dietitianId) =>
   axiosClient.get(`/dietitian/profile/${dietitianId}`);
