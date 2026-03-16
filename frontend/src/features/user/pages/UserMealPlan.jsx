@@ -66,72 +66,6 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 },
 };
 
-const fallbackMacroData = [
-  { name: 'Protein', value: 140, color: '#0D9488' },
-  { name: 'Carbs', value: 220, color: '#F59E0B' },
-  { name: 'Fat', value: 65, color: '#8B5CF6' },
-];
-
-const fallbackWeeklyCals = [
-  { day: 'M', cals: 2100 },
-  { day: 'T', cals: 2300 },
-  { day: 'W', cals: 1950 },
-  { day: 'T', cals: 2400 },
-  { day: 'F', cals: 2150 },
-  { day: 'S', cals: 2600 },
-  { day: 'S', cals: 2200 },
-];
-
-const fallbackMeals = [
-  {
-    key: 'breakfast',
-    type: 'Breakfast',
-    icon: FreeBreakfastRoundedIcon,
-    tone: '#d97706',
-    bg: '#fef3c7',
-    items: [
-      { name: 'Oatmeal with Berries', cals: 350, p: 12, c: 60, f: 6 },
-      { name: 'Whey Protein Shake', cals: 120, p: 24, c: 3, f: 1 },
-    ],
-    total: 470,
-  },
-  {
-    key: 'lunch',
-    type: 'Lunch',
-    icon: LunchDiningRoundedIcon,
-    tone: '#059669',
-    bg: '#d1fae5',
-    items: [
-      { name: 'Grilled Chicken Salad', cals: 450, p: 45, c: 15, f: 22 },
-      { name: 'Apple', cals: 95, p: 0, c: 25, f: 0 },
-    ],
-    total: 545,
-  },
-  {
-    key: 'dinner',
-    type: 'Dinner',
-    icon: DinnerDiningRoundedIcon,
-    tone: '#2563eb',
-    bg: '#dbeafe',
-    items: [
-      { name: 'Salmon & Asparagus', cals: 520, p: 38, c: 12, f: 32 },
-      { name: 'Quinoa', cals: 220, p: 8, c: 39, f: 4 },
-    ],
-    total: 740,
-  },
-  {
-    key: 'snacks',
-    type: 'Snacks',
-    icon: IcecreamRoundedIcon,
-    tone: '#7c3aed',
-    bg: '#ede9fe',
-    items: [
-      { name: 'Greek Yogurt', cals: 120, p: 15, c: 8, f: 0 },
-    ],
-    total: 120,
-  },
-];
-
 const yAxisTicks = [650, 1300, 1950, 2600];
 
 const mealSectionConfig = {
@@ -181,10 +115,12 @@ function UserMealPlan() {
   const [logForm, setLogForm] = useState({
     mealType: 'breakfast',
     name: '',
-    calories: '',
-    protein: '',
-    carbs: '',
-    fat: '',
+  });
+  const [logNutrition, setLogNutrition] = useState({
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
     notes: '',
   });
   const [nutritionOptions, setNutritionOptions] = useState([]);
@@ -267,19 +203,7 @@ function UserMealPlan() {
         notes: item.description || '',
         isLogged: false,
       }));
-      const logItems = foodLogs
-        .filter((log) => log.mealType === mealType)
-        .map((log) => ({
-          id: String(log._id),
-          name: log.name,
-          cals: Number(log.calories || 0),
-          p: Number(log.protein || 0),
-          c: Number(log.carbs || 0),
-          f: Number(log.fat || 0),
-          notes: log.notes || '',
-          isLogged: true,
-        }));
-      const items = [...planItems, ...logItems];
+      const items = [...planItems];
 
       return {
         key: mealType,
@@ -291,7 +215,36 @@ function UserMealPlan() {
         total: items.reduce((sum, item) => sum + Number(item.cals || 0), 0),
       };
     });
-  }, [dietitianPlan, foodLogs]);
+  }, [dietitianPlan]);
+
+  const myPlanMeals = useMemo(
+    () =>
+      mealSectionOrder.map((mealType) => {
+        const config = mealSectionConfig[mealType];
+        const items = foodLogs
+          .filter((log) => log.mealType === mealType)
+          .map((log) => ({
+            id: String(log._id),
+            name: log.name,
+            cals: Number(log.calories || 0),
+            p: Number(log.protein || 0),
+            c: Number(log.carbs || 0),
+            f: Number(log.fat || 0),
+            notes: log.notes || '',
+            isLogged: true,
+          }));
+        return {
+          key: mealType,
+          type: config.label,
+          icon: config.icon || RestaurantRoundedIcon,
+          tone: config.tone,
+          bg: config.bg,
+          items,
+          total: items.reduce((sum, item) => sum + Number(item.cals || 0), 0),
+        };
+      }),
+    [foodLogs],
+  );
 
   const macroData = useMemo(() => {
     if (!meals.length) {
@@ -344,9 +297,43 @@ function UserMealPlan() {
     ];
   }, [meals]);
 
-  const displayMeals = planMode === 'dietitian' ? meals : fallbackMeals;
-  const displayMacroData = planMode === 'dietitian' ? macroData : fallbackMacroData;
-  const displayWeeklyCals = planMode === 'dietitian' ? weeklyCals : fallbackWeeklyCals;
+  const myPlanMacroData = useMemo(() => {
+    const totals = myPlanMeals.reduce(
+      (acc, meal) => {
+        meal.items.forEach((item) => {
+          acc.protein += Number(item.p || 0);
+          acc.carbs += Number(item.c || 0);
+          acc.fat += Number(item.f || 0);
+        });
+        return acc;
+      },
+      { protein: 0, carbs: 0, fat: 0 },
+    );
+    return [
+      { name: 'Protein', value: Number(totals.protein || 0), color: '#0D9488' },
+      { name: 'Carbs', value: Number(totals.carbs || 0), color: '#F59E0B' },
+      { name: 'Fat', value: Number(totals.fat || 0), color: '#8B5CF6' },
+    ];
+  }, [myPlanMeals]);
+
+  const myPlanWeeklyCals = useMemo(() => {
+    const total = myPlanMeals.reduce((sum, meal) => sum + Number(meal.total || 0), 0);
+    if (!total) return [{ day: 'M', cals: 0 }, { day: 'T', cals: 0 }, { day: 'W', cals: 0 }, { day: 'T', cals: 0 }, { day: 'F', cals: 0 }, { day: 'S', cals: 0 }, { day: 'S', cals: 0 }];
+    const base = Math.round(total);
+    return [
+      { day: 'M', cals: Math.max(0, base - 180) },
+      { day: 'T', cals: Math.max(0, base - 60) },
+      { day: 'W', cals: Math.max(0, base - 220) },
+      { day: 'T', cals: Math.max(0, base + 40) },
+      { day: 'F', cals: Math.max(0, base - 80) },
+      { day: 'S', cals: Math.max(0, base + 120) },
+      { day: 'S', cals: Math.max(0, base - 30) },
+    ];
+  }, [myPlanMeals]);
+
+  const displayMeals = planMode === 'dietitian' ? meals : myPlanMeals;
+  const displayMacroData = planMode === 'dietitian' ? macroData : myPlanMacroData;
+  const displayWeeklyCals = planMode === 'dietitian' ? weeklyCals : myPlanWeeklyCals;
 
   const totalConsumed = useMemo(
     () => displayMeals.reduce((sum, meal) => sum + Number(meal.total || 0), 0),
@@ -357,10 +344,12 @@ function UserMealPlan() {
     setLogForm({
       mealType,
       name: '',
-      calories: '',
-      protein: '',
-      carbs: '',
-      fat: '',
+    });
+    setLogNutrition({
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
       notes: '',
     });
     setEditingLogId(null);
@@ -377,10 +366,12 @@ function UserMealPlan() {
     setLogForm({
       mealType,
       name: logItem.name || '',
-      calories: String(logItem.cals ?? ''),
-      protein: String(logItem.p ?? ''),
-      carbs: String(logItem.c ?? ''),
-      fat: String(logItem.f ?? ''),
+    });
+    setLogNutrition({
+      calories: Number(logItem.cals || 0),
+      protein: Number(logItem.p || 0),
+      carbs: Number(logItem.c || 0),
+      fat: Number(logItem.f || 0),
       notes: logItem.notes || '',
     });
     setIsLogDialogOpen(true);
@@ -400,12 +391,14 @@ function UserMealPlan() {
     setLogForm((prev) => ({
       ...prev,
       name: option.name || prev.name,
-      calories: String(Number(option.calories || 0)),
-      protein: String(Number(option.protein || 0)),
-      carbs: String(Number(option.carbs || 0)),
-      fat: String(Number(option.fat || 0)),
-      notes: option.notes || prev.notes || '',
     }));
+    setLogNutrition({
+      calories: Number(option.calories || 0),
+      protein: Number(option.protein || 0),
+      carbs: Number(option.carbs || 0),
+      fat: Number(option.fat || 0),
+      notes: option.notes || '',
+    });
   };
 
   const refreshFoodLogs = async () => {
@@ -416,20 +409,36 @@ function UserMealPlan() {
 
   const handleSaveLog = async () => {
     try {
+      if (planMode !== 'custom') return;
       if (!String(logForm.name || '').trim()) {
         setPlanError('Food name is required');
         return;
+      }
+      let effectiveNutrition = { ...logNutrition };
+      if (!effectiveNutrition.calories && !effectiveNutrition.protein && !effectiveNutrition.carbs && !effectiveNutrition.fat) {
+        const exact = nutritionOptions.find(
+          (item) => String(item?.name || '').toLowerCase() === String(logForm.name || '').trim().toLowerCase(),
+        );
+        if (exact) {
+          effectiveNutrition = {
+            calories: Number(exact.calories || 0),
+            protein: Number(exact.protein || 0),
+            carbs: Number(exact.carbs || 0),
+            fat: Number(exact.fat || 0),
+            notes: exact.notes || '',
+          };
+        }
       }
       const payload = {
         userId,
         logDate: todayIso,
         mealType: logForm.mealType,
         name: logForm.name.trim(),
-        calories: Number(logForm.calories || 0),
-        protein: Number(logForm.protein || 0),
-        carbs: Number(logForm.carbs || 0),
-        fat: Number(logForm.fat || 0),
-        notes: String(logForm.notes || '').trim(),
+        calories: Number(effectiveNutrition.calories || 0),
+        protein: Number(effectiveNutrition.protein || 0),
+        carbs: Number(effectiveNutrition.carbs || 0),
+        fat: Number(effectiveNutrition.fat || 0),
+        notes: String(effectiveNutrition.notes || '').trim(),
       };
 
       if (editingLogId) {
@@ -447,6 +456,7 @@ function UserMealPlan() {
   };
 
   const handleDeleteLog = async (logId) => {
+    if (planMode !== 'custom') return;
     if (!logId || !userId) return;
     try {
       await deleteUserFoodLog(logId, userId);
@@ -713,20 +723,22 @@ function UserMealPlan() {
             <Typography sx={{ fontSize: '1.45rem', fontWeight: 900, color: theme.palette.text.primary }}>
               {planMode === 'dietitian' ? "Today's Meals" : 'My Meal Builder'}
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddRoundedIcon />}
-              onClick={() => openCreateLogDialog('breakfast')}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 800,
-                bgcolor: '#0f172a',
-                '&:hover': { bgcolor: '#111827' },
-              }}
-            >
-              {planMode === 'dietitian' ? 'Log Food' : 'Create Meal'}
-            </Button>
+            {planMode === 'custom' && (
+              <Button
+                variant="contained"
+                startIcon={<AddRoundedIcon />}
+                onClick={() => openCreateLogDialog('breakfast')}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 800,
+                  bgcolor: '#0f172a',
+                  '&:hover': { bgcolor: '#111827' },
+                }}
+              >
+                Create Meal
+              </Button>
+            )}
           </Stack>
 
           <Stack spacing={1.3}>
@@ -778,7 +790,7 @@ function UserMealPlan() {
                             <Typography sx={{ color: '#8B5CF6' }}>{item.f}g F</Typography>
                           </Stack>
                         </Box>
-                        {item.isLogged ? (
+                        {planMode === 'custom' && item.isLogged ? (
                           <Stack direction="row" spacing={0.6}>
                             <Button
                               size="small"
@@ -802,24 +814,26 @@ function UserMealPlan() {
                       </Stack>
                     ))}
 
-                    <Button
-                      fullWidth
-                      startIcon={<AddRoundedIcon />}
-                      onClick={() => openCreateLogDialog(meal.key)}
-                      sx={{
-                        mt: 0.6,
-                        color: '#64748b',
-                        textTransform: 'none',
-                        fontWeight: 700,
-                        borderRadius: 1.5,
-                        '&:hover': {
-                          bgcolor: isDark ? '#15253c' : '#ecfeff',
-                          color: '#0D9488',
-                        },
-                      }}
-                    >
-                      Add Food
-                    </Button>
+                    {planMode === 'custom' && (
+                      <Button
+                        fullWidth
+                        startIcon={<AddRoundedIcon />}
+                        onClick={() => openCreateLogDialog(meal.key)}
+                        sx={{
+                          mt: 0.6,
+                          color: '#64748b',
+                          textTransform: 'none',
+                          fontWeight: 700,
+                          borderRadius: 1.5,
+                          '&:hover': {
+                            bgcolor: isDark ? '#15253c' : '#ecfeff',
+                            color: '#0D9488',
+                          },
+                        }}
+                      >
+                        Add Food
+                      </Button>
+                    )}
                   </Box>
                 </MotionCard>
               );
@@ -895,6 +909,14 @@ function UserMealPlan() {
                 inputValue={logForm.name}
                 onInputChange={(_event, value) => {
                   setLogForm((prev) => ({ ...prev, name: value }));
+                  setLogNutrition((prev) => ({
+                    ...prev,
+                    calories: 0,
+                    protein: 0,
+                    carbs: 0,
+                    fat: 0,
+                    notes: '',
+                  }));
                 }}
                 onChange={handleNutritionSelect}
                 renderInput={(params) => (
@@ -915,51 +937,9 @@ function UserMealPlan() {
                   />
                 )}
               />
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
-                <TextField
-                  label="Calories"
-                  type="number"
-                  value={logForm.calories}
-                  onChange={handleLogFormChange('calories')}
-                  fullWidth
-                  size="small"
-                />
-                <TextField
-                  label="Protein (g)"
-                  type="number"
-                  value={logForm.protein}
-                  onChange={handleLogFormChange('protein')}
-                  fullWidth
-                  size="small"
-                />
-              </Stack>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
-                <TextField
-                  label="Carbs (g)"
-                  type="number"
-                  value={logForm.carbs}
-                  onChange={handleLogFormChange('carbs')}
-                  fullWidth
-                  size="small"
-                />
-                <TextField
-                  label="Fat (g)"
-                  type="number"
-                  value={logForm.fat}
-                  onChange={handleLogFormChange('fat')}
-                  fullWidth
-                  size="small"
-                />
-              </Stack>
-              <TextField
-                label="Notes"
-                value={logForm.notes}
-                onChange={handleLogFormChange('notes')}
-                multiline
-                minRows={2}
-                fullWidth
-                size="small"
-              />
+              <Typography sx={{ fontSize: '0.86rem', color: theme.palette.text.secondary }}>
+                Nutrition is auto-filled from selected food suggestion and shown in the meal card.
+              </Typography>
             </Stack>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2.5 }}>
