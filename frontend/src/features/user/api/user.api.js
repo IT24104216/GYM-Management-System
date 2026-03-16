@@ -49,3 +49,9 @@ export const getPublicDietitians = () =>
 
 export const bookDietitianAppointment = (data) =>
   axiosClient.post('/appointments', data);
+
+export const getUserProgress = (userId) =>
+  axiosClient.get(`/progress/${userId}`);
+
+export const saveUserMeasurement = (userId, data) =>
+  axiosClient.put(`/progress/${userId}/measurements`, data);
