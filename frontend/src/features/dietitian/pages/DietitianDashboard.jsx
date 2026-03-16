@@ -32,13 +32,16 @@ import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
-import { loadDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
+  getDietitianClientPlans,
   createDietitianSchedulingSlot,
   deleteDietitianSchedulingSlot,
   getDietitianAppointments,
+  getMealLibraryItems,
   getDietitianSchedulingSlots,
+  submitMealPlan,
+  upsertDietitianClientPlan,
   updateDietitianAppointmentStatus,
   updateDietitianSchedulingSlot,
 } from '../api/dietitian.api';
@@ -117,7 +120,7 @@ function DietitianDashboard() {
     member: null,
   });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
-  const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
+  const [mealSuggestions, setMealSuggestions] = useState([]);
   const [savedDietPlans, setSavedDietPlans] = useState({});
 
   const loadTimeSlots = async () => {
@@ -143,6 +146,47 @@ function DietitianDashboard() {
 
   useEffect(() => {
     loadTimeSlots();
+  }, [dietitianId]);
+
+  const toClientPlanForm = (plan) => ({
+    breakfast: Array.isArray(plan?.breakfast) ? plan.breakfast : [createMealOption(), createMealOption(), createMealOption()],
+    lunch: Array.isArray(plan?.lunch) ? plan.lunch : [createMealOption(), createMealOption(), createMealOption()],
+    dinner: Array.isArray(plan?.dinner) ? plan.dinner : [createMealOption(), createMealOption(), createMealOption()],
+    snacks: Array.isArray(plan?.snacks) ? plan.snacks : [createMealOption(), createMealOption(), createMealOption()],
+    additionalNotes: plan?.additionalNotes || '',
+  });
+
+  const loadDietitianMealsAndPlans = async () => {
+    if (!dietitianId) return;
+    try {
+      const [{ data: mealsData }, { data: plansData }] = await Promise.all([
+        getMealLibraryItems({ dietitianId }),
+        getDietitianClientPlans({ dietitianId }),
+      ]);
+
+      const meals = Array.isArray(mealsData?.data) ? mealsData.data : [];
+      setMealSuggestions(meals);
+
+      const plans = Array.isArray(plansData?.data) ? plansData.data : [];
+      const nextPlans = {};
+      plans.forEach((plan) => {
+        if (!plan?.userId) return;
+        nextPlans[String(plan.userId)] = {
+          id: String(plan._id),
+          isSubmitted: Boolean(plan.isSubmitted),
+          data: toClientPlanForm(plan),
+        };
+      });
+      setSavedDietPlans(nextPlans);
+    } catch (error) {
+      setMealSuggestions([]);
+      setSavedDietPlans({});
+      setSlotError(error?.response?.data?.message || 'Failed to load diet plans.');
+    }
+  };
+
+  useEffect(() => {
+    loadDietitianMealsAndPlans();
   }, [dietitianId]);
 
   const mapAppointmentRow = (item) => {
@@ -392,8 +436,8 @@ function DietitianDashboard() {
   };
 
   const openDietPlanModal = (member) => {
-    setMealSuggestions(loadDietitianMeals());
-    setDietPlanForm(createDietPlanForm());
+    const existingPlan = savedDietPlans[member.id]?.data;
+    setDietPlanForm(existingPlan || createDietPlanForm());
     setDietPlanModal({ open: true, member });
   };
 
@@ -401,11 +445,31 @@ function DietitianDashboard() {
     setDietPlanModal({ open: false, member: null });
   };
 
-  const saveDietPlan = () => {
+  const saveDietPlan = async () => {
     const memberId = dietPlanModal.member?.id;
     if (!memberId) return;
-    setSavedDietPlans((prev) => ({ ...prev, [memberId]: dietPlanForm }));
-    closeDietPlanModal();
+    try {
+      const payload = {
+        dietitianId,
+        userId: memberId,
+        memberName: dietPlanModal.member?.name || '',
+        breakfast: dietPlanForm.breakfast,
+        lunch: dietPlanForm.lunch,
+        dinner: dietPlanForm.dinner,
+        snacks: dietPlanForm.snacks,
+        additionalNotes: dietPlanForm.additionalNotes,
+      };
+      const { data } = await upsertDietitianClientPlan(payload);
+      const plan = data?.data;
+      if (plan?._id) {
+        await submitMealPlan(String(plan._id), dietitianId, true);
+      }
+      await loadDietitianMealsAndPlans();
+      closeDietPlanModal();
+      setSlotNotice({ open: true, message: 'Diet plan submitted successfully!' });
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to save diet plan.');
+    }
   };
 
   const updateMealField = (sectionKey, index, field, value) => {
