@@ -20,7 +20,13 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
-import { loadDietitianMeals, saveDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
+import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  createMealLibraryItem,
+  deleteMealLibraryItem,
+  getMealLibraryItems,
+  updateMealLibraryItem,
+} from '../api/dietitian.api';
 
 const CATEGORY_OPTIONS = [
   { value: 'weight_gain', label: 'Weight Gaining' },
@@ -52,11 +58,14 @@ function DietitianMealPlans() {
   const tagBg = isDark ? '#2563eb1f' : '#dbeafe';
 
   const [activeCategory, setActiveCategory] = useState('weight_gain');
-  const [meals, setMeals] = useState(() => loadDietitianMeals());
+  const { user } = useAuth();
+  const dietitianId = String(user?.id || user?._id || '');
+  const [meals, setMeals] = useState([]);
   const [mealForm, setMealForm] = useState(emptyMealForm);
   const [editState, setEditState] = useState({ open: false, meal: null });
   const [deleteState, setDeleteState] = useState({ open: false, meal: null });
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
+  const [isLoading, setIsLoading] = useState(false);
 
   const mealsByCategory = useMemo(
     () => meals.filter((meal) => meal.category === activeCategory),
@@ -65,11 +74,37 @@ function DietitianMealPlans() {
 
   const mealSuggestionLibrary = useMemo(() => meals, [meals]);
 
-  useEffect(() => {
-    saveDietitianMeals(meals);
-  }, [meals]);
+  const loadMeals = async () => {
+    if (!dietitianId) return;
+    setIsLoading(true);
+    try {
+      const { data } = await getMealLibraryItems({ dietitianId });
+      setMeals(Array.isArray(data?.data) ? data.data : []);
+    } catch (error) {
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to load meals.',
+        severity: 'error',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  const handleAddMeal = () => {
+  useEffect(() => {
+    loadMeals();
+  }, [dietitianId]);
+
+  const handleAddMeal = async () => {
+    if (!dietitianId) {
+      setFeedback({
+        open: true,
+        message: 'Dietitian account is required.',
+        severity: 'error',
+      });
+      return;
+    }
+
     if (!mealForm.mealName.trim() || !mealForm.calories || !mealForm.protein) {
       setFeedback({
         open: true,
@@ -78,9 +113,23 @@ function DietitianMealPlans() {
       });
       return;
     }
-    setMeals((prev) => [{ ...mealForm, id: Date.now() }, ...prev]);
-    setMealForm({ ...emptyMealForm, category: mealForm.category });
-    setFeedback({ open: true, message: 'Meal added successfully.', severity: 'success' });
+
+    try {
+      const payload = {
+        ...mealForm,
+        dietitianId,
+      };
+      const { data } = await createMealLibraryItem(payload);
+      setMeals((prev) => [data?.data, ...prev]);
+      setMealForm({ ...emptyMealForm, category: mealForm.category });
+      setFeedback({ open: true, message: 'Meal added successfully.', severity: 'success' });
+    } catch (error) {
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to add meal.',
+        severity: 'error',
+      });
+    }
   };
 
   const openEditMeal = (meal) => {
@@ -120,20 +169,44 @@ function DietitianMealPlans() {
     }));
   };
 
-  const saveEditedMeal = () => {
-    if (!editState.meal?.mealName?.trim()) return;
-    setMeals((prev) =>
-      prev.map((meal) => (meal.id === editState.meal.id ? editState.meal : meal)),
-    );
-    setEditState({ open: false, meal: null });
-    setFeedback({ open: true, message: 'Meal updated successfully.', severity: 'success' });
+  const saveEditedMeal = async () => {
+    if (!editState.meal?.mealName?.trim() || !dietitianId) return;
+    try {
+      const { data } = await updateMealLibraryItem(
+        editState.meal._id || editState.meal.id,
+        editState.meal,
+        dietitianId,
+      );
+      setMeals((prev) =>
+        prev.map((meal) =>
+          String(meal._id || meal.id) === String(data?.data?._id || data?.data?.id) ? data.data : meal),
+      );
+      setEditState({ open: false, meal: null });
+      setFeedback({ open: true, message: 'Meal updated successfully.', severity: 'success' });
+    } catch (error) {
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to update meal.',
+        severity: 'error',
+      });
+    }
   };
 
-  const deleteMeal = () => {
+  const deleteMeal = async () => {
     if (!deleteState.meal) return;
-    setMeals((prev) => prev.filter((meal) => meal.id !== deleteState.meal.id));
-    setDeleteState({ open: false, meal: null });
-    setFeedback({ open: true, message: 'Meal deleted successfully.', severity: 'success' });
+    try {
+      const id = deleteState.meal._id || deleteState.meal.id;
+      await deleteMealLibraryItem(id, dietitianId);
+      setMeals((prev) => prev.filter((meal) => String(meal._id || meal.id) !== String(id)));
+      setDeleteState({ open: false, meal: null });
+      setFeedback({ open: true, message: 'Meal deleted successfully.', severity: 'success' });
+    } catch (error) {
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to delete meal.',
+        severity: 'error',
+      });
+    }
   };
 
   const getCategoryLabel = (value) =>
@@ -275,9 +348,12 @@ function DietitianMealPlans() {
           gap: 1.5,
         }}
       >
+        {isLoading && (
+          <Typography sx={{ color: mutedText, mb: 1 }}>Loading meals...</Typography>
+        )}
         {mealsByCategory.map((meal) => (
           <Box
-            key={meal.id}
+            key={meal._id || meal.id}
             sx={{
               p: 1.7,
               border: '1px solid',
