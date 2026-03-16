@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -9,8 +9,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
-  IconButton,
   InputAdornment,
   MenuItem,
   Pagination,
@@ -20,526 +18,247 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
-import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
-import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
-import FormatListNumberedRoundedIcon from '@mui/icons-material/FormatListNumberedRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  createCoachExerciseCategory,
+  createCoachWorkoutPlan,
+  deleteCoachExerciseCategory,
+  deleteCoachWorkoutPlan,
+  getCoachExerciseCategories,
+  getCoachWorkoutPlans,
+  getCoachWorkoutRequests,
+  updateCoachExerciseCategory,
+  updateCoachWorkoutPlan,
+} from '../api/coach.api';
 
-const PRIORITY_ORDER = {
-  High: 0,
-  Medium: 1,
-  Low: 2,
+const PRIORITY_ORDER = { High: 0, Medium: 1, Low: 2 };
+const PRIORITY_GRADIENTS = {
+  High: 'linear-gradient(135deg, #ef4444, #f97316)',
+  Medium: 'linear-gradient(135deg, #3b82f6, #06b6d4)',
+  Low: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
 };
-
-const REQUESTED_USERS = [
-  {
-    id: 301,
-    name: 'Ryan Martinez',
-    avatar: 'RM',
-    age: 30,
-    goal: 'Fat Loss',
-    priority: 'High',
-    requestedOn: '2026-03-12',
-    sessionsPerWeek: 4,
-    notes: 'Needs gym-based plan with progressive overload and cardio split.',
-    gradient: 'linear-gradient(135deg, #ef4444, #f97316)',
-  },
-  {
-    id: 302,
-    name: 'Lisa Chen',
-    avatar: 'LC',
-    age: 27,
-    goal: 'Mobility + Strength',
-    priority: 'High',
-    requestedOn: '2026-03-11',
-    sessionsPerWeek: 3,
-    notes: 'Knee-sensitive. Prefers low-impact movements.',
-    gradient: 'linear-gradient(135deg, #f97316, #fb7185)',
-  },
-  {
-    id: 303,
-    name: 'Tom Bradley',
-    avatar: 'TB',
-    age: 25,
-    goal: 'Lean Muscle',
-    priority: 'Medium',
-    requestedOn: '2026-03-10',
-    sessionsPerWeek: 5,
-    notes: 'Beginner-friendly strength split needed.',
-    gradient: 'linear-gradient(135deg, #3b82f6, #06b6d4)',
-  },
-  {
-    id: 304,
-    name: 'Priya Sharma',
-    avatar: 'PS',
-    age: 29,
-    goal: 'Body Recomposition',
-    priority: 'Low',
-    requestedOn: '2026-03-09',
-    sessionsPerWeek: 4,
-    notes: 'Needs hybrid plan: strength + conditioning.',
-    gradient: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
-  },
-];
-
-const newExercise = () => ({
-  name: '',
-  amount: '',
-  description: '',
-  sourceType: 'manual',
-  suggestionKey: '',
-});
-const newCategoryExercise = () => ({ name: '', amount: '', description: '' });
-
-const INITIAL_CATEGORY_LIBRARY = {
-  weightGain: [
-    { name: 'Barbell Squat', amount: '4 x 8 reps', description: 'Primary compound for lower-body strength and mass.' },
-    { name: 'Deadlift', amount: '4 x 6 reps', description: 'Posterior-chain builder with progressive load.' },
-  ],
-  weightLoss: [
-    { name: 'Incline Walk Intervals', amount: '20 min', description: 'Alternate 2 min brisk + 1 min recovery.' },
-    { name: 'Kettlebell Circuit', amount: '4 rounds', description: 'Swings, goblet squats, rows with short rest.' },
-  ],
-};
-
-const CATEGORY_LABELS = {
-  weightGain: 'Weight Gaining',
-  weightLoss: 'Weight Reducing',
-};
+const CATEGORY_LABELS = { weightGain: 'Weight Gaining', weightLoss: 'Weight Reducing' };
+const blankExercise = () => ({ name: '', amount: '', description: '' });
 
 function CoachWorkoutPlans() {
   const theme = useTheme();
+  const { user } = useAuth();
+  const coachId = String(user?.id || '');
   const isDark = theme.palette.mode === 'dark';
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
   const panelBorder = isDark ? '#24344f' : '#e5e7eb';
   const mutedText = isDark ? '#94a3b8' : '#6b7280';
 
-  const pageSize = 9;
-  const [users] = useState(REQUESTED_USERS);
-  const [plansByUser, setPlansByUser] = useState({});
-  const [openUser, setOpenUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const [activeView, setActiveView] = useState('requests');
-  const [categoryLibrary, setCategoryLibrary] = useState(INITIAL_CATEGORY_LIBRARY);
-  const [categoryDrafts, setCategoryDrafts] = useState({
-    weightGain: newCategoryExercise(),
-    weightLoss: newCategoryExercise(),
-  });
-  const [editDialog, setEditDialog] = useState({
-    open: false,
-    categoryKey: '',
-    index: -1,
-    draft: newCategoryExercise(),
-  });
-  const [deleteDialog, setDeleteDialog] = useState({
-    open: false,
-    categoryKey: '',
-    index: -1,
-    name: '',
-  });
-  const [feedback, setFeedback] = useState({
-    open: false,
-    severity: 'success',
-    message: '',
-  });
-  const [planForm, setPlanForm] = useState({
-    planTitle: '',
-    planNote: '',
-    exercises: [newExercise()],
-  });
+  const [requests, setRequests] = useState([]);
+  const [plansByUser, setPlansByUser] = useState({});
+  const [categories, setCategories] = useState([]);
+  const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
+  const [page, setPage] = useState(1);
+  const [openPlan, setOpenPlan] = useState(null);
+  const [planForm, setPlanForm] = useState({ id: '', appointmentId: '', planTitle: '', planNote: '', exercises: [blankExercise()] });
+  const [drafts, setDrafts] = useState({ weightGain: blankExercise(), weightLoss: blankExercise() });
+  const [editCategory, setEditCategory] = useState({ open: false, id: '', categoryKey: '', name: '', amount: '', description: '' });
 
-  const sortedUsers = useMemo(
-    () => [...users].sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]),
-    [users],
-  );
-  const categorySuggestionOptions = useMemo(
-    () =>
-      Object.entries(categoryLibrary).flatMap(([categoryKey, exercises]) =>
-        exercises.map((exercise, idx) => ({
-          key: `${categoryKey}::${idx}`,
-          label: `${CATEGORY_LABELS[categoryKey]} - ${exercise.name}`,
-        })),
-      ),
-    [categoryLibrary],
-  );
-  const totalPages = Math.max(1, Math.ceil(sortedUsers.length / pageSize));
-  const safePage = Math.min(currentPage, totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const paginatedUsers = sortedUsers.slice(startIndex, startIndex + pageSize);
-  const showingFrom = sortedUsers.length ? startIndex + 1 : 0;
-  const showingTo = Math.min(startIndex + pageSize, sortedUsers.length);
+  const showToast = (message, severity = 'success') => setFeedback({ open: true, message, severity });
 
-  const openPlanDialog = (user) => {
-    const existing = plansByUser[user.id];
-    setOpenUser(user);
-    setPlanForm(
-      existing || {
-        planTitle: '',
-        planNote: '',
-        exercises: [newExercise()],
-      }
-    );
-    if (existing) {
-      setPlanForm({
-        ...existing,
-        exercises: (existing.exercises || []).map((exercise) => ({
-          ...newExercise(),
-          ...exercise,
+  const loadData = async () => {
+    if (!coachId) return;
+    try {
+      const [reqRes, planRes, catRes] = await Promise.all([
+        getCoachWorkoutRequests(coachId),
+        getCoachWorkoutPlans(coachId),
+        getCoachExerciseCategories(coachId),
+      ]);
+      const reqItems = Array.isArray(reqRes?.data?.data) ? reqRes.data.data : [];
+      const planItems = Array.isArray(planRes?.data?.data) ? planRes.data.data : [];
+      const catItems = Array.isArray(catRes?.data?.data) ? catRes.data.data : [];
+
+      setRequests(
+        reqItems.map((item) => ({
+          ...item,
+          gradient: PRIORITY_GRADIENTS[item.priority] || PRIORITY_GRADIENTS.Medium,
         })),
+      );
+      const byUser = {};
+      planItems.forEach((plan) => {
+        const key = String(plan.userId);
+        if (!byUser[key]) byUser[key] = plan;
       });
+      setPlansByUser(byUser);
+      setCategories(catItems);
+    } catch (error) {
+      showToast(error?.response?.data?.message || 'Failed to load workout data', 'error');
     }
   };
 
-  const closePlanDialog = () => {
-    setOpenUser(null);
-    setPlanForm({ planTitle: '', planNote: '', exercises: [newExercise()] });
-  };
+  useEffect(() => {
+    loadData();
+  }, [coachId]);
 
-  const updateExercise = (index, field, value) => {
-    setPlanForm((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((exercise, i) =>
-        i === index ? { ...exercise, [field]: value } : exercise,
-      ),
-    }));
-  };
+  const sortedRequests = useMemo(
+    () => [...requests].sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2)),
+    [requests],
+  );
 
-  const updateExerciseSourceType = (index, sourceType) => {
-    setPlanForm((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((exercise, i) =>
-        i === index
-          ? {
-              ...exercise,
-              sourceType,
-              suggestionKey: sourceType === 'manual' ? '' : exercise.suggestionKey,
-            }
-          : exercise,
-      ),
-    }));
-  };
-
-  const applyCategorySuggestion = (index, suggestionKey) => {
-    const [categoryKey, rawIndex] = suggestionKey.split('::');
-    const selectedExercise = categoryLibrary[categoryKey]?.[Number(rawIndex)];
-    if (!selectedExercise) return;
-    setPlanForm((prev) => ({
-      ...prev,
-      exercises: prev.exercises.map((exercise, i) =>
-        i === index
-          ? {
-              ...exercise,
-              sourceType: 'category',
-              suggestionKey,
-              name: selectedExercise.name,
-              amount: selectedExercise.amount,
-              description: selectedExercise.description,
-            }
-          : exercise,
-      ),
-    }));
-  };
-
-  const addExercise = () => {
-    setPlanForm((prev) => ({ ...prev, exercises: [...prev.exercises, newExercise()] }));
-  };
-
-  const removeExercise = (index) => {
-    setPlanForm((prev) => {
-      if (prev.exercises.length === 1) return prev;
-      return { ...prev, exercises: prev.exercises.filter((_, i) => i !== index) };
+  const groupedCategories = useMemo(() => {
+    const grouped = { weightGain: [], weightLoss: [] };
+    categories.forEach((item) => {
+      if (grouped[item.categoryKey]) grouped[item.categoryKey].push(item);
     });
-  };
+    return grouped;
+  }, [categories]);
 
-  const savePlan = () => {
-    if (!openUser) return;
-    setPlansByUser((prev) => ({
-      ...prev,
-      [openUser.id]: {
-        ...planForm,
-        createdAt: new Date().toISOString(),
-      },
-    }));
-    closePlanDialog();
-  };
+  const suggestionOptions = useMemo(
+    () => categories.map((item) => ({ id: item._id, label: `${CATEGORY_LABELS[item.categoryKey]} - ${item.name}`, item })),
+    [categories],
+  );
 
-  const updateCategoryDraft = (categoryKey, field, value) => {
-    setCategoryDrafts((prev) => ({
-      ...prev,
-      [categoryKey]: { ...prev[categoryKey], [field]: value },
-    }));
-  };
+  const pageSize = 9;
+  const totalPages = Math.max(1, Math.ceil(sortedRequests.length / pageSize));
+  const current = Math.min(page, totalPages);
+  const currentItems = sortedRequests.slice((current - 1) * pageSize, current * pageSize);
 
-  const addCategoryExercise = (categoryKey) => {
-    const draft = categoryDrafts[categoryKey];
-    if (!draft.name.trim() || !draft.amount.trim()) {
-      setFeedback({
-        open: true,
-        severity: 'warning',
-        message: 'Exercise name and amount are required.',
-      });
+  const openPlanDialog = (request) => {
+    const existing = plansByUser[String(request.userId)];
+    setOpenPlan(request);
+    if (!existing) {
+      setPlanForm({ id: '', appointmentId: String(request.appointmentId || ''), planTitle: '', planNote: '', exercises: [blankExercise()] });
       return;
     }
-    setCategoryLibrary((prev) => ({
-      ...prev,
-      [categoryKey]: [...prev[categoryKey], draft],
-    }));
-    setCategoryDrafts((prev) => ({
-      ...prev,
-      [categoryKey]: newCategoryExercise(),
-    }));
-    setFeedback({
-      open: true,
-      severity: 'success',
-      message: 'Exercise added successfully.',
+    setPlanForm({
+      id: String(existing._id),
+      appointmentId: String(existing.appointmentId || request.appointmentId || ''),
+      planTitle: existing.planTitle || '',
+      planNote: existing.planNote || '',
+      exercises: Array.isArray(existing.exercises) && existing.exercises.length ? existing.exercises : [blankExercise()],
     });
   };
 
-  const openEditExercise = (categoryKey, index) => {
-    const selected = categoryLibrary[categoryKey][index];
-    if (!selected) return;
-    setEditDialog({
-      open: true,
-      categoryKey,
-      index,
-      draft: { ...selected },
-    });
-  };
+  const savePlan = async () => {
+    if (!openPlan) return;
+    if (!planForm.planTitle.trim()) return showToast('Plan title is required', 'warning');
+    if (planForm.exercises.some((x) => !x.name?.trim() || !x.amount?.trim())) return showToast('Exercise name and amount are required', 'warning');
 
-  const saveEditedExercise = () => {
-    const { categoryKey, index, draft } = editDialog;
-    if (!draft.name.trim() || !draft.amount.trim()) {
-      setFeedback({
-        open: true,
-        severity: 'warning',
-        message: 'Exercise name and amount are required.',
-      });
-      return;
+    const payload = {
+      coachId,
+      userId: String(openPlan.userId),
+      appointmentId: String(planForm.appointmentId || openPlan.appointmentId || ''),
+      planTitle: planForm.planTitle.trim(),
+      planNote: planForm.planNote.trim(),
+      exercises: planForm.exercises.map((x) => ({ ...x, name: x.name.trim(), amount: x.amount.trim(), description: (x.description || '').trim() })),
+    };
+
+    try {
+      if (planForm.id) await updateCoachWorkoutPlan(planForm.id, payload);
+      else await createCoachWorkoutPlan(payload);
+      showToast(planForm.id ? 'Workout plan updated' : 'Workout plan created');
+      setOpenPlan(null);
+      await loadData();
+    } catch (error) {
+      showToast(error?.response?.data?.message || 'Failed to save workout plan', 'error');
     }
-    setCategoryLibrary((prev) => ({
-      ...prev,
-      [categoryKey]: prev[categoryKey].map((item, i) => (i === index ? draft : item)),
-    }));
-    setEditDialog({
-      open: false,
-      categoryKey: '',
-      index: -1,
-      draft: newCategoryExercise(),
-    });
-    setFeedback({
-      open: true,
-      severity: 'success',
-      message: 'Exercise updated successfully.',
-    });
   };
 
-  const openDeleteExercise = (categoryKey, index) => {
-    const selected = categoryLibrary[categoryKey][index];
-    if (!selected) return;
-    setDeleteDialog({
-      open: true,
-      categoryKey,
-      index,
-      name: selected.name,
-    });
+  const removePlan = async (request) => {
+    const existing = plansByUser[String(request.userId)];
+    if (!existing?._id) return;
+    try {
+      await deleteCoachWorkoutPlan(String(existing._id));
+      showToast('Workout plan deleted');
+      await loadData();
+    } catch (error) {
+      showToast(error?.response?.data?.message || 'Failed to delete workout plan', 'error');
+    }
   };
 
-  const confirmDeleteExercise = () => {
-    const { categoryKey, index } = deleteDialog;
-    setCategoryLibrary((prev) => ({
-      ...prev,
-      [categoryKey]: prev[categoryKey].filter((_, i) => i !== index),
-    }));
-    setDeleteDialog({
-      open: false,
-      categoryKey: '',
-      index: -1,
-      name: '',
-    });
-    setFeedback({
-      open: true,
-      severity: 'success',
-      message: 'Exercise deleted successfully.',
-    });
+  const addCategory = async (categoryKey) => {
+    const draft = drafts[categoryKey];
+    if (!draft.name.trim() || !draft.amount.trim()) return showToast('Exercise name and amount are required', 'warning');
+    try {
+      await createCoachExerciseCategory({ coachId, categoryKey, name: draft.name.trim(), amount: draft.amount.trim(), description: (draft.description || '').trim() });
+      setDrafts((prev) => ({ ...prev, [categoryKey]: blankExercise() }));
+      showToast('Exercise added');
+      await loadData();
+    } catch (error) {
+      showToast(error?.response?.data?.message || 'Failed to add exercise', 'error');
+    }
+  };
+
+  const saveCategoryEdit = async () => {
+    if (!editCategory.name.trim() || !editCategory.amount.trim()) return showToast('Exercise name and amount are required', 'warning');
+    try {
+      await updateCoachExerciseCategory(editCategory.id, {
+        categoryKey: editCategory.categoryKey,
+        name: editCategory.name.trim(),
+        amount: editCategory.amount.trim(),
+        description: (editCategory.description || '').trim(),
+      });
+      setEditCategory({ open: false, id: '', categoryKey: '', name: '', amount: '', description: '' });
+      showToast('Exercise updated');
+      await loadData();
+    } catch (error) {
+      showToast(error?.response?.data?.message || 'Failed to update exercise', 'error');
+    }
+  };
+
+  const removeCategory = async (id) => {
+    try {
+      await deleteCoachExerciseCategory(String(id));
+      showToast('Exercise deleted');
+      await loadData();
+    } catch (error) {
+      showToast(error?.response?.data?.message || 'Failed to delete exercise', 'error');
+    }
   };
 
   return (
     <Box sx={{ pb: 3 }}>
-      <PageHeader
-        title="Workout Plans"
-        subtitle="Build personalized exercise plans for users who requested coaching. Priority is ordered from high to low."
-      />
-
+      <PageHeader title="Workout Plans" subtitle="Build personalized exercise plans for users who requested coaching. Priority is ordered from high to low." />
       <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-        <Button
-          variant={activeView === 'requests' ? 'contained' : 'outlined'}
-          onClick={() => setActiveView('requests')}
-          sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
-        >
-          User Workout Requests
-        </Button>
-        <Button
-          variant={activeView === 'categories' ? 'contained' : 'outlined'}
-          onClick={() => setActiveView('categories')}
-          sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}
-        >
-          Exercise Categories
-        </Button>
+        <Button variant={activeView === 'requests' ? 'contained' : 'outlined'} onClick={() => setActiveView('requests')} sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}>User Workout Requests</Button>
+        <Button variant={activeView === 'categories' ? 'contained' : 'outlined'} onClick={() => setActiveView('categories')} sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2 }}>Exercise Categories</Button>
       </Stack>
 
       {activeView === 'requests' && (
         <>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' },
-              gap: 2,
-            }}
-          >
-            {paginatedUsers.map((user) => {
-              const hasPlan = Boolean(plansByUser[user.id]);
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' }, gap: 2 }}>
+            {currentItems.map((request) => {
+              const hasPlan = Boolean(plansByUser[String(request.userId)]);
               return (
-                <Box
-                  key={user.id}
-                  sx={{
-                    background: panelBg,
-                    border: '1px solid',
-                    borderColor: panelBorder,
-                    borderRadius: 2.5,
-                    p: { xs: 2, md: 2.5 },
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                    minHeight: 260,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                    '&:hover': {
-                      transform: 'translateY(-3px)',
-                      boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
-                    },
-                  }}
-                >
-                  <Stack
-                    direction={{ xs: 'column', md: 'row' }}
-                    spacing={2}
-                    justifyContent="space-between"
-                    alignItems={{ xs: 'flex-start', md: 'center' }}
-                  >
+                <Box key={request.appointmentId || request.userId} sx={{ background: panelBg, border: '1px solid', borderColor: panelBorder, borderRadius: 2.5, p: 2.5, minHeight: 250, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
-                      <Avatar
-                        sx={{
-                          width: 48,
-                          height: 48,
-                          fontWeight: 800,
-                          color: '#fff',
-                          background: user.gradient,
-                        }}
-                      >
-                        {user.avatar}
-                      </Avatar>
+                      <Avatar sx={{ width: 48, height: 48, fontWeight: 800, color: '#fff', background: request.gradient }}>{request.avatar || 'U'}</Avatar>
                       <Box>
-                        <Typography sx={{ fontWeight: 800, fontSize: '1rem' }}>{user.name}</Typography>
-                        <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>
-                          Age {user.age} | Goal: {user.goal} | {user.sessionsPerWeek} sessions/week
-                        </Typography>
+                        <Typography sx={{ fontWeight: 800, fontSize: '1rem' }}>{request.name}</Typography>
+                        <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>Age {request.age} | Goal: {request.goal}</Typography>
                       </Box>
                     </Stack>
-
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Chip
-                        size="small"
-                        label={`${user.priority} Priority`}
-                        sx={{
-                          fontWeight: 700,
-                          bgcolor:
-                            user.priority === 'High'
-                              ? '#ef44441a'
-                              : user.priority === 'Medium'
-                                ? '#f59e0b1a'
-                                : '#10b9811a',
-                          color:
-                            user.priority === 'High'
-                              ? '#ef4444'
-                              : user.priority === 'Medium'
-                                ? '#f59e0b'
-                                : '#10b981',
-                        }}
-                      />
-                      {hasPlan && (
-                        <Chip
-                          size="small"
-                          icon={<AssignmentTurnedInRoundedIcon />}
-                          label="Plan Ready"
-                          sx={{ fontWeight: 700, bgcolor: '#16a34a1a', color: '#16a34a' }}
-                        />
-                      )}
+                    <Stack direction="row" spacing={1}>
+                      <Chip size="small" label={`${request.priority} Priority`} />
+                      {hasPlan && <Chip size="small" label="Plan Ready" icon={<AssignmentTurnedInRoundedIcon />} />}
                     </Stack>
                   </Stack>
-
-                  <Typography sx={{ mt: 1.4, color: mutedText, fontSize: '0.86rem' }}>
-                    Request note: {user.notes}
-                  </Typography>
-
-                  <Stack
-                    direction={{ xs: 'column', sm: 'row' }}
-                    spacing={1}
-                    justifyContent="space-between"
-                    alignItems={{ xs: 'flex-start', sm: 'center' }}
-                    sx={{ mt: 1.6 }}
-                  >
-                    <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>
-                      Requested on: {user.requestedOn}
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      startIcon={<FitnessCenterRoundedIcon />}
-                      onClick={() => openPlanDialog(user)}
-                      sx={{
-                        textTransform: 'none',
-                        borderRadius: 2,
-                        fontWeight: 700,
-                        bgcolor: hasPlan ? '#0284c7' : '#0d9488',
-                        '&:hover': { bgcolor: hasPlan ? '#0369a1' : '#0f766e' },
-                      }}
-                    >
-                      {hasPlan ? 'Edit Workout Plan' : 'Create Workout Plan'}
-                    </Button>
+                  <Typography sx={{ mt: 1.2, color: mutedText, fontSize: '0.86rem' }}>Request note: {request.notes || '-'}</Typography>
+                  <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="center" sx={{ mt: 1.2 }}>
+                    <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>Requested on: {request.requestedOn}</Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Button variant="contained" onClick={() => openPlanDialog(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>{hasPlan ? 'Edit Workout Plan' : 'Create Workout Plan'}</Button>
+                      {hasPlan && <Button variant="outlined" color="error" onClick={() => removePlan(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>Delete</Button>}
+                    </Stack>
                   </Stack>
                 </Box>
               );
             })}
           </Box>
-
-          {sortedUsers.length > pageSize && (
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              justifyContent="space-between"
-              alignItems={{ xs: 'flex-start', sm: 'center' }}
-              sx={{ mt: 2 }}
-            >
-              <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>
-                Showing {showingFrom}-{showingTo} of {sortedUsers.length} users
-              </Typography>
-              <Pagination
-                page={safePage}
-                count={totalPages}
-                onChange={(_, page) => setCurrentPage(page)}
-                color="primary"
-                shape="rounded"
-                siblingCount={1}
-                boundaryCount={1}
-                sx={{
-                  '& .MuiPaginationItem-root': {
-                    fontWeight: 700,
-                    borderRadius: 1.6,
-                  },
-                }}
-              />
+          {sortedRequests.length > pageSize && (
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ mt: 2 }}>
+              <Typography sx={{ color: mutedText, fontSize: '0.84rem' }}>Showing {(current - 1) * pageSize + 1}-{Math.min(current * pageSize, sortedRequests.length)} of {sortedRequests.length} users</Typography>
+              <Pagination page={current} count={totalPages} onChange={(_, value) => setPage(value)} color="primary" shape="rounded" />
             </Stack>
           )}
         </>
@@ -547,381 +266,94 @@ function CoachWorkoutPlans() {
 
       {activeView === 'categories' && (
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
-          {[
-            { key: 'weightGain', title: 'Weight Gaining Exercises', tone: '#16a34a' },
-            { key: 'weightLoss', title: 'Weight Reducing Exercises', tone: '#0284c7' },
-          ].map((category) => (
-            <Box
-              key={category.key}
-              sx={{
-                background: panelBg,
-                border: '1px solid',
-                borderColor: panelBorder,
-                borderRadius: 2.5,
-                p: 2,
-              }}
-            >
-              <Typography sx={{ fontWeight: 800, fontSize: '1rem', mb: 1.5, color: category.tone }}>
-                {category.title}
-              </Typography>
-
+          {['weightGain', 'weightLoss'].map((categoryKey) => (
+            <Box key={categoryKey} sx={{ background: panelBg, border: '1px solid', borderColor: panelBorder, borderRadius: 2.5, p: 2 }}>
+              <Typography sx={{ fontWeight: 800, fontSize: '1rem', mb: 1.5 }}>{CATEGORY_LABELS[categoryKey]} Exercises</Typography>
               <Stack spacing={1} sx={{ mb: 1.5, maxHeight: 260, overflowY: 'auto', pr: 0.5 }}>
-                {categoryLibrary[category.key].map((exercise, idx) => (
-                  <Box
-                    key={`${category.key}-${idx}`}
-                    sx={{
-                      p: 1.2,
-                      border: '1px solid',
-                      borderColor: panelBorder,
-                      borderRadius: 1.5,
-                      background: isDark ? '#0b1530' : '#f8fafc',
-                    }}
-                  >
-                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-                      <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{exercise.name}</Typography>
-                      <Stack direction="row" spacing={0.5}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<EditRoundedIcon sx={{ fontSize: 14 }} />}
-                          onClick={() => openEditExercise(category.key, idx)}
-                          sx={{ textTransform: 'none', minWidth: 0, px: 1 }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="small"
-                          color="error"
-                          variant="outlined"
-                          startIcon={<DeleteOutlineRoundedIcon sx={{ fontSize: 14 }} />}
-                          onClick={() => openDeleteExercise(category.key, idx)}
-                          sx={{ textTransform: 'none', minWidth: 0, px: 1 }}
-                        >
-                          Delete
-                        </Button>
+                {(groupedCategories[categoryKey] || []).map((exercise) => (
+                  <Box key={exercise._id} sx={{ p: 1.2, border: '1px solid', borderColor: panelBorder, borderRadius: 1.5, background: isDark ? '#0b1530' : '#f8fafc' }}>
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography sx={{ fontWeight: 700 }}>{exercise.name}</Typography>
+                      <Stack direction="row" spacing={1}>
+                        <Button size="small" variant="outlined" onClick={() => setEditCategory({ open: true, id: exercise._id, categoryKey, name: exercise.name, amount: exercise.amount, description: exercise.description || '' })}>Edit</Button>
+                        <Button size="small" color="error" variant="outlined" onClick={() => removeCategory(exercise._id)}>Delete</Button>
                       </Stack>
                     </Stack>
                     <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>{exercise.amount}</Typography>
-                    <Typography sx={{ color: mutedText, fontSize: '0.8rem', mt: 0.4 }}>
-                      {exercise.description}
-                    </Typography>
+                    <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>{exercise.description}</Typography>
                   </Box>
                 ))}
               </Stack>
-
-              <Divider sx={{ mb: 1.5 }} />
-
               <Stack spacing={1}>
-                <TextField
-                  label="Exercise Name"
-                  size="small"
-                  value={categoryDrafts[category.key].name}
-                  onChange={(e) => updateCategoryDraft(category.key, 'name', e.target.value)}
-                  fullWidth
-                />
-                <TextField
-                  label="Amount"
-                  size="small"
-                  value={categoryDrafts[category.key].amount}
-                  onChange={(e) => updateCategoryDraft(category.key, 'amount', e.target.value)}
-                  fullWidth
-                />
-                <TextField
-                  label="Description"
-                  size="small"
-                  value={categoryDrafts[category.key].description}
-                  onChange={(e) => updateCategoryDraft(category.key, 'description', e.target.value)}
-                  multiline
-                  minRows={2}
-                  fullWidth
-                />
-                <Button
-                  variant="contained"
-                  startIcon={<AddRoundedIcon />}
-                  onClick={() => addCategoryExercise(category.key)}
-                  sx={{
-                    alignSelf: 'flex-start',
-                    textTransform: 'none',
-                    borderRadius: 2,
-                    fontWeight: 700,
-                    bgcolor: category.tone,
-                  }}
-                >
-                  Add To Category
-                </Button>
+                <TextField size="small" label="Exercise Name" value={drafts[categoryKey].name} onChange={(e) => setDrafts((prev) => ({ ...prev, [categoryKey]: { ...prev[categoryKey], name: e.target.value } }))} />
+                <TextField size="small" label="Amount" value={drafts[categoryKey].amount} onChange={(e) => setDrafts((prev) => ({ ...prev, [categoryKey]: { ...prev[categoryKey], amount: e.target.value } }))} />
+                <TextField size="small" label="Description" value={drafts[categoryKey].description} onChange={(e) => setDrafts((prev) => ({ ...prev, [categoryKey]: { ...prev[categoryKey], description: e.target.value } }))} multiline minRows={2} />
+                <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => addCategory(categoryKey)} sx={{ alignSelf: 'flex-start', textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>Add To Category</Button>
               </Stack>
             </Box>
           ))}
         </Box>
       )}
 
-      <Dialog
-        open={Boolean(openUser)}
-        onClose={closePlanDialog}
-        fullWidth
-        maxWidth="md"
-        PaperProps={{
-          sx: {
-            borderRadius: 2.5,
-            border: '1px solid',
-            borderColor: panelBorder,
-            background: panelBg,
-          },
-        }}
-      >
-        <DialogTitle sx={{ pr: 7 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: '1.15rem' }}>
-            {openUser ? `Workout Plan: ${openUser.name}` : 'Workout Plan'}
-          </Typography>
-          <IconButton onClick={closePlanDialog} sx={{ position: 'absolute', top: 10, right: 10 }}>
-            <CloseRoundedIcon />
-          </IconButton>
-        </DialogTitle>
-
+      <Dialog open={Boolean(openPlan)} onClose={() => setOpenPlan(null)} fullWidth maxWidth="md">
+        <DialogTitle>{openPlan ? `Workout Plan: ${openPlan.name}` : 'Workout Plan'}</DialogTitle>
         <DialogContent>
-          <Stack spacing={2}>
-            <TextField
-              label="Plan Title"
-              value={planForm.planTitle}
-              onChange={(e) => setPlanForm((prev) => ({ ...prev, planTitle: e.target.value }))}
-              fullWidth
-            />
-            <TextField
-              label="Plan Notes"
-              value={planForm.planNote}
-              onChange={(e) => setPlanForm((prev) => ({ ...prev, planNote: e.target.value }))}
-              fullWidth
-              multiline
-              minRows={2}
-            />
-
-            <Divider />
-            <Typography sx={{ fontWeight: 700 }}>Exercise Library Builder</Typography>
-            <Typography sx={{ color: mutedText, fontSize: '0.82rem' }}>
-              Add as many exercises as needed. Use Exercise Name, Amount, and Description for each row.
-            </Typography>
-
-            <Box sx={{ maxHeight: 420, overflowY: 'auto', pr: 0.5 }}>
-              <Stack spacing={1.2}>
-                {planForm.exercises.map((exercise, index) => (
-                  <Box
-                    key={`exercise-${index}`}
-                    sx={{
-                      p: 1.5,
-                      border: '1px solid',
-                      borderColor: panelBorder,
-                      borderRadius: 2,
-                      background: isDark ? '#0b1530' : '#f8fafc',
-                    }}
-                  >
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                      <Chip
-                        size="small"
-                        icon={<FormatListNumberedRoundedIcon />}
-                        label={`Exercise ${index + 1}`}
-                        sx={{ fontWeight: 700 }}
-                      />
-                      <IconButton
-                        onClick={() => removeExercise(index)}
-                        disabled={planForm.exercises.length === 1}
-                        size="small"
-                      >
-                        <DeleteOutlineRoundedIcon />
-                      </IconButton>
-                    </Stack>
-
-                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} sx={{ mb: 1.2 }}>
-                      <TextField
-                        select
-                        label="Input Mode"
-                        value={exercise.sourceType}
-                        onChange={(e) => updateExerciseSourceType(index, e.target.value)}
-                        fullWidth
-                      >
-                        <MenuItem value="manual">Manual</MenuItem>
-                        <MenuItem value="category">From Category Suggestions</MenuItem>
-                      </TextField>
-                      {exercise.sourceType === 'category' && (
-                        <TextField
-                          select
-                          label="Suggested Exercise"
-                          value={exercise.suggestionKey}
-                          onChange={(e) => applyCategorySuggestion(index, e.target.value)}
-                          fullWidth
-                        >
-                          {categorySuggestionOptions.map((option) => (
-                            <MenuItem key={option.key} value={option.key}>
-                              {option.label}
-                            </MenuItem>
-                          ))}
-                        </TextField>
-                      )}
-                    </Stack>
-
-                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2}>
-                      <TextField
-                        label="Exercise Name"
-                        value={exercise.name}
-                        onChange={(e) => updateExercise(index, 'name', e.target.value)}
-                        fullWidth
-                      />
-                      <TextField
-                        label="Amount"
-                        value={exercise.amount}
-                        onChange={(e) => updateExercise(index, 'amount', e.target.value)}
-                        placeholder="3 x 12 reps / 20 min / 5 rounds"
-                        fullWidth
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <Typography sx={{ color: mutedText, fontSize: '0.75rem' }}>Qty</Typography>
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                    </Stack>
-
-                    <TextField
-                      sx={{ mt: 1.2 }}
-                      label="Description"
-                      value={exercise.description}
-                      onChange={(e) => updateExercise(index, 'description', e.target.value)}
-                      fullWidth
-                      multiline
-                      minRows={2}
-                      placeholder="Coaching cues, tempo, rest time, and safety notes."
-                    />
-                  </Box>
-                ))}
-              </Stack>
-            </Box>
-
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Button
-                variant="outlined"
-                startIcon={<AddRoundedIcon />}
-                onClick={addExercise}
-                sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}
-              >
-                Add New Exercise
-              </Button>
-              <Button
-                variant="contained"
-                onClick={savePlan}
-                sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 800, px: 2.5, bgcolor: '#0d9488', '&:hover': { bgcolor: '#0f766e' } }}
-              >
-                Save Workout Plan
-              </Button>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <TextField label="Plan Title" value={planForm.planTitle} onChange={(e) => setPlanForm((prev) => ({ ...prev, planTitle: e.target.value }))} fullWidth />
+            <TextField label="Plan Notes" value={planForm.planNote} onChange={(e) => setPlanForm((prev) => ({ ...prev, planNote: e.target.value }))} fullWidth multiline minRows={2} />
+            {planForm.exercises.map((exercise, index) => (
+              <Box key={`exercise-${index}`} sx={{ p: 1.5, border: '1px solid', borderColor: panelBorder, borderRadius: 2 }}>
+                <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
+                  <Chip size="small" label={`Exercise ${index + 1}`} />
+                  <Button size="small" color="error" onClick={() => setPlanForm((prev) => ({ ...prev, exercises: prev.exercises.length === 1 ? prev.exercises : prev.exercises.filter((_, i) => i !== index) }))}>Remove</Button>
+                </Stack>
+                <TextField
+                  select
+                  label="Suggest from Categories"
+                  value=""
+                  onChange={(e) => {
+                    const selected = suggestionOptions.find((x) => x.id === e.target.value);
+                    if (!selected) return;
+                    setPlanForm((prev) => ({ ...prev, exercises: prev.exercises.map((x, i) => (i === index ? { ...x, name: selected.item.name, amount: selected.item.amount, description: selected.item.description || '' } : x)) }));
+                  }}
+                  fullWidth
+                  size="small"
+                  sx={{ mb: 1 }}
+                >
+                  {suggestionOptions.map((option) => <MenuItem key={option.id} value={option.id}>{option.label}</MenuItem>)}
+                </TextField>
+                <Stack spacing={1}>
+                  <TextField label="Exercise Name" value={exercise.name} onChange={(e) => setPlanForm((prev) => ({ ...prev, exercises: prev.exercises.map((x, i) => (i === index ? { ...x, name: e.target.value } : x)) }))} fullWidth />
+                  <TextField label="Amount" value={exercise.amount} onChange={(e) => setPlanForm((prev) => ({ ...prev, exercises: prev.exercises.map((x, i) => (i === index ? { ...x, amount: e.target.value } : x)) }))} fullWidth InputProps={{ startAdornment: <InputAdornment position="start">Qty</InputAdornment> }} />
+                  <TextField label="Description" value={exercise.description} onChange={(e) => setPlanForm((prev) => ({ ...prev, exercises: prev.exercises.map((x, i) => (i === index ? { ...x, description: e.target.value } : x)) }))} fullWidth multiline minRows={2} />
+                </Stack>
+              </Box>
+            ))}
+            <Stack direction="row" justifyContent="space-between">
+              <Button variant="outlined" onClick={() => setPlanForm((prev) => ({ ...prev, exercises: [...prev.exercises, blankExercise()] }))}>Add New Exercise</Button>
+              <Button variant="contained" onClick={savePlan}>Save Workout Plan</Button>
             </Stack>
           </Stack>
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={editDialog.open}
-        onClose={() =>
-          setEditDialog({ open: false, categoryKey: '', index: -1, draft: newCategoryExercise() })
-        }
-        fullWidth
-        maxWidth="sm"
-      >
+      <Dialog open={editCategory.open} onClose={() => setEditCategory({ open: false, id: '', categoryKey: '', name: '', amount: '', description: '' })} fullWidth maxWidth="sm">
         <DialogTitle>Edit Exercise</DialogTitle>
         <DialogContent>
           <Stack spacing={1.2} sx={{ mt: 0.5 }}>
-            <TextField
-              label="Exercise Name"
-              value={editDialog.draft.name}
-              onChange={(e) =>
-                setEditDialog((prev) => ({
-                  ...prev,
-                  draft: { ...prev.draft, name: e.target.value },
-                }))
-              }
-              fullWidth
-            />
-            <TextField
-              label="Amount"
-              value={editDialog.draft.amount}
-              onChange={(e) =>
-                setEditDialog((prev) => ({
-                  ...prev,
-                  draft: { ...prev.draft, amount: e.target.value },
-                }))
-              }
-              fullWidth
-            />
-            <TextField
-              label="Description"
-              value={editDialog.draft.description}
-              onChange={(e) =>
-                setEditDialog((prev) => ({
-                  ...prev,
-                  draft: { ...prev.draft, description: e.target.value },
-                }))
-              }
-              multiline
-              minRows={3}
-              fullWidth
-            />
+            <TextField label="Exercise Name" value={editCategory.name} onChange={(e) => setEditCategory((prev) => ({ ...prev, name: e.target.value }))} fullWidth />
+            <TextField label="Amount" value={editCategory.amount} onChange={(e) => setEditCategory((prev) => ({ ...prev, amount: e.target.value }))} fullWidth />
+            <TextField label="Description" value={editCategory.description} onChange={(e) => setEditCategory((prev) => ({ ...prev, description: e.target.value }))} multiline minRows={3} fullWidth />
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            onClick={() =>
-              setEditDialog({ open: false, categoryKey: '', index: -1, draft: newCategoryExercise() })
-            }
-            sx={{ textTransform: 'none' }}
-          >
-            Cancel
-          </Button>
-          <Button onClick={saveEditedExercise} variant="contained" sx={{ textTransform: 'none' }}>
-            Save Changes
-          </Button>
+          <Button onClick={() => setEditCategory({ open: false, id: '', categoryKey: '', name: '', amount: '', description: '' })}>Cancel</Button>
+          <Button onClick={saveCategoryEdit} variant="contained">Save Changes</Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog
-        open={deleteDialog.open}
-        onClose={() => setDeleteDialog({ open: false, categoryKey: '', index: -1, name: '' })}
-        fullWidth
-        maxWidth="xs"
-      >
-        <DialogTitle>Delete Exercise</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ color: 'text.secondary' }}>
-            Are you sure you want to delete <strong>{deleteDialog.name}</strong>?
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            onClick={() => setDeleteDialog({ open: false, categoryKey: '', index: -1, name: '' })}
-            sx={{ textTransform: 'none' }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={confirmDeleteExercise}
-            color="error"
-            variant="contained"
-            sx={{ textTransform: 'none' }}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Snackbar
-        open={feedback.open}
-        autoHideDuration={2500}
-        onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert
-          severity={feedback.severity}
-          variant="filled"
-          onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
-          sx={{ width: '100%' }}
-        >
+      <Snackbar open={feedback.open} autoHideDuration={2500} onClose={() => setFeedback((prev) => ({ ...prev, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <Alert severity={feedback.severity} variant="filled" onClose={() => setFeedback((prev) => ({ ...prev, open: false }))} sx={{ width: '100%' }}>
           {feedback.message}
         </Alert>
       </Snackbar>
