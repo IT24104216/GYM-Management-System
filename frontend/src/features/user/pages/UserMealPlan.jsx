@@ -76,6 +76,18 @@ const mealSectionConfig = {
 };
 const mealSectionOrder = ['breakfast', 'lunch', 'dinner', 'snacks'];
 
+const formatSuggestionSource = (source) => {
+  const value = String(source || '').trim().toLowerCase();
+  if (!value) return 'Unknown';
+  if (value === 'usda') return 'USDA';
+  if (value.includes('sri-lanka') || value.includes('local')) return 'Local DB';
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
 function CalorieTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
 
@@ -892,7 +904,7 @@ function UserMealPlan() {
                       <Typography sx={{ fontSize: '0.92rem' }}>{option?.name || ''}</Typography>
                       <Chip
                         size="small"
-                        label="USDA"
+                        label={formatSuggestionSource(option?.source)}
                         sx={{
                           ml: 1,
                           height: 20,
