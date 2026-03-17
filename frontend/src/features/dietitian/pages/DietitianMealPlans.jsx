@@ -47,6 +47,18 @@ const emptyMealForm = {
   description: '',
 };
 
+const formatSuggestionSource = (source) => {
+  const value = String(source || '').trim().toLowerCase();
+  if (!value) return 'Unknown';
+  if (value === 'usda') return 'USDA';
+  if (value.includes('sri-lanka') || value.includes('local')) return 'Local DB';
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
 function DietitianMealPlans() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -352,7 +364,7 @@ function DietitianMealPlans() {
                   <Typography sx={{ fontSize: '0.92rem' }}>{name}</Typography>
                   <Chip
                     size="small"
-                    label="USDA"
+                    label={formatSuggestionSource(option?.source)}
                     sx={{
                       ml: 1,
                       height: 20,
@@ -556,7 +568,7 @@ function DietitianMealPlans() {
                     <Typography sx={{ fontSize: '0.92rem' }}>{name}</Typography>
                     <Chip
                       size="small"
-                      label="USDA"
+                      label={formatSuggestionSource(option?.source)}
                       sx={{
                         ml: 1,
                         height: 20,
