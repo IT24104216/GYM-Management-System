@@ -36,6 +36,16 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    notificationPreferences: {
+      email: {
+        type: Boolean,
+        default: true,
+      },
+      push: {
+        type: Boolean,
+        default: true,
+      },
+    },
   },
   {
     timestamps: true,
