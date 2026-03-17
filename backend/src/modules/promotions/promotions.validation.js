@@ -17,7 +17,7 @@ const urlOrEmptySchema = z
     }
   }, { message: 'link must be a valid URL' });
 
-const basePromotionSchema = z.object({
+const promotionFieldsSchema = z.object({
   title: z.string().trim().min(1).max(140),
   placement: z.string().trim().min(1).max(80),
   target: z.string().trim().min(1).max(120),
@@ -28,7 +28,9 @@ const basePromotionSchema = z.object({
   link: urlOrEmptySchema,
   description: z.string().trim().max(1200).optional().default(''),
   image: z.string().trim().max(5000000).optional().default(''),
-}).superRefine((data, ctx) => {
+});
+
+const basePromotionSchema = promotionFieldsSchema.superRefine((data, ctx) => {
   if (data.endDate < data.startDate) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -40,7 +42,7 @@ const basePromotionSchema = z.object({
 
 export const createPromotionSchema = basePromotionSchema;
 
-export const updatePromotionSchema = basePromotionSchema.partial().superRefine((data, ctx) => {
+export const updatePromotionSchema = promotionFieldsSchema.partial().superRefine((data, ctx) => {
   if (data.startDate && data.endDate && data.endDate < data.startDate) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -62,4 +64,3 @@ export const promotionQuerySchema = z.object({
 export const publicPromotionQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(10).optional().default(3),
 });
-
