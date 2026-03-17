@@ -60,8 +60,8 @@ export const createCoachWorkoutPlan = (data) =>
 export const updateCoachWorkoutPlan = (id, data) =>
   axiosClient.put(`/workouts/plans/${id}`, data);
 
-export const submitCoachWorkoutPlan = (id) =>
-  axiosClient.patch(`/workouts/plans/${id}/submit`, { submitted: true });
+export const submitCoachWorkoutPlan = (id, data = { submitted: true, mode: 'all' }) =>
+  axiosClient.patch(`/workouts/plans/${id}/submit`, data);
 
 export const deleteCoachWorkoutPlan = (id) =>
   axiosClient.delete(`/workouts/plans/${id}`);
