@@ -156,18 +156,30 @@ const PLAN_GRADIENTS = [
   'linear-gradient(135deg, #b45309 0%, #ea580c 100%)',
 ];
 
+const getWeekNumberFromDay = (dayNumber) => Math.max(1, Math.ceil(Number(dayNumber) / 7));
+const normalizePublishedWeeks = (weeks = [], durationDays = 30) => {
+  const totalWeeks = Math.max(1, Math.ceil((Number(durationDays) || 30) / 7));
+  return [...new Set((Array.isArray(weeks) ? weeks : [])
+    .map((w) => Number(w))
+    .filter((w) => Number.isInteger(w) && w >= 1 && w <= totalWeeks))]
+    .sort((a, b) => a - b);
+};
+
 const mapPlansToWorkouts = (plans = []) => {
   const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const result = [];
 
   plans.forEach((plan, planIdx) => {
     const planExercises = Array.isArray(plan.exercises) ? plan.exercises : [];
+    const programDays = Array.isArray(plan.programDays) ? plan.programDays : [];
     const session = plan.session || {};
     const progressMap = new Map(
       (Array.isArray(session.exerciseProgress) ? session.exerciseProgress : [])
         .map((item) => [Number(item.index), Boolean(item.done)]),
     );
     const isCompleted = session.status === 'completed' || plan.status === 'completed';
+    const publishedWeeks = normalizePublishedWeeks(plan.publishedWeeks, plan.durationDays);
+    const canShowAllDays = Boolean(plan.isSubmitted);
     const baseDate = new Date(plan.createdAt || Date.now());
     const completedDate = session.completedAt ? new Date(session.completedAt) : null;
     const completedDateLabel = completedDate && !Number.isNaN(completedDate.getTime())
@@ -176,6 +188,69 @@ const mapPlansToWorkouts = (plans = []) => {
     const scheduledDate = Number.isNaN(baseDate.getTime())
       ? todayLabel
       : baseDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    if (programDays.length) {
+      programDays
+        .filter((day) => {
+          if (day.isRest) return false;
+          if (canShowAllDays) return true;
+          return publishedWeeks.includes(getWeekNumberFromDay(day.dayNumber));
+        })
+        .forEach((day, dayIdx) => {
+          const indexes = Array.isArray(day.exerciseIndexes) && day.exerciseIndexes.length
+            ? day.exerciseIndexes
+            : planExercises.map((_, idx) => idx);
+          const dayExercises = indexes
+            .map((idx) => ({ item: planExercises[idx], idx }))
+            .filter((entry) => Boolean(entry.item));
+          const primary = dayExercises[0]?.item || planExercises[0] || {};
+          const dateLabel = day.date
+            ? new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : scheduledDate;
+          result.push({
+            id: `${plan._id || `plan-${planIdx}`}-day-${day.dayNumber || dayIdx + 1}`,
+            sourcePlanId: String(plan._id || `plan-${planIdx}`),
+            title: day.title || primary.name || plan.planTitle || 'Workout Exercise',
+            muscles: day.muscles || plan.planTitle || 'Coach Assigned Plan',
+            workoutDate: dateLabel,
+            workoutIsoDate: day.date || '',
+            duration: `${Number(day.durationMinutes || plan.planDurationMinutes || 45)} min`,
+            assignedDurationMinutes: Number(day.durationMinutes || plan.planDurationMinutes || 45),
+            level: day.level || 'Coach Plan',
+            rating: Number(day.rating || 4.7),
+            gradient: PLAN_GRADIENTS[(planIdx + dayIdx) % PLAN_GRADIENTS.length],
+            done: Boolean(day.done) || isCompleted,
+            planExercises: dayExercises.length
+              ? dayExercises.map(({ item, idx }) => ({
+                id: `${plan._id || `plan-${planIdx}`}-session-${day.dayNumber || dayIdx + 1}-${idx}`,
+                name: item.name || 'Exercise',
+                setsReps: item.amount || '',
+                focusArea: day.muscles || plan.planTitle || 'Workout',
+                instruction: item.description || 'Follow the coach instructions.',
+                done: isCompleted ? true : Boolean(progressMap.get(idx)),
+                flipped: false,
+                exerciseIndex: idx,
+              }))
+              : planExercises.map((item, itemIdx) => ({
+                id: `${plan._id || `plan-${planIdx}`}-session-${day.dayNumber || dayIdx + 1}-${itemIdx}`,
+                name: item.name || 'Exercise',
+                setsReps: item.amount || '',
+                focusArea: day.muscles || plan.planTitle || 'Workout',
+                instruction: item.description || 'Follow the coach instructions.',
+                done: isCompleted ? true : Boolean(progressMap.get(itemIdx)),
+                flipped: false,
+                exerciseIndex: itemIdx,
+              })),
+            sessionExerciseMeta: {
+              setsReps: primary.amount || '',
+              instruction: primary.description || '',
+            },
+          });
+        });
+      return;
+    }
+
+    if (!canShowAllDays) return;
 
     planExercises.forEach((exercise, exIdx) => {
       result.push({
@@ -332,13 +407,19 @@ function UserWorkouts() {
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
   );
   const userId = String(user?.id || '');
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
   const loadAssignedPlans = async () => {
     if (!userId) return;
     try {
-      const { data } = await getUserWorkoutPlans(userId, { submitted: true });
+      const { data } = await getUserWorkoutPlans(userId);
       const plans = Array.isArray(data?.data) ? data.data : [];
-      setWorkouts(mapPlansToWorkouts(plans));
+      const filtered = plans.filter((plan) => {
+        if (plan?.isSubmitted) return true;
+        const publishedWeeks = normalizePublishedWeeks(plan?.publishedWeeks, plan?.durationDays);
+        return publishedWeeks.length > 0;
+      });
+      setWorkouts(mapPlansToWorkouts(filtered));
     } catch {
       setWorkouts([]);
     }
@@ -349,26 +430,32 @@ function UserWorkouts() {
   }, [userId]);
 
   const upcomingExercises = workouts
-    .filter((item) => !item.done)
     .map((item) => {
-      const parsed = parseWorkoutDate(item.workoutDate);
+      const parsed = parseWorkoutDate(item.workoutIsoDate || item.workoutDate);
       return {
         ...item,
         workoutDateObject: parsed,
         workoutDateValue: parsed ? parsed.getTime() : Number.POSITIVE_INFINITY,
       };
     })
+    .filter((item) => {
+      if (item.done) return false;
+      if (!item.workoutDateObject) return true;
+      return item.workoutDateObject >= startOfToday;
+    })
     .sort((a, b) => a.workoutDateValue - b.workoutDateValue);
 
   const previousExercises = workouts
-    .filter((item) => item.done)
     .map((item) => {
-      const parsed = parseWorkoutDate(item.workoutDate);
+      const parsed = parseWorkoutDate(item.workoutIsoDate || item.workoutDate);
+      const isExpired = parsed ? parsed < startOfToday : false;
       return {
         ...item,
         completedDateValue: parsed ? parsed.getTime() : 0,
+        isExpired,
       };
     })
+    .filter((item) => item.done || item.isExpired)
     .sort((a, b) => b.completedDateValue - a.completedDateValue);
 
   const todayWorkout = upcomingExercises.find((item) => (
