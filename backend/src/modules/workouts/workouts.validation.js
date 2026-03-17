@@ -11,7 +11,7 @@ const exerciseSchema = z.object({
   name: z.string().trim().min(1, 'name is required').max(120),
   amount: z.string().trim().min(1, 'amount is required').max(80),
   description: z.string().trim().max(500).optional().default(''),
-  timePeriod: z.enum(['Anytime', 'Morning', 'Afternoon', 'Evening']).optional().default('Anytime'),
+  assignedMinutes: z.coerce.number().int().min(1).max(600).optional().default(45),
   sourceType: z.enum(['manual', 'category']).optional().default('manual'),
   suggestionKey: z.string().trim().max(120).optional().default(''),
 });
