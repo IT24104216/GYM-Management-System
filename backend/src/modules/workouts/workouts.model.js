@@ -20,10 +20,11 @@ const workoutExerciseSchema = new mongoose.Schema(
       maxlength: 500,
       default: '',
     },
-    timePeriod: {
-      type: String,
-      enum: ['Anytime', 'Morning', 'Afternoon', 'Evening'],
-      default: 'Anytime',
+    assignedMinutes: {
+      type: Number,
+      min: 1,
+      max: 600,
+      default: 45,
     },
     sourceType: {
       type: String,
