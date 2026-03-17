@@ -5,6 +5,7 @@ import { env } from '../../config/env.js';
 import { User } from '../users/users.model.js';
 import { DietitianProfile } from '../dietitian/dietitianProfile.model.js';
 import { DietPlan, FoodLog, MealLibraryItem } from './mealPlans.model.js';
+import { NutritionFood } from '../nutrition/nutrition.model.js';
 import {
   createFoodLogSchema,
   createMealLibrarySchema,
@@ -410,42 +411,83 @@ export const deleteUserFoodLog = asyncHandler(async (req, res) => {
 export const searchNutritionFoods = asyncHandler(async (req, res) => {
   const { q } = parseOrThrow(nutritionSearchQuerySchema, req.query || {});
   const query = q.trim();
+  const safe = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const startsWithRegex = new RegExp(`^${safe}`, 'i');
+  const containsRegex = new RegExp(safe, 'i');
 
-  if (!env.USDA_API_KEY) {
-    throw new AppError('USDA API key is missing', HTTP_STATUS.SERVICE_UNAVAILABLE);
+  const localStartsWith = await NutritionFood.find({
+    $or: [{ name: startsWithRegex }, { aliases: startsWithRegex }],
+  })
+    .sort({ name: 1 })
+    .limit(10)
+    .lean();
+
+  let localRows = localStartsWith;
+  if (localStartsWith.length < 10) {
+    const excludedIds = localStartsWith.map((item) => item._id);
+    const localContains = await NutritionFood.find({
+      _id: { $nin: excludedIds },
+      $or: [{ name: containsRegex }, { aliases: containsRegex }],
+    })
+      .sort({ name: 1 })
+      .limit(10 - localStartsWith.length)
+      .lean();
+    localRows = [...localStartsWith, ...localContains];
   }
 
-  const usdaUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&pageSize=12&api_key=${encodeURIComponent(env.USDA_API_KEY)}`;
+  const localResults = localRows.map((item) => ({
+    source: item.source || 'local-db',
+    id: String(item._id),
+    name: String(item.name || '').trim(),
+    calories: Number(item.calories || 0),
+    protein: Number(item.protein || 0),
+    carbs: Number(item.carbs || 0),
+    fat: Number(item.fat || 0),
+    notes: '',
+    vitamins: '',
+  })).filter((item) => item.name);
+
   let externalResults = [];
+  if (env.USDA_API_KEY) {
+    const usdaUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&pageSize=10&api_key=${encodeURIComponent(env.USDA_API_KEY)}`;
+    try {
+      const response = await fetch(usdaUrl, { method: 'GET' });
+      if (response.ok) {
+        const json = await response.json();
+        externalResults = (json?.foods || []).map((food) => {
+          const nutrients = Array.isArray(food.foodNutrients) ? food.foodNutrients : [];
+          const getNutrient = (names) => {
+            const hit = nutrients.find((n) =>
+              names.some((name) => String(n?.nutrientName || '').toLowerCase() === name.toLowerCase()));
+            return Number(hit?.value || 0);
+          };
 
-  try {
-    const response = await fetch(usdaUrl, { method: 'GET' });
-
-    if (response.ok) {
-      const json = await response.json();
-      externalResults = (json?.foods || []).map((food) => {
-        const nutrients = Array.isArray(food.foodNutrients) ? food.foodNutrients : [];
-        const getNutrient = (names) => {
-          const hit = nutrients.find((n) =>
-            names.some((name) => String(n?.nutrientName || '').toLowerCase() === name.toLowerCase()));
-          return Number(hit?.value || 0);
-        };
-
-        return {
-          source: 'usda',
-          id: String(food.fdcId || ''),
-          name: String(food.description || '').trim(),
-          calories: getNutrient(['Energy', 'Energy (Atwater General Factors)', 'Energy (Atwater Specific Factors)']),
-          protein: getNutrient(['Protein']),
-          carbs: getNutrient(['Carbohydrate, by difference']),
-          fat: getNutrient(['Total lipid (fat)']),
-          notes: '',
-          vitamins: '',
-        };
-      }).filter((item) => item.name);
+          return {
+            source: 'usda',
+            id: String(food.fdcId || ''),
+            name: String(food.description || '').trim(),
+            calories: getNutrient(['Energy', 'Energy (Atwater General Factors)', 'Energy (Atwater Specific Factors)']),
+            protein: getNutrient(['Protein']),
+            carbs: getNutrient(['Carbohydrate, by difference']),
+            fat: getNutrient(['Total lipid (fat)']),
+            notes: '',
+            vitamins: '',
+          };
+        }).filter((item) => item.name);
+      }
+    } catch {
+      externalResults = [];
     }
-  } catch (_error) {
-    throw new AppError('USDA lookup failed', HTTP_STATUS.BAD_GATEWAY);
   }
-  res.status(HTTP_STATUS.OK).json({ data: externalResults.slice(0, 12) });
+
+  const merged = [...localResults, ...externalResults];
+  const seen = new Set();
+  const deduped = merged.filter((item) => {
+    const key = String(item.name || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  res.status(HTTP_STATUS.OK).json({ data: deduped.slice(0, 20) });
 });
