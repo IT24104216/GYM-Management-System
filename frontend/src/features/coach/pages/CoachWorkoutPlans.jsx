@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
   Avatar,
   Box,
   Button,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -31,6 +33,7 @@ import {
   deleteCoachExerciseCategory,
   deleteCoachWorkoutPlan,
   getCoachExerciseCategories,
+  getCoachExerciseSuggestions,
   getCoachWorkoutPlans,
   getCoachWorkoutRequests,
   submitCoachWorkoutPlan,
@@ -174,6 +177,9 @@ function CoachWorkoutPlans() {
   const [programDaysDraft, setProgramDaysDraft] = useState([]);
   const [selectedDayNumber, setSelectedDayNumber] = useState(1);
   const [dayEditorExercises, setDayEditorExercises] = useState([blankExercise()]);
+  const [exerciseSuggestionsByIndex, setExerciseSuggestionsByIndex] = useState({});
+  const [suggestionsLoadingByIndex, setSuggestionsLoadingByIndex] = useState({});
+  const suggestionTimersRef = useRef({});
   const [publishSelectionByUser, setPublishSelectionByUser] = useState({});
   const [drafts, setDrafts] = useState({ weightGain: blankExercise(), weightLoss: blankExercise() });
   const [editCategory, setEditCategory] = useState({ open: false, id: '', categoryKey: '', name: '', amount: '', description: '' });
@@ -214,6 +220,10 @@ function CoachWorkoutPlans() {
   useEffect(() => {
     loadData();
   }, [coachId]);
+
+  useEffect(() => () => {
+    Object.values(suggestionTimersRef.current).forEach((timerId) => clearTimeout(timerId));
+  }, []);
 
   const sortedRequests = useMemo(
     () => [...requests].sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2)),
@@ -280,21 +290,62 @@ function CoachWorkoutPlans() {
     .filter((day) => !day.isRest)
     .filter((day) => !isWorkoutDayAssigned(day));
 
-  const findNextWorkoutDayNumber = (days, fromDayNumber = 1) => {
+  const findNextWorkoutDayNumber = (days, fromDayNumber = 1, lockedWeeks = new Set()) => {
     const sorted = [...(days || [])].sort((a, b) => a.dayNumber - b.dayNumber);
-    const next = sorted.find((day) => !day.isRest && !day.assigned && day.dayNumber >= fromDayNumber);
+    const isLocked = (day) => lockedWeeks.has(Math.ceil(Number(day.dayNumber || 0) / 7));
+    const next = sorted.find((day) => !day.isRest && !day.assigned && day.dayNumber >= fromDayNumber && !isLocked(day));
     if (next) return next.dayNumber;
-    const first = sorted.find((day) => !day.isRest && !day.assigned);
+    const first = sorted.find((day) => !day.isRest && !day.assigned && !isLocked(day));
     if (first) return first.dayNumber;
-    const anyWorkout = sorted.find((day) => !day.isRest);
+    const anyWorkout = sorted.find((day) => !day.isRest && !isLocked(day));
     return anyWorkout?.dayNumber || 1;
   };
 
-  const loadDayEditor = (dayNumber, daysSource = programDaysDraft, exercisePool = planForm.exercises) => {
+  const searchExerciseSuggestions = (index, keyword) => {
+    const query = String(keyword || '').trim();
+    const timerMap = suggestionTimersRef.current;
+    if (timerMap[index]) clearTimeout(timerMap[index]);
+
+    if (query.length < 2) {
+      setExerciseSuggestionsByIndex((prev) => ({ ...prev, [index]: [] }));
+      setSuggestionsLoadingByIndex((prev) => ({ ...prev, [index]: false }));
+      return;
+    }
+
+    timerMap[index] = setTimeout(async () => {
+      setSuggestionsLoadingByIndex((prev) => ({ ...prev, [index]: true }));
+      try {
+        const { data } = await getCoachExerciseSuggestions({
+          coachId,
+          q: query,
+          limit: 8,
+        });
+        const items = Array.isArray(data?.data) ? data.data : [];
+        setExerciseSuggestionsByIndex((prev) => ({ ...prev, [index]: items }));
+      } catch {
+        setExerciseSuggestionsByIndex((prev) => ({ ...prev, [index]: [] }));
+      } finally {
+        setSuggestionsLoadingByIndex((prev) => ({ ...prev, [index]: false }));
+      }
+    }, 280);
+  };
+
+  const loadDayEditor = (dayNumber, daysSource = programDaysDraft, exercisePool = planForm.exercises, lockedWeeks = null) => {
     const day = (daysSource || []).find((item) => Number(item.dayNumber) === Number(dayNumber));
+    const effectiveLockedWeeks = lockedWeeks || (() => {
+      const plan = openPlan ? plansByUser[String(openPlan.userId)] : null;
+      const weeks = plan ? normalizePublishedWeeks(plan.publishedWeeks, plan.durationDays) : [];
+      return new Set(weeks);
+    })();
+    const weekNo = Math.ceil(Number(dayNumber || 0) / 7);
+    if (effectiveLockedWeeks.has(weekNo)) {
+      showToast(`Week ${weekNo} is published and locked for editing`, 'info');
+      return;
+    }
     setSelectedDayNumber(Number(dayNumber));
     if (!day || day.isRest) {
       setDayEditorExercises([blankExercise()]);
+      setExerciseSuggestionsByIndex({});
       return;
     }
     const indexes = Array.isArray(day.assignedExerciseIndexes) && day.assignedExerciseIndexes.length
@@ -310,6 +361,7 @@ function CoachWorkoutPlans() {
         assignedMinutes: Number(exercise.assignedMinutes) > 0 ? Number(exercise.assignedMinutes) : '',
       }));
     setDayEditorExercises(next.length ? next : [blankExercise()]);
+    setExerciseSuggestionsByIndex({});
   };
 
   const openPlanDialog = (request) => {
@@ -337,9 +389,10 @@ function CoachWorkoutPlans() {
       const nextDays = buildProgramDaysDraft(nextPlanForm);
       setProgramDaysDraft(nextDays);
       const nextDayNumber = findNextWorkoutDayNumber(nextDays, 1);
-      loadDayEditor(nextDayNumber, nextDays, nextPlanForm.exercises);
+      loadDayEditor(nextDayNumber, nextDays, nextPlanForm.exercises, new Set());
       return;
     }
+    const lockedWeeks = new Set(normalizePublishedWeeks(existing.publishedWeeks, existing.durationDays));
     const nextPlanForm = {
       id: String(existing._id),
       appointmentId: String(existing.appointmentId || request.appointmentId || ''),
@@ -356,8 +409,8 @@ function CoachWorkoutPlans() {
     setPlanForm(nextPlanForm);
     const nextDays = buildProgramDaysDraft(nextPlanForm, existing.programDays);
     setProgramDaysDraft(nextDays);
-    const nextDayNumber = findNextWorkoutDayNumber(nextDays, 1);
-    loadDayEditor(nextDayNumber, nextDays, nextPlanForm.exercises);
+    const nextDayNumber = findNextWorkoutDayNumber(nextDays, 1, lockedWeeks);
+    loadDayEditor(nextDayNumber, nextDays, nextPlanForm.exercises, lockedWeeks);
   };
 
   const applyTemplate = (templateKey) => {
@@ -388,6 +441,14 @@ function CoachWorkoutPlans() {
   };
 
   const regenerateProgramDays = () => {
+    const activePlan = openPlan ? plansByUser[String(openPlan.userId)] : null;
+    const publishedWeeks = activePlan
+      ? normalizePublishedWeeks(activePlan.publishedWeeks, activePlan.durationDays)
+      : [];
+    if (publishedWeeks.length > 0) {
+      showToast('Auto generate is locked after week publishing starts', 'warning');
+      return;
+    }
     const nextDays = buildProgramDaysDraft(planForm);
     setProgramDaysDraft(nextDays);
     const nextDayNumber = findNextWorkoutDayNumber(nextDays, selectedDayNumber || 1);
@@ -395,6 +456,14 @@ function CoachWorkoutPlans() {
   };
 
   const toggleProgramDayRest = (index) => {
+    const targetDay = programDaysDraft[index];
+    const activePlan = openPlan ? plansByUser[String(openPlan.userId)] : null;
+    const publishedWeeks = activePlan ? normalizePublishedWeeks(activePlan.publishedWeeks, activePlan.durationDays) : [];
+    const weekNo = Math.ceil(Number(targetDay?.dayNumber || 0) / 7);
+    if (publishedWeeks.includes(weekNo)) {
+      showToast(`Week ${weekNo} is published and locked for editing`, 'warning');
+      return;
+    }
     setProgramDaysDraft((prev) => prev.map((day, idx) => (
       idx === index
         ? {
@@ -462,21 +531,32 @@ function CoachWorkoutPlans() {
   const saveSelectedDay = () => {
     const selected = programDaysDraft.find((day) => Number(day.dayNumber) === Number(selectedDayNumber));
     if (!selected) return showToast('Select a day first', 'warning');
+    const activePlan = openPlan ? plansByUser[String(openPlan.userId)] : null;
+    const publishedWeeks = activePlan ? normalizePublishedWeeks(activePlan.publishedWeeks, activePlan.durationDays) : [];
+    const selectedWeekNo = Math.ceil(Number(selected.dayNumber || 0) / 7);
+    if (publishedWeeks.includes(selectedWeekNo)) {
+      return showToast(`Week ${selectedWeekNo} is published and locked for editing`, 'warning');
+    }
     if (selected.isRest) return showToast('Rest day does not need exercises', 'info');
 
-    const cleaned = dayEditorExercises
-      .map((exercise) => ({
-        name: String(exercise.name || '').trim(),
-        amount: String(exercise.amount || '').trim(),
-        description: String(exercise.description || '').trim(),
-        assignedMinutes: Math.max(0, Number(exercise.assignedMinutes) || 0),
-      }))
-      .filter((exercise) => exercise.name && exercise.amount);
+    const normalized = dayEditorExercises.map((exercise) => ({
+      name: String(exercise.name || '').trim(),
+      amount: String(exercise.amount || '').trim(),
+      description: String(exercise.description || '').trim(),
+      assignedMinutes: Math.max(0, Number(exercise.assignedMinutes) || 0),
+    }));
 
-    if (!cleaned.length) return showToast('Add at least one valid exercise for this day', 'warning');
-    if (cleaned.some((exercise) => exercise.assignedMinutes < 1)) {
-      return showToast('Assigned time must be at least 1 minute for each exercise', 'warning');
+    if (!normalized.length) return showToast('Add at least one exercise for this day', 'warning');
+    for (let i = 0; i < normalized.length; i += 1) {
+      const item = normalized[i];
+      const label = `Exercise ${i + 1}`;
+      if (!item.name) return showToast(`${label}: Exercise name is required`, 'warning');
+      if (item.assignedMinutes < 1) return showToast(`${label}: Assigned time must be at least 1 minute`, 'warning');
+      if (!item.amount) return showToast(`${label}: Amount is required`, 'warning');
+      if (!item.description) return showToast(`${label}: Description is required`, 'warning');
     }
+
+    const cleaned = normalized;
 
     const nextPool = [...planForm.exercises];
     const indexes = cleaned.map((exercise) => {
@@ -575,7 +655,9 @@ function CoachWorkoutPlans() {
 
   const addCategory = async (categoryKey) => {
     const draft = drafts[categoryKey];
-    if (!draft.name.trim() || !draft.amount.trim()) return showToast('Exercise name and amount are required', 'warning');
+    if (!draft.name.trim() || !draft.amount.trim() || !draft.description.trim()) {
+      return showToast('Exercise name, amount, and description are required', 'warning');
+    }
     try {
       await createCoachExerciseCategory({ coachId, categoryKey, name: draft.name.trim(), amount: draft.amount.trim(), description: (draft.description || '').trim() });
       setDrafts((prev) => ({ ...prev, [categoryKey]: blankExercise() }));
@@ -587,7 +669,9 @@ function CoachWorkoutPlans() {
   };
 
   const saveCategoryEdit = async () => {
-    if (!editCategory.name.trim() || !editCategory.amount.trim()) return showToast('Exercise name and amount are required', 'warning');
+    if (!editCategory.name.trim() || !editCategory.amount.trim() || !editCategory.description.trim()) {
+      return showToast('Exercise name, amount, and description are required', 'warning');
+    }
     try {
       await updateCoachExerciseCategory(editCategory.id, {
         categoryKey: editCategory.categoryKey,
@@ -612,6 +696,14 @@ function CoachWorkoutPlans() {
       showToast(error?.response?.data?.message || 'Failed to delete exercise', 'error');
     }
   };
+
+  const activeDialogPlan = openPlan ? plansByUser[String(openPlan.userId)] : null;
+  const publishedWeeksInDialog = activeDialogPlan
+    ? normalizePublishedWeeks(activeDialogPlan.publishedWeeks, activeDialogPlan.durationDays)
+    : [];
+  const hasPublishedWeeksInDialog = publishedWeeksInDialog.length > 0;
+  const selectedWeekNo = Math.ceil(Number(selectedDayNumber || 0) / 7);
+  const isSelectedWeekLocked = publishedWeeksInDialog.includes(selectedWeekNo);
 
   return (
     <Box sx={{ pb: 3 }}>
@@ -934,6 +1026,7 @@ function CoachWorkoutPlans() {
                 select
                 label="Duration (Days)"
                 value={planForm.durationDays}
+                disabled={hasPublishedWeeksInDialog}
                 onChange={(e) => setPlanForm((prev) => ({ ...prev, durationDays: Number(e.target.value) === 60 ? 60 : 30 }))}
                 fullWidth
               >
@@ -944,6 +1037,7 @@ function CoachWorkoutPlans() {
                 label="Days / Week"
                 type="number"
                 value={planForm.daysPerWeek}
+                disabled={hasPublishedWeeksInDialog}
                 onChange={(e) => setPlanForm((prev) => ({ ...prev, daysPerWeek: Math.max(1, Math.min(7, Number(e.target.value) || 4)) }))}
                 inputProps={{ min: 1, max: 7 }}
                 fullWidth
@@ -954,6 +1048,7 @@ function CoachWorkoutPlans() {
                 label="Start Date"
                 type="date"
                 value={planForm.startDate}
+                disabled={hasPublishedWeeksInDialog}
                 onChange={(e) => setPlanForm((prev) => ({ ...prev, startDate: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
                 fullWidth
@@ -973,6 +1068,7 @@ function CoachWorkoutPlans() {
                 select
                 label="Template"
                 value={planForm.templateKey}
+                disabled={hasPublishedWeeksInDialog}
                 onChange={(e) => applyTemplate(e.target.value)}
                 fullWidth
               >
@@ -984,7 +1080,7 @@ function CoachWorkoutPlans() {
             <Divider />
             <Stack direction="row" justifyContent="space-between" alignItems="center">
               <Typography sx={{ fontWeight: 800, fontSize: '0.98rem' }}>Weekly Schedule</Typography>
-              <Button size="small" variant="outlined" onClick={regenerateProgramDays}>
+                <Button size="small" variant="outlined" onClick={regenerateProgramDays} disabled={hasPublishedWeeksInDialog}>
                 Auto Generate Weeks
               </Button>
             </Stack>
@@ -1001,6 +1097,10 @@ function CoachWorkoutPlans() {
             >
               <Stack spacing={0.8}>
                 {programDaysDraft.map((day, index) => (
+                  (() => {
+                    const dayWeekNo = Math.ceil(Number(day.dayNumber || 0) / 7);
+                    const isPublishedWeek = publishedWeeksInDialog.includes(dayWeekNo);
+                    return (
                   <Stack key={`${day.date}-${day.dayNumber}`} direction="row" spacing={1} alignItems="center" justifyContent="space-between">
                     <Typography sx={{ fontSize: '0.82rem', color: mutedText, minWidth: 150 }}>
                       Day {day.dayNumber} • {day.date}
@@ -1008,6 +1108,13 @@ function CoachWorkoutPlans() {
                     <Typography sx={{ fontSize: '0.82rem', color: theme.palette.text.primary, flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pr: 1 }}>
                       {day.title || (day.isRest ? 'Rest Day' : 'Workout Day')}
                     </Typography>
+                    {isPublishedWeek && (
+                      <Chip
+                        size="small"
+                        color="info"
+                        label={`Week ${dayWeekNo} Published`}
+                      />
+                    )}
                     {!day.isRest && Boolean(day.assigned) && (
                       <Chip
                         size="small"
@@ -1017,21 +1124,25 @@ function CoachWorkoutPlans() {
                         sx={{ transition: 'all 0.25s ease' }}
                       />
                     )}
-                    <Button
-                      size="small"
-                      variant={day.isRest ? 'outlined' : 'contained'}
-                      color={day.isRest ? 'warning' : 'success'}
-                      onClick={() => (day.isRest ? toggleProgramDayRest(index) : loadDayEditor(day.dayNumber))}
-                      sx={{
-                        textTransform: 'none',
-                        minWidth: 96,
-                        transition: 'all 0.25s ease',
-                        transform: selectedDayNumber === day.dayNumber ? 'scale(1.03)' : 'scale(1)',
-                      }}
-                    >
-                      {day.isRest ? 'Rest' : (day.assigned ? 'Edit' : 'Workout')}
-                    </Button>
+                    {!isPublishedWeek && (
+                      <Button
+                        size="small"
+                        variant={day.isRest ? 'outlined' : 'contained'}
+                        color={day.isRest ? 'warning' : 'success'}
+                        onClick={() => (day.isRest ? toggleProgramDayRest(index) : loadDayEditor(day.dayNumber))}
+                        sx={{
+                          textTransform: 'none',
+                          minWidth: 96,
+                          transition: 'all 0.25s ease',
+                          transform: selectedDayNumber === day.dayNumber ? 'scale(1.03)' : 'scale(1)',
+                        }}
+                      >
+                        {day.isRest ? 'Rest' : (day.assigned ? 'Edit' : 'Workout')}
+                      </Button>
+                    )}
                   </Stack>
+                    );
+                  })()
                 ))}
               </Stack>
             </Box>
@@ -1040,36 +1151,94 @@ function CoachWorkoutPlans() {
             <Typography sx={{ color: mutedText, fontSize: '0.82rem' }}>
               Editing Day {selectedDayNumber}
             </Typography>
+            {isSelectedWeekLocked && (
+              <Alert severity="info">Week {selectedWeekNo} is already published. Editing is locked for this week.</Alert>
+            )}
             {dayEditorExercises.map((exercise, index) => (
               <Box key={`exercise-${index}`} sx={{ p: 1.5, border: '1px solid', borderColor: panelBorder, borderRadius: 2 }}>
                 <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
                   <Chip size="small" label={`Exercise ${index + 1}`} />
-                  <Button size="small" color="error" onClick={() => setDayEditorExercises((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)))}>Remove</Button>
+                  <Button size="small" color="error" disabled={isSelectedWeekLocked} onClick={() => setDayEditorExercises((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)))}>Remove</Button>
                 </Stack>
                 <Stack spacing={1}>
-                  <TextField label="Exercise Name" value={exercise.name} onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, name: e.target.value } : x)))} fullWidth />
+                  <Autocomplete
+                    freeSolo
+                    options={exerciseSuggestionsByIndex[index] || []}
+                    loading={Boolean(suggestionsLoadingByIndex[index])}
+                    getOptionLabel={(option) => (typeof option === 'string' ? option : option?.name || '')}
+                    filterOptions={(items) => items}
+                    inputValue={exercise.name}
+                    onInputChange={(_event, value, reason) => {
+                      if (reason === 'reset') return;
+                      if (isSelectedWeekLocked) return;
+                      setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, name: value } : x)));
+                      searchExerciseSuggestions(index, value);
+                    }}
+                    onChange={(_event, option) => {
+                      if (isSelectedWeekLocked) return;
+                      if (!option || typeof option === 'string') return;
+                      setDayEditorExercises((prev) => prev.map((x, i) => (i === index
+                        ? {
+                          ...x,
+                          name: option.name || x.name,
+                          amount: option.amount || x.amount,
+                          description: option.description || x.description,
+                          assignedMinutes: Number(option.assignedMinutes) > 0 ? Number(option.assignedMinutes) : (x.assignedMinutes || 45),
+                        }
+                        : x)));
+                    }}
+                    renderOption={(props, option) => (
+                      <Box component="li" {...props} sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                        <Typography sx={{ fontSize: '0.9rem' }}>{option?.name || ''}</Typography>
+                        <Chip
+                          size="small"
+                          label={option?.source === 'api-ninjas' ? 'API Ninjas' : 'Library'}
+                          sx={{ height: 22, fontSize: '0.68rem', fontWeight: 700 }}
+                        />
+                      </Box>
+                    )}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Exercise Name"
+                        disabled={isSelectedWeekLocked}
+                        fullWidth
+                        InputProps={{
+                          ...params.InputProps,
+                          endAdornment: (
+                            <>
+                              {suggestionsLoadingByIndex[index] ? <CircularProgress color="inherit" size={16} /> : null}
+                              {params.InputProps.endAdornment}
+                            </>
+                          ),
+                        }}
+                      />
+                    )}
+                  />
                   <TextField
                     label="Assigned Time (minutes)"
                     type="number"
                     value={exercise.assignedMinutes ?? ''}
                     onChange={(e) => {
+                      if (isSelectedWeekLocked) return;
                       const value = Number(e.target.value);
                       setDayEditorExercises((prev) => prev.map((x, i) => (i === index
                         ? { ...x, assignedMinutes: Number.isNaN(value) ? '' : Math.max(0, Math.min(600, value)) }
                         : x)));
                     }}
                     inputProps={{ min: 1, max: 600 }}
+                    disabled={isSelectedWeekLocked}
                     fullWidth
                   />
-                  <TextField label="Amount" value={exercise.amount} onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, amount: e.target.value } : x)))} fullWidth InputProps={{ startAdornment: <InputAdornment position="start">Qty</InputAdornment> }} />
-                  <TextField label="Description" value={exercise.description} onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, description: e.target.value } : x)))} fullWidth multiline minRows={2} />
+                  <TextField label="Amount" value={exercise.amount} disabled={isSelectedWeekLocked} onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, amount: e.target.value } : x)))} fullWidth InputProps={{ startAdornment: <InputAdornment position="start">Qty</InputAdornment> }} />
+                  <TextField label="Description" value={exercise.description} disabled={isSelectedWeekLocked} onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, description: e.target.value } : x)))} fullWidth multiline minRows={2} />
                 </Stack>
               </Box>
             ))}
             <Stack direction="row" justifyContent="space-between">
               <Stack direction="row" spacing={1}>
-                <Button variant="outlined" onClick={() => setDayEditorExercises((prev) => [...prev, blankExercise()])}>Add New Exercise</Button>
-                <Button variant="contained" color="info" onClick={saveSelectedDay}>Apply To Day</Button>
+                <Button variant="outlined" disabled={isSelectedWeekLocked} onClick={() => setDayEditorExercises((prev) => [...prev, blankExercise()])}>Add New Exercise</Button>
+                <Button variant="contained" color="info" disabled={isSelectedWeekLocked} onClick={saveSelectedDay}>Apply To Day</Button>
               </Stack>
               <Stack direction="row" spacing={1}>
                 <Button variant="contained" onClick={savePlan}>Save Draft</Button>
