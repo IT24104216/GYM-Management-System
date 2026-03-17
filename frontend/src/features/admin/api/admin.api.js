@@ -29,3 +29,12 @@ export const updatePromotion = (id, data) =>
 
 export const deletePromotion = (id) =>
   axiosClient.delete(`/promotions/${id}`);
+
+export const getAdminSettings = (adminId) =>
+  axiosClient.get('/admin/settings', { params: { adminId } });
+
+export const updateAdminSettings = (payload) =>
+  axiosClient.put('/admin/settings', payload);
+
+export const changeAdminPassword = (payload) =>
+  axiosClient.put('/admin/settings/password', payload);
