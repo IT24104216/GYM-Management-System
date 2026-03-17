@@ -20,6 +20,11 @@ const workoutExerciseSchema = new mongoose.Schema(
       maxlength: 500,
       default: '',
     },
+    timePeriod: {
+      type: String,
+      enum: ['Anytime', 'Morning', 'Afternoon', 'Evening'],
+      default: 'Anytime',
+    },
     sourceType: {
       type: String,
       enum: ['manual', 'category'],
@@ -69,11 +74,52 @@ const workoutPlanSchema = new mongoose.Schema(
       maxlength: 1000,
       default: '',
     },
+    durationDays: {
+      type: Number,
+      min: 7,
+      max: 120,
+      default: 30,
+    },
+    daysPerWeek: {
+      type: Number,
+      min: 1,
+      max: 7,
+      default: 4,
+    },
+    startDate: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true,
+    },
+    builderType: {
+      type: String,
+      enum: ['template', 'library', 'custom'],
+      default: 'template',
+    },
+    templateKey: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     status: {
       type: String,
       enum: ['assigned', 'completed'],
       default: 'assigned',
       index: true,
+    },
+    isSubmitted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    publishedWeeks: {
+      type: [Number],
+      default: [],
+    },
+    submittedAt: {
+      type: Date,
+      default: null,
     },
     exercises: {
       type: [workoutExerciseSchema],
@@ -82,6 +128,68 @@ const workoutPlanSchema = new mongoose.Schema(
         message: 'At least one exercise is required',
       },
       default: [],
+    },
+    programDays: {
+      type: [
+        new mongoose.Schema(
+          {
+            dayNumber: { type: Number, required: true, min: 1 },
+            date: { type: String, required: true, trim: true },
+            isRest: { type: Boolean, default: false },
+            title: { type: String, trim: true, default: '' },
+            muscles: { type: String, trim: true, default: '' },
+            durationMinutes: { type: Number, min: 1, max: 600, default: 45 },
+            level: { type: String, trim: true, default: 'Coach Plan' },
+            rating: { type: Number, min: 0, max: 5, default: 4.7 },
+            exerciseIndexes: { type: [Number], default: [] },
+            assigned: { type: Boolean, default: false },
+            assignedAt: { type: Date, default: null },
+            assignedExerciseIndexes: { type: [Number], default: [] },
+            done: { type: Boolean, default: false },
+            completedAt: { type: Date, default: null },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    currentDayDate: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    session: {
+      status: {
+        type: String,
+        enum: ['idle', 'ongoing', 'completed'],
+        default: 'idle',
+      },
+      startedAt: {
+        type: Date,
+        default: null,
+      },
+      completedAt: {
+        type: Date,
+        default: null,
+      },
+      elapsedSeconds: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
+      exerciseProgress: {
+        type: [
+          new mongoose.Schema(
+            {
+              index: { type: Number, required: true, min: 0 },
+              done: { type: Boolean, default: false },
+              completedAt: { type: Date, default: null },
+            },
+            { _id: false },
+          ),
+        ],
+        default: [],
+      },
     },
   },
   {
