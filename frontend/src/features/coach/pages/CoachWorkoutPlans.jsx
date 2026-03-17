@@ -45,8 +45,7 @@ const PRIORITY_GRADIENTS = {
   Low: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
 };
 const CATEGORY_LABELS = { weightGain: 'Weight Gaining', weightLoss: 'Weight Reducing' };
-const TIME_PERIOD_OPTIONS = ['Anytime', 'Morning', 'Afternoon', 'Evening'];
-const blankExercise = () => ({ name: '', amount: '', description: '', timePeriod: 'Anytime' });
+const blankExercise = () => ({ name: '', amount: '', description: '', assignedMinutes: '' });
 const PROGRAM_TEMPLATES = [
   {
     key: 'beginner-weight-gain-30',
@@ -54,9 +53,9 @@ const PROGRAM_TEMPLATES = [
     durationDays: 30,
     goal: 'Weight Gain',
     exercises: [
-      { name: 'Barbell Squat', amount: '4 x 8', description: 'Lower body hypertrophy with progressive load', timePeriod: 'Anytime' },
-      { name: 'Bench Press', amount: '4 x 8', description: 'Upper body strength and chest development', timePeriod: 'Anytime' },
-      { name: 'Romanian Deadlift', amount: '3 x 10', description: 'Posterior chain and hamstring strength', timePeriod: 'Anytime' },
+      { name: 'Barbell Squat', amount: '4 x 8', description: 'Lower body hypertrophy with progressive load', assignedMinutes: 45 },
+      { name: 'Bench Press', amount: '4 x 8', description: 'Upper body strength and chest development', assignedMinutes: 45 },
+      { name: 'Romanian Deadlift', amount: '3 x 10', description: 'Posterior chain and hamstring strength', assignedMinutes: 45 },
     ],
   },
   {
@@ -65,9 +64,9 @@ const PROGRAM_TEMPLATES = [
     durationDays: 60,
     goal: 'Fat Loss',
     exercises: [
-      { name: 'Incline Walk Intervals', amount: '25 min', description: 'Alternating brisk pace and recovery', timePeriod: 'Anytime' },
-      { name: 'Kettlebell Circuit', amount: '4 rounds', description: 'Full body conditioning and calorie burn', timePeriod: 'Anytime' },
-      { name: 'Core Circuit', amount: '3 rounds', description: 'Core endurance and posture support', timePeriod: 'Anytime' },
+      { name: 'Incline Walk Intervals', amount: '25 min', description: 'Alternating brisk pace and recovery', assignedMinutes: 45 },
+      { name: 'Kettlebell Circuit', amount: '4 rounds', description: 'Full body conditioning and calorie burn', assignedMinutes: 45 },
+      { name: 'Core Circuit', amount: '3 rounds', description: 'Core endurance and posture support', assignedMinutes: 45 },
     ],
   },
   {
@@ -76,9 +75,9 @@ const PROGRAM_TEMPLATES = [
     durationDays: 30,
     goal: 'General Fitness',
     exercises: [
-      { name: 'Bodyweight Squats', amount: '4 x 15', description: 'Strength endurance for lower body', timePeriod: 'Anytime' },
-      { name: 'Push-ups', amount: '4 x 12', description: 'Upper body pressing strength', timePeriod: 'Anytime' },
-      { name: 'Plank Hold', amount: '3 x 45 sec', description: 'Core stability and control', timePeriod: 'Anytime' },
+      { name: 'Bodyweight Squats', amount: '4 x 15', description: 'Strength endurance for lower body', assignedMinutes: 45 },
+      { name: 'Push-ups', amount: '4 x 12', description: 'Upper body pressing strength', assignedMinutes: 45 },
+      { name: 'Plank Hold', amount: '3 x 45 sec', description: 'Core stability and control', assignedMinutes: 45 },
     ],
   },
 ];
@@ -253,11 +252,6 @@ function CoachWorkoutPlans() {
     return Array.from(map.values()).slice(0, 12);
   }, [submittedPlans]);
 
-  const suggestionOptions = useMemo(
-    () => categories.map((item) => ({ id: item._id, label: `${CATEGORY_LABELS[item.categoryKey]} - ${item.name}`, item })),
-    [categories],
-  );
-
   const pageSize = 9;
   const totalPages = Math.max(1, Math.ceil(sortedRequests.length / pageSize));
   const current = Math.min(page, totalPages);
@@ -313,7 +307,7 @@ function CoachWorkoutPlans() {
         name: exercise.name || '',
         amount: exercise.amount || '',
         description: exercise.description || '',
-        timePeriod: TIME_PERIOD_OPTIONS.includes(exercise.timePeriod) ? exercise.timePeriod : 'Anytime',
+        assignedMinutes: Number(exercise.assignedMinutes) > 0 ? Number(exercise.assignedMinutes) : '',
       }));
     setDayEditorExercises(next.length ? next : [blankExercise()]);
   };
@@ -419,9 +413,6 @@ function CoachWorkoutPlans() {
   const savePlan = async () => {
     if (!openPlan) return;
     if (!planForm.planTitle.trim()) return showToast('Plan title is required', 'warning');
-    if (!Number(planForm.planDurationMinutes) || Number(planForm.planDurationMinutes) < 1) {
-      return showToast('Assigned time must be at least 1 minute', 'warning');
-    }
     if (![30, 60].includes(Number(planForm.durationDays))) {
       return showToast('Duration must be 30 or 60 days', 'warning');
     }
@@ -431,7 +422,7 @@ function CoachWorkoutPlans() {
         name: String(x.name || '').trim(),
         amount: String(x.amount || '').trim(),
         description: String(x.description || '').trim(),
-        timePeriod: TIME_PERIOD_OPTIONS.includes(x.timePeriod) ? x.timePeriod : 'Anytime',
+        assignedMinutes: Math.max(1, Math.min(600, Number(x.assignedMinutes) || 45)),
       }))
       .filter((x) => x.name && x.amount);
     if (!cleanedPool.length) {
@@ -478,11 +469,14 @@ function CoachWorkoutPlans() {
         name: String(exercise.name || '').trim(),
         amount: String(exercise.amount || '').trim(),
         description: String(exercise.description || '').trim(),
-        timePeriod: TIME_PERIOD_OPTIONS.includes(exercise.timePeriod) ? exercise.timePeriod : 'Anytime',
+        assignedMinutes: Math.max(0, Number(exercise.assignedMinutes) || 0),
       }))
       .filter((exercise) => exercise.name && exercise.amount);
 
     if (!cleaned.length) return showToast('Add at least one valid exercise for this day', 'warning');
+    if (cleaned.some((exercise) => exercise.assignedMinutes < 1)) {
+      return showToast('Assigned time must be at least 1 minute for each exercise', 'warning');
+    }
 
     const nextPool = [...planForm.exercises];
     const indexes = cleaned.map((exercise) => {
@@ -490,7 +484,7 @@ function CoachWorkoutPlans() {
         (item) => (item.name || '').trim().toLowerCase() === exercise.name.toLowerCase()
           && (item.amount || '').trim().toLowerCase() === exercise.amount.toLowerCase()
           && (item.description || '').trim().toLowerCase() === exercise.description.toLowerCase()
-          && (item.timePeriod || 'Anytime') === exercise.timePeriod,
+          && Number(item.assignedMinutes || 0) === Number(exercise.assignedMinutes || 0),
       );
       if (existingIndex >= 0) return existingIndex;
       nextPool.push(exercise);
@@ -696,13 +690,56 @@ function CoachWorkoutPlans() {
                       />
                     </Box>
                   )}
-                  <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="center" sx={{ mt: 1.2 }}>
+                  <Stack
+                    direction="column"
+                    spacing={1}
+                    alignItems="flex-start"
+                    sx={{ mt: 1.2 }}
+                  >
                     <Typography sx={{ color: mutedText, fontSize: '0.8rem' }}>Requested on: {request.requestedOn}</Typography>
-                    <Stack direction="row" spacing={1}>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      useFlexGap
+                      sx={{
+                        width: '100%',
+                        flexWrap: 'wrap',
+                        justifyContent: 'flex-start',
+                      }}
+                    >
                       {!isSubmitted && (
-                        <Button variant="contained" onClick={() => openPlanDialog(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>{hasPlan ? 'Edit Workout Plan' : 'Create Workout Plan'}</Button>
+                        <Button
+                          variant="contained"
+                          onClick={() => openPlanDialog(request)}
+                          sx={{
+                            textTransform: 'none',
+                            borderRadius: 2,
+                            fontWeight: 700,
+                            minHeight: 40,
+                            minWidth: 168,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {hasPlan ? 'Edit Workout Plan' : 'Create Workout Plan'}
+                        </Button>
                       )}
-                      {hasPlan && !isSubmitted && <Button variant="outlined" color="error" onClick={() => removePlan(request)} sx={{ textTransform: 'none', borderRadius: 2, fontWeight: 700 }}>Delete</Button>}
+                      {hasPlan && !isSubmitted && (
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          onClick={() => removePlan(request)}
+                          sx={{
+                            textTransform: 'none',
+                            borderRadius: 2,
+                            fontWeight: 700,
+                            minHeight: 40,
+                            minWidth: 92,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      )}
                       {hasPlan && !isSubmitted && (
                         <TextField
                           select
@@ -710,10 +747,12 @@ function CoachWorkoutPlans() {
                           value={publishSelectValue}
                           onChange={(e) => setPublishSelectionByUser((prev) => ({ ...prev, [String(request.userId)]: e.target.value }))}
                           sx={{
-                            minWidth: 190,
+                            minWidth: { xs: '100%', sm: 220 },
+                            flex: '1 1 220px',
                             '& .MuiOutlinedInput-root': {
                               borderRadius: 2,
                               bgcolor: isDark ? '#111f3d' : '#f8fafc',
+                              minHeight: 40,
                             },
                           }}
                         >
@@ -759,6 +798,9 @@ function CoachWorkoutPlans() {
                             borderRadius: 2,
                             fontWeight: 800,
                             px: 2.2,
+                            minHeight: 40,
+                            minWidth: 110,
+                            whiteSpace: 'nowrap',
                             background: 'linear-gradient(135deg, #1f8f3a, #2ba64f)',
                           }}
                         >
@@ -916,20 +958,6 @@ function CoachWorkoutPlans() {
                 InputLabelProps={{ shrink: true }}
                 fullWidth
               />
-              <TextField
-                label="Assigned Time (minutes)"
-                type="number"
-                value={planForm.planDurationMinutes}
-                onChange={(e) => {
-                  const value = Number(e.target.value);
-                  setPlanForm((prev) => ({
-                    ...prev,
-                    planDurationMinutes: Number.isNaN(value) ? '' : Math.max(1, Math.min(600, value)),
-                  }));
-                }}
-                inputProps={{ min: 1, max: 600 }}
-                fullWidth
-              />
             </Stack>
             <TextField label="Plan Notes" value={planForm.planNote} onChange={(e) => setPlanForm((prev) => ({ ...prev, planNote: e.target.value }))} fullWidth multiline minRows={2} />
             <Divider />
@@ -1018,39 +1046,21 @@ function CoachWorkoutPlans() {
                   <Chip size="small" label={`Exercise ${index + 1}`} />
                   <Button size="small" color="error" onClick={() => setDayEditorExercises((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)))}>Remove</Button>
                 </Stack>
-                <TextField
-                  select
-                  label="Categories"
-                  value=""
-                  onChange={(e) => {
-                    const selected = suggestionOptions.find((x) => x.id === e.target.value);
-                    if (!selected) return;
-                    setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? {
-                      ...x,
-                      name: selected.item.name,
-                      amount: selected.item.amount,
-                      description: selected.item.description || '',
-                    } : x)));
-                  }}
-                  fullWidth
-                  size="small"
-                  sx={{ mb: 1 }}
-                >
-                  {suggestionOptions.map((option) => <MenuItem key={option.id} value={option.id}>{option.label}</MenuItem>)}
-                </TextField>
                 <Stack spacing={1}>
                   <TextField label="Exercise Name" value={exercise.name} onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, name: e.target.value } : x)))} fullWidth />
                   <TextField
-                    select
-                    label="Time Period"
-                    value={TIME_PERIOD_OPTIONS.includes(exercise.timePeriod) ? exercise.timePeriod : 'Anytime'}
-                    onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, timePeriod: e.target.value } : x)))}
+                    label="Assigned Time (minutes)"
+                    type="number"
+                    value={exercise.assignedMinutes ?? ''}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setDayEditorExercises((prev) => prev.map((x, i) => (i === index
+                        ? { ...x, assignedMinutes: Number.isNaN(value) ? '' : Math.max(0, Math.min(600, value)) }
+                        : x)));
+                    }}
+                    inputProps={{ min: 1, max: 600 }}
                     fullWidth
-                  >
-                    {TIME_PERIOD_OPTIONS.map((slot) => (
-                      <MenuItem key={slot} value={slot}>{slot}</MenuItem>
-                    ))}
-                  </TextField>
+                  />
                   <TextField label="Amount" value={exercise.amount} onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, amount: e.target.value } : x)))} fullWidth InputProps={{ startAdornment: <InputAdornment position="start">Qty</InputAdornment> }} />
                   <TextField label="Description" value={exercise.description} onChange={(e) => setDayEditorExercises((prev) => prev.map((x, i) => (i === index ? { ...x, description: e.target.value } : x)))} fullWidth multiline minRows={2} />
                 </Stack>
