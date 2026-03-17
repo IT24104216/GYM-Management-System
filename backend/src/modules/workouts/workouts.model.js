@@ -17,7 +17,7 @@ const workoutExerciseSchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
-      maxlength: 500,
+      maxlength: 1000,
       default: '',
     },
     assignedMinutes: {
@@ -230,7 +230,7 @@ const exerciseCategorySchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
-      maxlength: 500,
+      maxlength: 1000,
       default: '',
     },
   },
