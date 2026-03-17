@@ -69,6 +69,9 @@ export const deleteCoachWorkoutPlan = (id) =>
 export const getCoachExerciseCategories = (coachId) =>
   axiosClient.get('/workouts/categories', { params: { coachId } });
 
+export const getCoachExerciseSuggestions = (params) =>
+  axiosClient.get('/workouts/exercises/suggestions', { params });
+
 export const createCoachExerciseCategory = (data) =>
   axiosClient.post('/workouts/categories', data);
 
@@ -77,3 +80,6 @@ export const updateCoachExerciseCategory = (id, data) =>
 
 export const deleteCoachExerciseCategory = (id) =>
   axiosClient.delete(`/workouts/categories/${id}`);
+
+export const getCoachMemberProgressScores = (coachId, params) =>
+  axiosClient.get(`/progress/coach/${coachId}/member-scores`, { params });
