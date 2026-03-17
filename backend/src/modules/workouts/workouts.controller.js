@@ -1,5 +1,6 @@
 import { Appointment } from '../appointments/appointments.model.js';
 import { User } from '../users/users.model.js';
+import { env } from '../../config/env.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
@@ -9,6 +10,7 @@ import {
   categoryQuerySchema,
   createCategorySchema,
   createWorkoutPlanSchema,
+  exerciseSuggestionQuerySchema,
   planIdParamsSchema,
   submitWorkoutPlanSchema,
   updateCategorySchema,
@@ -81,6 +83,8 @@ const normalizePublishedWeeks = (weeks = [], totalWeeks = 1) => (
 );
 
 const getWeekNumberFromDay = (dayNumber) => Math.max(1, Math.ceil(Number(dayNumber) / 7));
+
+const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const isWorkoutDayAssigned = (day) => {
   if (day?.isRest) return true;
@@ -636,6 +640,72 @@ export const getExerciseCategories = asyncHandler(async (req, res) => {
 
   res.status(HTTP_STATUS.OK).json({
     data: categories,
+  });
+});
+
+export const getExerciseSuggestions = asyncHandler(async (req, res) => {
+  const query = parseOrThrow(exerciseSuggestionQuerySchema, req.query || {});
+  const limit = Number(query.limit) || 8;
+  const searchRegex = new RegExp(escapeRegExp(query.q), 'i');
+
+  const localFilter = { name: searchRegex };
+  if (query.coachId) localFilter.coachId = query.coachId;
+
+  const localItems = await ExerciseCategory.find(localFilter)
+    .sort({ createdAt: -1 })
+    .limit(limit);
+
+  const suggestions = localItems.map((item) => ({
+    name: item.name,
+    amount: item.amount || '3 x 12',
+    description: item.description || '',
+    assignedMinutes: 45,
+    source: 'local',
+  }));
+
+  if (suggestions.length < limit && env.API_NINJAS_KEY) {
+    try {
+      const url = `${env.API_NINJAS_BASE_URL}/v1/exercises?name=${encodeURIComponent(query.q)}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Api-Key': env.API_NINJAS_KEY,
+        },
+      });
+
+      if (response.ok) {
+        const remoteItems = await response.json();
+        const existingNames = new Set(suggestions.map((item) => String(item.name || '').trim().toLowerCase()));
+
+        (Array.isArray(remoteItems) ? remoteItems : []).forEach((item) => {
+          if (suggestions.length >= limit) return;
+          const name = String(item?.name || '').trim();
+          if (!name) return;
+          const key = name.toLowerCase();
+          if (existingNames.has(key)) return;
+
+          suggestions.push({
+            name,
+            amount: '3 x 12',
+            description: String(item?.instructions || '').trim().slice(0, 1000),
+            assignedMinutes: 45,
+            source: 'api-ninjas',
+            meta: {
+              muscle: item?.muscle || '',
+              equipment: item?.equipment || '',
+              difficulty: item?.difficulty || '',
+            },
+          });
+          existingNames.add(key);
+        });
+      }
+    } catch {
+      // external provider is optional; return local suggestions even if it fails
+    }
+  }
+
+  res.status(HTTP_STATUS.OK).json({
+    data: suggestions.slice(0, limit),
   });
 });
 
