@@ -1,5 +1,7 @@
 import { User } from '../users/users.model.js';
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { Appointment } from '../appointments/appointments.model.js';
 import { CoachProfile } from '../coach/coachProfile.model.js';
 import { DietitianProfile } from '../dietitian/dietitianProfile.model.js';
@@ -9,6 +11,37 @@ import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 
 const ROLE_SET = new Set(['user', 'coach', 'dietitian', 'admin']);
 const STATUS_SET = new Set(['active', 'inactive', 'suspended']);
+const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}$/;
+
+const adminSettingsSchema = z.object({
+  adminId: z.string().trim().min(1),
+  fullName: z.string().trim().min(2).max(80),
+  email: z.string().trim().email(),
+  emailNotifications: z.boolean(),
+  pushNotifications: z.boolean(),
+});
+
+const adminPasswordSchema = z.object({
+  adminId: z.string().trim().min(1),
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(128),
+  confirmPassword: z.string().min(1),
+}).superRefine((value, ctx) => {
+  if (!PASSWORD_RULE.test(value.newPassword)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'New password must include uppercase, lowercase, and a number.',
+      path: ['newPassword'],
+    });
+  }
+  if (value.newPassword !== value.confirmPassword) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'New password and confirm password do not match.',
+      path: ['confirmPassword'],
+    });
+  }
+});
 
 const toUiRole = {
   user: 'Member',
@@ -22,6 +55,31 @@ const toUiStatus = {
   inactive: 'Inactive',
   suspended: 'Suspended',
 };
+
+function parseOrThrow(schema, payload) {
+  const result = schema.safeParse(payload);
+  if (!result.success) {
+    throw new AppError(
+      'Validation failed',
+      HTTP_STATUS.UNPROCESSABLE_ENTITY,
+      result.error.flatten()
+    );
+  }
+  return result.data;
+}
+
+async function getAdminByIdOrThrow(adminId) {
+  if (!mongoose.isValidObjectId(adminId)) {
+    throw new AppError('Invalid admin id', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const admin = await User.findById(adminId);
+  if (!admin || admin.role !== 'admin') {
+    throw new AppError('Admin not found', HTTP_STATUS.NOT_FOUND);
+  }
+
+  return admin;
+}
 
 function toUserDto(userDoc) {
   const roleChangedAt = userDoc.roleChangedAt || null;
@@ -61,6 +119,91 @@ export const getAdminStatus = (_req, res) => {
     status: 'ready',
   });
 };
+
+export const getAdminSettings = asyncHandler(async (req, res) => {
+  const adminId = String(req.query.adminId || '').trim();
+  if (!adminId) {
+    throw new AppError('adminId is required', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const admin = await getAdminByIdOrThrow(adminId);
+  const prefs = admin.notificationPreferences || {};
+
+  res.status(HTTP_STATUS.OK).json({
+    data: {
+      adminId: String(admin._id),
+      fullName: admin.name,
+      email: admin.email,
+      emailNotifications: prefs.email ?? true,
+      pushNotifications: prefs.push ?? true,
+    },
+  });
+});
+
+export const updateAdminSettings = asyncHandler(async (req, res) => {
+  const payload = parseOrThrow(adminSettingsSchema, req.body);
+  const admin = await getAdminByIdOrThrow(payload.adminId);
+
+  if (admin.email !== payload.email.toLowerCase()) {
+    const existing = await User.findOne({
+      email: payload.email.toLowerCase(),
+      _id: { $ne: admin._id },
+    });
+    if (existing) {
+      throw new AppError('Email is already in use', HTTP_STATUS.CONFLICT);
+    }
+  }
+
+  admin.name = payload.fullName;
+  admin.email = payload.email.toLowerCase();
+  admin.notificationPreferences = {
+    email: payload.emailNotifications,
+    push: payload.pushNotifications,
+  };
+  await admin.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Admin settings updated successfully',
+    data: {
+      adminId: String(admin._id),
+      fullName: admin.name,
+      email: admin.email,
+      emailNotifications: admin.notificationPreferences?.email ?? true,
+      pushNotifications: admin.notificationPreferences?.push ?? true,
+    },
+  });
+});
+
+export const changeAdminPassword = asyncHandler(async (req, res) => {
+  const payload = parseOrThrow(adminPasswordSchema, req.body);
+  const admin = await getAdminByIdOrThrow(payload.adminId);
+
+  const isCurrentPasswordValid = await bcrypt.compare(
+    payload.currentPassword,
+    admin.passwordHash
+  );
+  if (!isCurrentPasswordValid) {
+    throw new AppError('Current password is incorrect', HTTP_STATUS.UNAUTHORIZED);
+  }
+
+  const isSamePassword = await bcrypt.compare(
+    payload.newPassword,
+    admin.passwordHash
+  );
+  if (isSamePassword) {
+    throw new AppError(
+      'New password must be different from current password',
+      HTTP_STATUS.CONFLICT
+    );
+  }
+
+  admin.passwordHash = await bcrypt.hash(payload.newPassword, 10);
+  await admin.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Password updated successfully',
+  });
+});
 
 export const getUsers = asyncHandler(async (req, res) => {
   const search = String(req.query.search || '').trim();
