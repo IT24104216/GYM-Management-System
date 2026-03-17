@@ -22,7 +22,7 @@ import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getCoachAppointments } from '../api/coach.api';
+import { getCoachAppointments, getCoachMemberProgressScores } from '../api/coach.api';
 import {
   BarChart,
   Bar,
@@ -85,6 +85,8 @@ const formatWait = (createdAt) => {
   return `${diffDays} days`;
 };
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
 const typeToColor = {
   consultation: '#8B5CF6',
   training: '#0D9488',
@@ -141,6 +143,7 @@ function CoachDashboard() {
   const coachId = String(user?.id || user?._id || '');
   const [flippedMemberIds, setFlippedMemberIds] = useState({});
   const [appointments, setAppointments] = useState([]);
+  const [memberProgressScores, setMemberProgressScores] = useState({});
   const [toast, setToast] = useState({ open: false, message: '', severity: 'error' });
   const isDark = theme.palette.mode === 'dark';
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
@@ -159,7 +162,11 @@ function CoachDashboard() {
   const loadDashboardData = async () => {
     if (!coachId) return;
     try {
-      const { data } = await getCoachAppointments({ page: 1, limit: 300 });
+      const [{ data }, { data: scorePayload }] = await Promise.all([
+        getCoachAppointments({ page: 1, limit: 300 }),
+        getCoachMemberProgressScores(coachId, { days: 7 }),
+      ]);
+
       const all = Array.isArray(data?.data) ? data.data : [];
       const coachName = String(user?.name || '').trim().toLowerCase();
       const mine = all.filter((item) => {
@@ -170,8 +177,10 @@ function CoachDashboard() {
         return item.sessionType !== 'nutrition' && (byId || byNoteId || byName);
       });
       setAppointments(mine);
+      setMemberProgressScores(scorePayload?.data?.byUserId || {});
     } catch (error) {
       setAppointments([]);
+      setMemberProgressScores({});
       setToast({
         open: true,
         message: error?.response?.data?.message || 'Failed to load coach dashboard data',
@@ -220,9 +229,9 @@ function CoachDashboard() {
       return starts >= prevMonthStart && starts < monthStart;
     });
 
-    const completedCount = validAppointments.filter((item) => item.status === 'completed').length;
-    const avgScore = validAppointments.length
-      ? Math.round((completedCount / validAppointments.length) * 100)
+    const progressScoreRows = Object.values(memberProgressScores || {});
+    const avgScore = progressScoreRows.length
+      ? Math.round(progressScoreRows.reduce((sum, row) => sum + Number(row?.score || 0), 0) / progressScoreRows.length)
       : 0;
 
     const revenueMtd = thisMonthAppointments.filter((item) => item.status === 'completed').length * 75;
@@ -317,7 +326,8 @@ function CoachDashboard() {
         const totalSessions = items.length;
         const completedSessions = items.filter((x) => x.status === 'completed').length;
         const program = Math.min(Math.round((completedSessions / totalSessions) * 100), 100);
-        const score = Math.min(60 + Math.round(program * 0.4), 99);
+        const scoreData = memberProgressScores[userId];
+        const score = clamp(Number(scoreData?.score || 0), 0, 100);
         return {
           id: userId,
           name: userName,
@@ -360,7 +370,7 @@ function CoachDashboard() {
       weeklyData: weeklyRows,
       scheduleDateLabel: now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
     };
-  }, [appointments]);
+  }, [appointments, memberProgressScores]);
 
   const toggleMemberCard = (id) => {
     setFlippedMemberIds((prev) => ({ ...prev, [id]: !prev[id] }));
