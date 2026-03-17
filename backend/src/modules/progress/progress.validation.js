@@ -18,6 +18,14 @@ export const progressUserParamsSchema = z.object({
   userId: idSchema,
 });
 
+export const progressCoachParamsSchema = z.object({
+  coachId: idSchema,
+});
+
+export const progressScoreQuerySchema = z.object({
+  days: z.coerce.number().int().min(7).max(120).optional().default(7),
+});
+
 export const upsertMeasurementSchema = z.object({
   date: isoDateSchema,
   chest: positiveNumberField,
@@ -27,4 +35,3 @@ export const upsertMeasurementSchema = z.object({
   bodyFat: positiveNumberField,
   weight: positiveNumberField,
 });
-
