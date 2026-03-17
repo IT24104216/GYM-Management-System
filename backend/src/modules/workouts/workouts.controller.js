@@ -50,6 +50,160 @@ function isOnlineAppointment(appointment) {
   return byNote === 'online';
 }
 
+const toIsoDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const todayIso = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTotalWeeks = (planOrPayload) => {
+  const durationDays = Number(planOrPayload?.durationDays) || 30;
+  return Math.max(1, Math.ceil(durationDays / 7));
+};
+
+const normalizePublishedWeeks = (weeks = [], totalWeeks = 1) => (
+  [...new Set((Array.isArray(weeks) ? weeks : [])
+    .map((w) => Number(w))
+    .filter((w) => Number.isInteger(w) && w >= 1 && w <= totalWeeks))]
+    .sort((a, b) => a - b)
+);
+
+const getWeekNumberFromDay = (dayNumber) => Math.max(1, Math.ceil(Number(dayNumber) / 7));
+
+const isWorkoutDayAssigned = (day) => {
+  if (day?.isRest) return true;
+  const hasAssignedExercises = Array.isArray(day?.assignedExerciseIndexes)
+    && day.assignedExerciseIndexes.length > 0;
+  return Boolean(day?.assigned) && hasAssignedExercises;
+};
+
+const buildProgramDays = (payload) => {
+  if (Array.isArray(payload.programDays) && payload.programDays.length) {
+    return payload.programDays
+      .map((day, idx) => ({
+        dayNumber: Number(day.dayNumber) || idx + 1,
+        date: toIsoDate(day.date) || todayIso(),
+        isRest: Boolean(day.isRest),
+        title: String(day.title || ''),
+        muscles: String(day.muscles || ''),
+        durationMinutes: Number(day.durationMinutes) || Number(payload.planDurationMinutes) || 45,
+        level: String(day.level || 'Coach Plan'),
+        rating: Number(day.rating || 4.7),
+        exerciseIndexes: Array.isArray(day.exerciseIndexes) ? day.exerciseIndexes.map((i) => Number(i)).filter((i) => Number.isInteger(i) && i >= 0) : [],
+        assigned: Boolean(day.assigned),
+        assignedAt: day.assignedAt ? new Date(day.assignedAt) : null,
+        assignedExerciseIndexes: Array.isArray(day.assignedExerciseIndexes)
+          ? day.assignedExerciseIndexes.map((i) => Number(i)).filter((i) => Number.isInteger(i) && i >= 0)
+          : [],
+        done: Boolean(day.done),
+        completedAt: day.done ? (day.completedAt ? new Date(day.completedAt) : new Date()) : null,
+      }))
+      .sort((a, b) => a.dayNumber - b.dayNumber);
+  }
+
+  const durationDays = Number(payload.durationDays) || 30;
+  const daysPerWeek = Math.max(1, Math.min(7, Number(payload.daysPerWeek) || 4));
+  const start = toIsoDate(payload.startDate) || todayIso();
+  const startDate = new Date(`${start}T00:00:00`);
+  const exercises = Array.isArray(payload.exercises) ? payload.exercises : [];
+  const builderType = String(payload.builderType || 'template');
+
+  const splitByDaysPerWeek = {
+    1: ['Full Body'],
+    2: ['Upper Body', 'Lower Body'],
+    3: ['Push', 'Pull', 'Legs'],
+    4: ['Upper Body', 'Lower Body', 'Push', 'Pull'],
+    5: ['Push', 'Pull', 'Legs', 'Upper Body', 'Lower Body'],
+    6: ['Push', 'Pull', 'Legs', 'Push', 'Pull', 'Legs'],
+    7: ['Push', 'Pull', 'Legs', 'Upper Body', 'Lower Body', 'Core', 'Conditioning'],
+  };
+  const splitCycle = splitByDaysPerWeek[daysPerWeek] || splitByDaysPerWeek[4];
+  const splitToMuscles = {
+    Push: 'Chest, Shoulders, Triceps',
+    Pull: 'Back, Rear Delts, Biceps',
+    Legs: 'Quads, Hamstrings, Glutes, Calves',
+    'Upper Body': 'Chest, Back, Shoulders, Arms',
+    'Lower Body': 'Quads, Hamstrings, Glutes, Calves',
+    'Full Body': 'Full Body',
+    Core: 'Core, Stability',
+    Conditioning: 'Cardio, Conditioning',
+  };
+
+  const days = [];
+  let workoutDayCount = 0;
+  for (let offset = 0; offset < durationDays; offset += 1) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + offset);
+    const dateIso = toIsoDate(date) || start;
+    const dayOfWeek = date.getDay(); // 0-6
+    const positionInWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // 1-7
+    const isWorkout = positionInWeek <= daysPerWeek;
+
+    let dayTitle = 'Rest Day';
+    let dayMuscles = 'Recovery';
+    let exerciseIndexes = [];
+
+    if (isWorkout) {
+      const splitName = splitCycle[workoutDayCount % splitCycle.length] || 'Workout';
+      const weekNumber = Math.floor(offset / 7) + 1;
+      const phaseLabel =
+        weekNumber <= 1
+          ? 'Foundation'
+          : weekNumber <= 2
+            ? 'Progressive Load'
+            : weekNumber <= 3
+              ? 'Intensity'
+              : 'Review';
+
+      dayTitle = `${splitName} - ${phaseLabel}`;
+      dayMuscles = splitToMuscles[splitName] || (payload.planTitle || 'Coach Plan');
+
+      workoutDayCount += 1;
+    }
+
+    days.push({
+      dayNumber: offset + 1,
+      date: dateIso,
+      isRest: !isWorkout,
+      title:
+        builderType === 'custom'
+          ? isWorkout
+            ? (payload.planTitle || `Day ${offset + 1} Workout`)
+            : 'Rest Day'
+          : dayTitle,
+      muscles:
+        builderType === 'custom'
+          ? isWorkout
+            ? (payload.planTitle || 'Coach Plan')
+            : 'Recovery'
+          : dayMuscles,
+      durationMinutes: Number(payload.planDurationMinutes) || 45,
+      level: 'Coach Plan',
+      rating: 4.7,
+      exerciseIndexes: isWorkout && exercises.length ? exerciseIndexes : [],
+      assigned: !isWorkout,
+      assignedAt: !isWorkout ? new Date() : null,
+      assignedExerciseIndexes: [],
+      done: false,
+      completedAt: null,
+    });
+  }
+
+  return days;
+};
+
 export const getworkoutsStatus = (_req, res) => {
   res.json({
     module: 'workouts',
@@ -161,7 +315,14 @@ export const createWorkoutPlan = asyncHandler(async (req, res) => {
     throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
   }
 
-  const created = await WorkoutPlan.create(payload);
+  const programDays = buildProgramDays(payload);
+  const created = await WorkoutPlan.create({
+    ...payload,
+    startDate: toIsoDate(payload.startDate) || todayIso(),
+    currentDayDate: toIsoDate(payload.startDate) || todayIso(),
+    programDays,
+    publishedWeeks: [],
+  });
 
   res.status(HTTP_STATUS.CREATED).json({
     message: 'Workout plan created successfully',
@@ -182,6 +343,16 @@ export const updateWorkoutPlan = asyncHandler(async (req, res) => {
   }
 
   Object.assign(plan, payload);
+  const nextPayload = {
+    ...plan.toObject(),
+    ...payload,
+    exercises: payload.exercises || plan.exercises || [],
+  };
+  const nextProgramDays = buildProgramDays(nextPayload);
+  plan.programDays = nextProgramDays;
+  plan.startDate = toIsoDate(nextPayload.startDate) || plan.startDate || todayIso();
+  plan.currentDayDate = plan.currentDayDate || plan.startDate;
+  plan.publishedWeeks = normalizePublishedWeeks(plan.publishedWeeks, getTotalWeeks(plan));
   await plan.save();
 
   res.status(HTTP_STATUS.OK).json({
@@ -217,15 +388,66 @@ export const submitWorkoutPlan = asyncHandler(async (req, res) => {
   if (!plan) {
     throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
   }
-  if (plan.isSubmitted) {
+  if (plan.isSubmitted && payload.mode === 'all') {
     return res.status(HTTP_STATUS.OK).json({
       message: 'Workout plan already submitted',
       data: plan,
     });
   }
+  if (!Array.isArray(plan.programDays) || !plan.programDays.length) {
+    plan.programDays = buildProgramDays(plan);
+  }
+  if (!plan.currentDayDate) {
+    plan.currentDayDate = plan.startDate || todayIso();
+  }
 
+  const totalWeeks = getTotalWeeks(plan);
+  let publishedWeeks = normalizePublishedWeeks(plan.publishedWeeks, totalWeeks);
+
+  if (payload.mode === 'week') {
+    const weekNumber = Number(payload.weekNumber);
+    if (!Number.isInteger(weekNumber) || weekNumber < 1 || weekNumber > totalWeeks) {
+      throw new AppError('Valid weekNumber is required for week publish', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+    }
+    const weekDays = (plan.programDays || []).filter((day) => getWeekNumberFromDay(day.dayNumber) === weekNumber);
+    if (!weekDays.length) {
+      throw new AppError(`No program days found for week ${weekNumber}`, HTTP_STATUS.CONFLICT);
+    }
+    const missingWeekDays = weekDays.filter((day) => !isWorkoutDayAssigned(day));
+    if (missingWeekDays.length > 0) {
+      const sample = missingWeekDays.slice(0, 6).map((day) => day.dayNumber).join(', ');
+      throw new AppError(
+        `Complete week ${weekNumber} before publish. Missing day assignments: ${sample}${missingWeekDays.length > 6 ? '...' : ''}`,
+        HTTP_STATUS.CONFLICT,
+      );
+    }
+    publishedWeeks = normalizePublishedWeeks([...publishedWeeks, weekNumber], totalWeeks);
+    plan.publishedWeeks = publishedWeeks;
+    const allWeeksPublished = publishedWeeks.length >= totalWeeks;
+    plan.isSubmitted = allWeeksPublished ? Boolean(payload.submitted) : false;
+    plan.submittedAt = allWeeksPublished ? new Date() : null;
+    await plan.save();
+
+    return res.status(HTTP_STATUS.OK).json({
+      message: allWeeksPublished
+        ? 'Workout plan submitted successfully'
+        : `Week ${weekNumber} published successfully`,
+      data: plan,
+    });
+  }
+
+  const unassignedWorkoutDays = (plan.programDays || []).filter((day) => !isWorkoutDayAssigned(day));
+  if (unassignedWorkoutDays.length > 0) {
+    const sample = unassignedWorkoutDays.slice(0, 6).map((day) => day.dayNumber).join(', ');
+    throw new AppError(
+      `Complete all workout days before publish. Missing day assignments: ${sample}${unassignedWorkoutDays.length > 6 ? '...' : ''}`,
+      HTTP_STATUS.CONFLICT,
+    );
+  }
+  plan.publishedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
   plan.isSubmitted = Boolean(payload.submitted);
   plan.submittedAt = plan.isSubmitted ? new Date() : null;
+
   await plan.save();
 
   res.status(HTTP_STATUS.OK).json({
@@ -242,8 +464,9 @@ export const startWorkoutSession = asyncHandler(async (req, res) => {
   if (!plan) {
     throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
   }
-  if (!plan.isSubmitted) {
-    throw new AppError('Workout plan is not submitted yet', HTTP_STATUS.CONFLICT);
+  const publishedWeeks = normalizePublishedWeeks(plan.publishedWeeks, getTotalWeeks(plan));
+  if (!plan.isSubmitted && !publishedWeeks.length) {
+    throw new AppError('Workout plan is not published yet', HTTP_STATUS.CONFLICT);
   }
   if (String(plan.userId) !== payload.userId) {
     throw new AppError('Workout plan does not belong to this user', HTTP_STATUS.FORBIDDEN);
@@ -265,6 +488,15 @@ export const startWorkoutSession = asyncHandler(async (req, res) => {
     };
     await plan.save();
   }
+  if (Array.isArray(plan.programDays) && plan.programDays.length) {
+    const today = todayIso();
+    const nextPending = plan.programDays.find((day) => !day.isRest && !day.done && day.date <= today)
+      || plan.programDays.find((day) => !day.isRest && !day.done);
+    if (nextPending?.date) {
+      plan.currentDayDate = nextPending.date;
+      await plan.save();
+    }
+  }
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Workout session started',
@@ -280,8 +512,9 @@ export const updateWorkoutSessionProgress = asyncHandler(async (req, res) => {
   if (!plan) {
     throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
   }
-  if (!plan.isSubmitted) {
-    throw new AppError('Workout plan is not submitted yet', HTTP_STATUS.CONFLICT);
+  const publishedWeeks = normalizePublishedWeeks(plan.publishedWeeks, getTotalWeeks(plan));
+  if (!plan.isSubmitted && !publishedWeeks.length) {
+    throw new AppError('Workout plan is not published yet', HTTP_STATUS.CONFLICT);
   }
   if (String(plan.userId) !== payload.userId) {
     throw new AppError('Workout plan does not belong to this user', HTTP_STATUS.FORBIDDEN);
@@ -338,8 +571,9 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
   if (!plan) {
     throw new AppError('Workout plan not found', HTTP_STATUS.NOT_FOUND);
   }
-  if (!plan.isSubmitted) {
-    throw new AppError('Workout plan is not submitted yet', HTTP_STATUS.CONFLICT);
+  const publishedWeeks = normalizePublishedWeeks(plan.publishedWeeks, getTotalWeeks(plan));
+  if (!plan.isSubmitted && !publishedWeeks.length) {
+    throw new AppError('Workout plan is not published yet', HTTP_STATUS.CONFLICT);
   }
   if (String(plan.userId) !== payload.userId) {
     throw new AppError('Workout plan does not belong to this user', HTTP_STATUS.FORBIDDEN);
@@ -360,6 +594,23 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
     throw new AppError('Complete all exercises before finishing', HTTP_STATUS.CONFLICT);
   }
 
+  const effectiveDay = toIsoDate(payload.dayDate) || todayIso();
+  if (Array.isArray(plan.programDays) && plan.programDays.length) {
+    const targetIndex = plan.programDays.findIndex(
+      (day) => !day.isRest && !day.done && day.date <= effectiveDay,
+    );
+    if (targetIndex >= 0) {
+      plan.programDays[targetIndex].done = true;
+      plan.programDays[targetIndex].completedAt = new Date();
+      const nextPending = plan.programDays.find(
+        (day) => !day.isRest && !day.done && day.date >= plan.programDays[targetIndex].date,
+      );
+      plan.currentDayDate = nextPending?.date || plan.programDays[targetIndex].date;
+    }
+    const pendingWorkoutDays = plan.programDays.some((day) => !day.isRest && !day.done);
+    plan.status = pendingWorkoutDays ? 'assigned' : 'completed';
+  }
+
   plan.session = {
     ...(plan.session?.toObject ? plan.session.toObject() : plan.session || {}),
     status: 'completed',
@@ -368,7 +619,6 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
       ? payload.elapsedSeconds
       : Number(plan.session?.elapsedSeconds || 0),
   };
-  plan.status = 'completed';
   await plan.save();
 
   res.status(HTTP_STATUS.OK).json({
