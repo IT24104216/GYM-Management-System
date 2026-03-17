@@ -68,6 +68,22 @@ const itemVariants = {
 
 const yAxisTicks = [650, 1300, 1950, 2600];
 
+const toIsoDate = (date) => {
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const shiftIsoDate = (isoDate, offsetDays) => {
+  const base = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(base.getTime())) return isoDate;
+  base.setDate(base.getDate() + Number(offsetDays || 0));
+  return toIsoDate(base);
+};
+
 const mealSectionConfig = {
   breakfast: { label: 'Breakfast', icon: FreeBreakfastRoundedIcon, tone: '#d97706', bg: '#fef3c7' },
   lunch: { label: 'Lunch', icon: LunchDiningRoundedIcon, tone: '#059669', bg: '#d1fae5' },
@@ -90,6 +106,7 @@ const formatSuggestionSource = (source) => {
 
 function CalorieTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
+  const point = payload[0]?.payload || {};
 
   return (
     <Box
@@ -103,11 +120,16 @@ function CalorieTooltip({ active, payload, label }) {
       }}
     >
       <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-        {label}
+        {point.fullDate || label}
       </Typography>
       <Typography sx={{ mt: 0.45, fontSize: '0.88rem', fontWeight: 800, color: '#84cc16', lineHeight: 1.2 }}>
         cals : {payload[0].value}
       </Typography>
+      {Number(point.mealCount || 0) > 0 && (
+        <Typography sx={{ mt: 0.35, fontSize: '0.78rem', fontWeight: 700, color: '#334155', lineHeight: 1.2 }}>
+          meals: {point.mealCount} | P {point.protein || 0}g | C {point.carbs || 0}g | F {point.fat || 0}g
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -122,6 +144,7 @@ function UserMealPlan() {
   const [planError, setPlanError] = useState('');
   const [isPlanLoading, setIsPlanLoading] = useState(false);
   const [foodLogs, setFoodLogs] = useState([]);
+  const [allFoodLogs, setAllFoodLogs] = useState([]);
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [logForm, setLogForm] = useState({
@@ -139,6 +162,8 @@ function UserMealPlan() {
   const [isNutritionLoading, setIsNutritionLoading] = useState(false);
 
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [customTrendDate, setCustomTrendDate] = useState(todayIso);
+  const [customTrendRange, setCustomTrendRange] = useState(7);
 
   useEffect(() => {
     const loadDietitianPlan = async () => {
@@ -165,13 +190,27 @@ function UserMealPlan() {
       try {
         const { data } = await getUserFoodLogs(userId, todayIso);
         setFoodLogs(Array.isArray(data?.data) ? data.data : []);
-      } catch (_error) {
+      } catch {
         setFoodLogs([]);
       }
     };
 
     loadFoodLogs();
   }, [todayIso, userId]);
+
+  useEffect(() => {
+    const loadAllFoodLogs = async () => {
+      if (!userId || planMode !== 'custom') return;
+      try {
+        const { data } = await getUserFoodLogs(userId);
+        setAllFoodLogs(Array.isArray(data?.data) ? data.data : []);
+      } catch {
+        setAllFoodLogs([]);
+      }
+    };
+
+    loadAllFoodLogs();
+  }, [planMode, userId]);
 
   useEffect(() => {
     if (!isLogDialogOpen) return;
@@ -186,7 +225,7 @@ function UserMealPlan() {
         setIsNutritionLoading(true);
         const { data } = await searchNutritionFoods(query);
         setNutritionOptions(Array.isArray(data?.data) ? data.data : []);
-      } catch (_error) {
+      } catch {
         setNutritionOptions([]);
       } finally {
         setIsNutritionLoading(false);
@@ -328,24 +367,51 @@ function UserMealPlan() {
     ];
   }, [myPlanMeals]);
 
-  const myPlanWeeklyCals = useMemo(() => {
-    const total = myPlanMeals.reduce((sum, meal) => sum + Number(meal.total || 0), 0);
-    if (!total) return [{ day: 'M', cals: 0 }, { day: 'T', cals: 0 }, { day: 'W', cals: 0 }, { day: 'T', cals: 0 }, { day: 'F', cals: 0 }, { day: 'S', cals: 0 }, { day: 'S', cals: 0 }];
-    const base = Math.round(total);
-    return [
-      { day: 'M', cals: Math.max(0, base - 180) },
-      { day: 'T', cals: Math.max(0, base - 60) },
-      { day: 'W', cals: Math.max(0, base - 220) },
-      { day: 'T', cals: Math.max(0, base + 40) },
-      { day: 'F', cals: Math.max(0, base - 80) },
-      { day: 'S', cals: Math.max(0, base + 120) },
-      { day: 'S', cals: Math.max(0, base - 30) },
-    ];
-  }, [myPlanMeals]);
+  const myPlanRangeCals = useMemo(() => {
+    const grouped = new Map();
+    allFoodLogs.forEach((log) => {
+      const dateKey = String(log?.logDate || '').slice(0, 10);
+      if (!dateKey) return;
+      const prev = grouped.get(dateKey) || { cals: 0, protein: 0, carbs: 0, fat: 0, count: 0 };
+      grouped.set(dateKey, {
+        cals: prev.cals + Number(log?.calories || 0),
+        protein: prev.protein + Number(log?.protein || 0),
+        carbs: prev.carbs + Number(log?.carbs || 0),
+        fat: prev.fat + Number(log?.fat || 0),
+        count: prev.count + 1,
+      });
+    });
+
+    const endIso = toIsoDate(customTrendDate) || todayIso;
+    const range = [1, 7, 30].includes(Number(customTrendRange)) ? Number(customTrendRange) : 7;
+    const items = Array.from({ length: range }).map((_, idx) => {
+      const offset = idx - (range - 1);
+      const iso = shiftIsoDate(endIso, offset);
+      const entry = grouped.get(iso) || { cals: 0, protein: 0, carbs: 0, fat: 0, count: 0 };
+      const parsed = new Date(`${iso}T00:00:00`);
+      const label = range === 30
+        ? parsed.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+        : parsed.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0);
+      return {
+        day: label,
+        fullDate: parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        cals: Math.round(entry.cals),
+        protein: Math.round(entry.protein),
+        carbs: Math.round(entry.carbs),
+        fat: Math.round(entry.fat),
+        mealCount: entry.count,
+      };
+    });
+
+    return items;
+  }, [allFoodLogs, customTrendDate, customTrendRange, todayIso]);
 
   const displayMeals = planMode === 'dietitian' ? meals : myPlanMeals;
   const displayMacroData = planMode === 'dietitian' ? macroData : myPlanMacroData;
-  const displayWeeklyCals = planMode === 'dietitian' ? weeklyCals : myPlanWeeklyCals;
+  const displayWeeklyCals = planMode === 'dietitian' ? weeklyCals : myPlanRangeCals;
+  const trendLabel = planMode === 'dietitian'
+    ? 'Last 7 Days'
+    : (Number(customTrendRange) === 1 ? '1 Day' : `${customTrendRange} Days`);
 
   const totalConsumed = useMemo(
     () => displayMeals.reduce((sum, meal) => sum + Number(meal.total || 0), 0),
@@ -419,6 +485,12 @@ function UserMealPlan() {
     setFoodLogs(Array.isArray(data?.data) ? data.data : []);
   };
 
+  const refreshAllFoodLogs = async () => {
+    if (!userId) return;
+    const { data } = await getUserFoodLogs(userId);
+    setAllFoodLogs(Array.isArray(data?.data) ? data.data : []);
+  };
+
   const handleSaveLog = async () => {
     try {
       if (planMode !== 'custom') return;
@@ -459,7 +531,7 @@ function UserMealPlan() {
         await createUserFoodLog(payload);
       }
 
-      await refreshFoodLogs();
+      await Promise.all([refreshFoodLogs(), refreshAllFoodLogs()]);
       closeLogDialog();
       setPlanError('');
     } catch (error) {
@@ -472,7 +544,7 @@ function UserMealPlan() {
     if (!logId || !userId) return;
     try {
       await deleteUserFoodLog(logId, userId);
-      await refreshFoodLogs();
+      await Promise.all([refreshFoodLogs(), refreshAllFoodLogs()]);
       setPlanError('');
     } catch (error) {
       setPlanError(error?.response?.data?.message || 'Failed to delete food log');
@@ -618,7 +690,31 @@ function UserMealPlan() {
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.6}>
                 <Typography sx={{ fontWeight: 900, fontSize: '1.2rem' }}>Calorie Trend</Typography>
-                <Chip label="Last 7 Days" sx={{ borderRadius: 1.8, fontWeight: 700 }} />
+                {planMode === 'custom' ? (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <TextField
+                      type="date"
+                      size="small"
+                      value={customTrendDate}
+                      onChange={(event) => setCustomTrendDate(event.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                      sx={{ width: 156 }}
+                    />
+                    <TextField
+                      select
+                      size="small"
+                      value={customTrendRange}
+                      onChange={(event) => setCustomTrendRange(Number(event.target.value))}
+                      sx={{ width: 96 }}
+                    >
+                      <MenuItem value={1}>1 Day</MenuItem>
+                      <MenuItem value={7}>7 Days</MenuItem>
+                      <MenuItem value={30}>30 Days</MenuItem>
+                    </TextField>
+                  </Stack>
+                ) : (
+                  <Chip label={trendLabel} sx={{ borderRadius: 1.8, fontWeight: 700 }} />
+                )}
               </Stack>
 
               <Box sx={{ width: '100%', overflowX: 'auto' }}>
@@ -649,7 +745,7 @@ function UserMealPlan() {
                         dataKey="cals"
                         fill="#84cc16"
                         radius={[8, 8, 0, 0]}
-                        barSize={52}
+                        barSize={planMode === 'custom' ? (customTrendRange === 30 ? 12 : (customTrendRange === 1 ? 52 : 34)) : 52}
                         isAnimationActive
                         animationDuration={650}
                       />
