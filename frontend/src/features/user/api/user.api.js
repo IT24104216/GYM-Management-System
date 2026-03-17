@@ -84,3 +84,6 @@ export const getUserProgress = (userId) =>
 
 export const saveUserMeasurement = (userId, data) =>
   axiosClient.put(`/progress/${userId}/measurements`, data);
+
+export const getPublicPromotions = (params = {}) =>
+  axiosClient.get('/promotions/public', { params });
