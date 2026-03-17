@@ -5,6 +5,7 @@ import {
   deleteExerciseCategoryItem,
   deleteWorkoutPlan,
   finishWorkoutSession,
+  getExerciseSuggestions,
   getExerciseCategories,
   getworkoutsStatus,
   getWorkoutPlans,
@@ -29,6 +30,7 @@ router.patch('/plans/:id/session/progress', updateWorkoutSessionProgress);
 router.patch('/plans/:id/session/finish', finishWorkoutSession);
 router.delete('/plans/:id', deleteWorkoutPlan);
 router.get('/categories', getExerciseCategories);
+router.get('/exercises/suggestions', getExerciseSuggestions);
 router.post('/categories', createExerciseCategoryItem);
 router.put('/categories/:id', updateExerciseCategoryItem);
 router.delete('/categories/:id', deleteExerciseCategoryItem);
