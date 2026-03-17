@@ -14,3 +14,18 @@ export const deleteUser = (id) =>
 
 export const getPlatformStats = () =>
   axiosClient.get('/admin/stats');
+
+export const getAdminReportsOverview = () =>
+  axiosClient.get('/admin/reports/overview');
+
+export const getPromotions = (params) =>
+  axiosClient.get('/promotions/list', { params });
+
+export const createPromotion = (data) =>
+  axiosClient.post('/promotions', data);
+
+export const updatePromotion = (id, data) =>
+  axiosClient.put(`/promotions/${id}`, data);
+
+export const deletePromotion = (id) =>
+  axiosClient.delete(`/promotions/${id}`);
