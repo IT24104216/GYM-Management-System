@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   alpha,
   Box,
   Button,
@@ -15,12 +16,19 @@ import {
   TextField,
   Typography,
   useTheme,
+  Snackbar,
 } from '@mui/material';
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import KeyRoundedIcon from '@mui/icons-material/KeyRounded';
+import { useAuth } from '@/features/auth/model/AuthContext';
+import {
+  changeAdminPassword as changeAdminPasswordApi,
+  getAdminSettings as getAdminSettingsApi,
+  updateAdminSettings as updateAdminSettingsApi,
+} from '@/features/admin/api/admin.api';
 
 const MotionBox = motion.create(Box);
 
@@ -46,6 +54,7 @@ const itemVariants = {
 };
 
 function AdminSettings() {
+  const { user } = useAuth();
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -53,6 +62,19 @@ function AdminSettings() {
     confirmPassword: '',
   });
   const [passwordError, setPasswordError] = useState('');
+  const [settingsForm, setSettingsForm] = useState({
+    fullName: '',
+    email: '',
+    emailNotifications: true,
+    pushNotifications: true,
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [toast, setToast] = useState({
+    open: false,
+    severity: 'success',
+    message: '',
+  });
 
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -66,6 +88,8 @@ function AdminSettings() {
   const sectionTitleColor = isDark ? theme.palette.common.white : '#111827';
   const headingColor = isDark ? theme.palette.common.white : '#0f172a';
 
+  const adminId = user?.id || '';
+
   const isSubmitDisabled = useMemo(() => {
     return (
       !passwordForm.currentPassword.trim() ||
@@ -73,6 +97,38 @@ function AdminSettings() {
       !passwordForm.confirmPassword.trim()
     );
   }, [passwordForm]);
+
+  useEffect(() => {
+    if (!adminId) return;
+
+    let isMounted = true;
+
+    const loadSettings = async () => {
+      try {
+        const { data } = await getAdminSettingsApi(adminId);
+        const nextData = data?.data || {};
+        if (!isMounted) return;
+        setSettingsForm({
+          fullName: nextData.fullName || '',
+          email: nextData.email || '',
+          emailNotifications: Boolean(nextData.emailNotifications),
+          pushNotifications: Boolean(nextData.pushNotifications),
+        });
+      } catch (error) {
+        if (!isMounted) return;
+        setToast({
+          open: true,
+          severity: 'error',
+          message: error?.response?.data?.message || 'Failed to load admin settings.',
+        });
+      }
+    };
+
+    loadSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [adminId]);
 
   const handleOpenPasswordDialog = () => {
     setPasswordError('');
@@ -89,7 +145,59 @@ function AdminSettings() {
     setPasswordForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const handleSubmitPasswordChange = () => {
+  const handleProfileFieldChange = (field) => (event) => {
+    const value = event.target.value;
+    setSettingsForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleNotificationToggle = (field) => (_event, checked) => {
+    setSettingsForm((prev) => ({ ...prev, [field]: checked }));
+  };
+
+  const handleSaveSettings = async () => {
+    if (!adminId) {
+      setToast({
+        open: true,
+        severity: 'error',
+        message: 'Admin account is not available.',
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const payload = {
+        adminId,
+        fullName: settingsForm.fullName.trim(),
+        email: settingsForm.email.trim(),
+        emailNotifications: settingsForm.emailNotifications,
+        pushNotifications: settingsForm.pushNotifications,
+      };
+      const { data } = await updateAdminSettingsApi(payload);
+      const nextData = data?.data || payload;
+      setSettingsForm({
+        fullName: nextData.fullName || payload.fullName,
+        email: nextData.email || payload.email,
+        emailNotifications: Boolean(nextData.emailNotifications),
+        pushNotifications: Boolean(nextData.pushNotifications),
+      });
+      setToast({
+        open: true,
+        severity: 'success',
+        message: data?.message || 'Settings saved successfully.',
+      });
+    } catch (error) {
+      setToast({
+        open: true,
+        severity: 'error',
+        message: error?.response?.data?.message || 'Failed to save settings.',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSubmitPasswordChange = async () => {
     if (passwordForm.newPassword.length < 8) {
       setPasswordError('New password must be at least 8 characters.');
       return;
@@ -100,7 +208,39 @@ function AdminSettings() {
       return;
     }
 
-    setIsPasswordDialogOpen(false);
+    if (!adminId) {
+      setPasswordError('Admin account is not available.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const { data } = await changeAdminPasswordApi({
+        adminId,
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
+      });
+      setIsPasswordDialogOpen(false);
+      setToast({
+        open: true,
+        severity: 'success',
+        message: data?.message || 'Password updated successfully.',
+      });
+    } catch (error) {
+      const responseMessage = error?.response?.data?.message;
+      const detailMessage = error?.response?.data?.details?.fieldErrors
+        ? Object.values(error.response.data.details.fieldErrors).flat().join(' ')
+        : '';
+      setPasswordError(responseMessage || detailMessage || 'Failed to update password.');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleCloseToast = (_event, reason) => {
+    if (reason === 'clickaway') return;
+    setToast((prev) => ({ ...prev, open: false }));
   };
 
   return (
@@ -158,10 +298,8 @@ function AdminSettings() {
               </Typography>
               <TextField
                 fullWidth
-                value="Admin User"
-                slotProps={{
-                  input: { readOnly: true },
-                }}
+                value={settingsForm.fullName}
+                onChange={handleProfileFieldChange('fullName')}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2.5,
@@ -185,10 +323,8 @@ function AdminSettings() {
               </Typography>
               <TextField
                 fullWidth
-                value="admin@gympro.com"
-                slotProps={{
-                  input: { readOnly: true },
-                }}
+                value={settingsForm.email}
+                onChange={handleProfileFieldChange('email')}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2.5,
@@ -237,7 +373,8 @@ function AdminSettings() {
                 </Typography>
               </Box>
               <Switch
-                defaultChecked
+                checked={settingsForm.emailNotifications}
+                onChange={handleNotificationToggle('emailNotifications')}
                 sx={{
                   '& .MuiSwitch-switchBase.Mui-checked': {
                     color: '#ffffff',
@@ -264,7 +401,8 @@ function AdminSettings() {
                 </Typography>
               </Box>
               <Switch
-                defaultChecked
+                checked={settingsForm.pushNotifications}
+                onChange={handleNotificationToggle('pushNotifications')}
                 sx={{
                   '& .MuiSwitch-switchBase.Mui-checked': {
                     color: '#ffffff',
@@ -326,6 +464,8 @@ function AdminSettings() {
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 1 }}>
         <Button
           variant="contained"
+          onClick={handleSaveSettings}
+          disabled={isSaving}
           sx={{
             px: 3.5,
             py: 1.2,
@@ -343,7 +483,7 @@ function AdminSettings() {
             },
           }}
         >
-          Save Changes
+          {isSaving ? 'Saving...' : 'Save Changes'}
         </Button>
       </Box>
 
@@ -430,10 +570,26 @@ function AdminSettings() {
               },
             }}
           >
-            Update Password
+            {isUpdatingPassword ? 'Updating...' : 'Update Password'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={3200}
+        onClose={handleCloseToast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleCloseToast}
+          severity={toast.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </MotionBox>
   );
 }
