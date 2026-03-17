@@ -5,6 +5,12 @@ import { User } from '../users/users.model.js';
 import { WorkoutPlan } from '../workouts/workouts.model.js';
 import { ProgressTracking } from './progress.model.js';
 import {
+  calculateCoachMemberScores,
+  calculateUserProgressScore,
+} from './progress.scoring.js';
+import {
+  progressCoachParamsSchema,
+  progressScoreQuerySchema,
   progressUserParamsSchema,
   upsertMeasurementSchema,
 } from './progress.validation.js';
@@ -75,6 +81,7 @@ export const getProgressStatus = (_req, res) => {
 
 export const getUserProgress = asyncHandler(async (req, res) => {
   const { userId } = parseOrThrow(progressUserParamsSchema, req.params);
+  const { days } = parseOrThrow(progressScoreQuerySchema, req.query || {});
 
   const memberUser = await User.findById(userId).select('_id');
   if (!memberUser) {
@@ -83,7 +90,10 @@ export const getUserProgress = asyncHandler(async (req, res) => {
 
   const progressDoc = await ProgressTracking.findOne({ userId });
   const { weightHistoryByDate, measurementsByDate } = mapMeasurementsByDate(progressDoc?.measurements || []);
-  const completion = await getWorkoutCompletionDates(userId);
+  const [completion, score] = await Promise.all([
+    getWorkoutCompletionDates(userId),
+    calculateUserProgressScore(userId, { daysWindow: days }),
+  ]);
 
   res.status(HTTP_STATUS.OK).json({
     data: {
@@ -91,12 +101,14 @@ export const getUserProgress = asyncHandler(async (req, res) => {
       weightHistoryByDate,
       measurementsByDate,
       ...completion,
+      score,
     },
   });
 });
 
 export const upsertUserMeasurement = asyncHandler(async (req, res) => {
   const { userId } = parseOrThrow(progressUserParamsSchema, req.params);
+  const { days } = parseOrThrow(progressScoreQuerySchema, req.query || {});
   const payload = parseOrThrow(upsertMeasurementSchema, req.body || {});
 
   const memberUser = await User.findById(userId).select('_id');
@@ -122,7 +134,10 @@ export const upsertUserMeasurement = asyncHandler(async (req, res) => {
 
   const latestDoc = await ProgressTracking.findOne({ userId });
   const { weightHistoryByDate, measurementsByDate } = mapMeasurementsByDate(latestDoc?.measurements || []);
-  const completion = await getWorkoutCompletionDates(userId);
+  const [completion, score] = await Promise.all([
+    getWorkoutCompletionDates(userId),
+    calculateUserProgressScore(userId, { daysWindow: days }),
+  ]);
 
   res.status(HTTP_STATUS.OK).json({
     message: `Progress updated for ${payload.date}`,
@@ -131,7 +146,34 @@ export const upsertUserMeasurement = asyncHandler(async (req, res) => {
       weightHistoryByDate,
       measurementsByDate,
       ...completion,
+      score,
     },
   });
 });
 
+export const getUserProgressScore = asyncHandler(async (req, res) => {
+  const { userId } = parseOrThrow(progressUserParamsSchema, req.params);
+  const { days } = parseOrThrow(progressScoreQuerySchema, req.query || {});
+
+  const memberUser = await User.findById(userId).select('_id');
+  if (!memberUser) {
+    throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+  }
+
+  const score = await calculateUserProgressScore(userId, { daysWindow: days });
+
+  res.status(HTTP_STATUS.OK).json({
+    data: score,
+  });
+});
+
+export const getCoachMemberScores = asyncHandler(async (req, res) => {
+  const { coachId } = parseOrThrow(progressCoachParamsSchema, req.params);
+  const { days } = parseOrThrow(progressScoreQuerySchema, req.query || {});
+
+  const scoreData = await calculateCoachMemberScores(coachId, { daysWindow: days });
+
+  res.status(HTTP_STATUS.OK).json({
+    data: scoreData,
+  });
+});
