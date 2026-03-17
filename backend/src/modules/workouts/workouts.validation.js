@@ -10,7 +10,7 @@ const idSchema = z
 const exerciseSchema = z.object({
   name: z.string().trim().min(1, 'name is required').max(120),
   amount: z.string().trim().min(1, 'amount is required').max(80),
-  description: z.string().trim().max(500).optional().default(''),
+  description: z.string().trim().max(1000).optional().default(''),
   assignedMinutes: z.coerce.number().int().min(1).max(600).optional().default(45),
   sourceType: z.enum(['manual', 'category']).optional().default('manual'),
   suggestionKey: z.string().trim().max(120).optional().default(''),
@@ -109,19 +109,25 @@ export const categoryQuerySchema = z.object({
   coachId: idSchema,
 });
 
+export const exerciseSuggestionQuerySchema = z.object({
+  coachId: idSchema.optional(),
+  q: z.string().trim().min(2).max(80),
+  limit: z.coerce.number().int().min(1).max(20).optional().default(8),
+});
+
 export const createCategorySchema = z.object({
   coachId: idSchema,
   categoryKey: z.enum(['weightGain', 'weightLoss']),
   name: z.string().trim().min(1).max(120),
   amount: z.string().trim().min(1).max(80),
-  description: z.string().trim().max(500).optional().default(''),
+  description: z.string().trim().max(1000).optional().default(''),
 });
 
 export const updateCategorySchema = z.object({
   categoryKey: z.enum(['weightGain', 'weightLoss']).optional(),
   name: z.string().trim().min(1).max(120).optional(),
   amount: z.string().trim().min(1).max(80).optional(),
-  description: z.string().trim().max(500).optional(),
+  description: z.string().trim().max(1000).optional(),
 });
 
 export const categoryIdParamsSchema = z.object({
