@@ -3,12 +3,35 @@ import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { Promotion } from './promotions.model.js';
 import {
+  createNotificationForAdmins,
+  createNotificationsForRole,
+} from '../notifications/notifications.service.js';
+import {
   createPromotionSchema,
   promotionIdParamsSchema,
   promotionQuerySchema,
   publicPromotionQuerySchema,
   updatePromotionSchema,
 } from './promotions.validation.js';
+
+const normalizePlacement = (placement = '') => {
+  if (placement === 'Dashboard Hero' || placement === 'Member App Banner') return 'Dashboard Hero';
+  if (placement === 'Promotions Page') return 'Promotions Page';
+  if (placement === 'PT Booking Page' || placement === 'Class Schedule Page' || placement === 'Email Footer') {
+    return 'Promotions Page';
+  }
+  return 'Promotions Page';
+};
+
+const dbPlacementValues = (placement) => {
+  if (placement === 'Dashboard Hero') return ['Dashboard Hero', 'Member App Banner'];
+  if (placement === 'Promotions Page') {
+    return ['Promotions Page', 'PT Booking Page', 'Class Schedule Page', 'Email Footer'];
+  }
+  return [];
+};
+
+const isHomepagePlacement = (placement = '') => normalizePlacement(placement) === 'Dashboard Hero';
 
 const parseOrThrow = (schema, payload) => {
   const result = schema.safeParse(payload);
@@ -25,7 +48,7 @@ const parseOrThrow = (schema, payload) => {
 const toDto = (doc) => ({
   id: String(doc._id),
   title: doc.title,
-  placement: doc.placement,
+  placement: normalizePlacement(doc.placement),
   target: doc.target,
   status: doc.status,
   budget: Number(doc.budget || 0),
@@ -46,6 +69,7 @@ export const getPromotions = asyncHandler(async (req, res) => {
   const query = parseOrThrow(promotionQuerySchema, req.query || {});
   const filter = {};
   if (query.status) filter.status = query.status;
+  if (query.placement) filter.placement = { $in: dbPlacementValues(query.placement) };
 
   const promotions = await Promotion.find(filter)
     .sort({ updatedAt: -1, createdAt: -1 })
@@ -59,6 +83,26 @@ export const getPromotions = asyncHandler(async (req, res) => {
 export const createPromotion = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(createPromotionSchema, req.body || {});
   const created = await Promotion.create(payload);
+
+  if (created.status === 'ACTIVE') {
+    const homepagePromo = isHomepagePlacement(created.placement);
+    await Promise.allSettled([
+      createNotificationsForRole('user', {
+        type: 'promotion',
+        title: 'New Free Offer Available',
+        message: `${created.title} is now live. Check latest offers in Promotions.`,
+        entityType: homepagePromo ? 'promotion-homepage' : 'promotion',
+        entityId: String(created._id),
+        actionUrl: homepagePromo ? (created.link || '') : '',
+      }),
+      createNotificationForAdmins({
+        title: 'Promotion Activated',
+        message: `${created.title} was published for users.`,
+        entityType: 'promotion',
+        entityId: String(created._id),
+      }),
+    ]);
+  }
 
   res.status(HTTP_STATUS.CREATED).json({
     message: 'Promotion created successfully',
@@ -89,6 +133,26 @@ export const updatePromotion = asyncHandler(async (req, res) => {
   Object.assign(promotion, payload);
   await promotion.save();
 
+  if (promotion.status === 'ACTIVE') {
+    const homepagePromo = isHomepagePlacement(promotion.placement);
+    await Promise.allSettled([
+      createNotificationsForRole('user', {
+        type: 'promotion',
+        title: 'New Free Offer Available',
+        message: `${promotion.title} is now live. Check latest offers in Promotions.`,
+        entityType: homepagePromo ? 'promotion-homepage' : 'promotion',
+        entityId: String(promotion._id),
+        actionUrl: homepagePromo ? (promotion.link || '') : '',
+      }),
+      createNotificationForAdmins({
+        title: 'Promotion Updated',
+        message: `${promotion.title} was updated while active.`,
+        entityType: 'promotion',
+        entityId: String(promotion._id),
+      }),
+    ]);
+  }
+
   res.status(HTTP_STATUS.OK).json({
     message: 'Promotion updated successfully',
     data: toDto(promotion),
@@ -105,18 +169,40 @@ export const deletePromotion = asyncHandler(async (req, res) => {
 });
 
 export const getPublicPromotions = asyncHandler(async (req, res) => {
-  const { limit } = parseOrThrow(publicPromotionQuerySchema, req.query || {});
+  const { limit, placement } = parseOrThrow(publicPromotionQuerySchema, req.query || {});
   const now = new Date();
-  const promotions = await Promotion.find({
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(now);
+  dayEnd.setHours(23, 59, 59, 999);
+  const placementFilterValues = placement ? dbPlacementValues(placement) : [];
+
+  const placementFilter = placementFilterValues.length
+    ? { placement: { $in: placementFilterValues } }
+    : {};
+
+  let promotions = await Promotion.find({
     status: 'ACTIVE',
-    startDate: { $lte: now },
-    endDate: { $gte: now },
+    startDate: { $lte: dayEnd },
+    endDate: { $gte: dayStart },
+    ...placementFilter,
   })
     .sort({ updatedAt: -1, createdAt: -1 })
     .limit(limit);
+
+  if (!promotions.length) {
+    promotions = await Promotion.find({ status: 'ACTIVE', ...placementFilter })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .limit(limit);
+  }
+
+  if (!promotions.length) {
+    promotions = await Promotion.find({ ...placementFilter })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .limit(limit);
+  }
 
   res.status(HTTP_STATUS.OK).json({
     data: promotions.map(toDto),
   });
 });
-
