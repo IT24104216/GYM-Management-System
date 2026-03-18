@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const PLACEMENTS = ['Dashboard Hero', 'Promotions Page'];
+
 const urlOrEmptySchema = z
   .string()
   .trim()
@@ -9,7 +11,6 @@ const urlOrEmptySchema = z
   .refine((value) => {
     if (!value) return true;
     try {
-      // eslint-disable-next-line no-new
       new URL(value);
       return true;
     } catch {
@@ -19,7 +20,7 @@ const urlOrEmptySchema = z
 
 const promotionFieldsSchema = z.object({
   title: z.string().trim().min(1).max(140),
-  placement: z.string().trim().min(1).max(80),
+  placement: z.enum(PLACEMENTS),
   target: z.string().trim().min(1).max(120),
   status: z.enum(['ACTIVE', 'DRAFT', 'PAUSED']).optional().default('DRAFT'),
   budget: z.coerce.number().finite().gt(0),
@@ -58,9 +59,11 @@ export const promotionIdParamsSchema = z.object({
 
 export const promotionQuerySchema = z.object({
   status: z.enum(['ACTIVE', 'DRAFT', 'PAUSED']).optional(),
-  limit: z.coerce.number().int().min(1).max(50).optional().default(100),
+  placement: z.enum(PLACEMENTS).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(100),
 });
 
 export const publicPromotionQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(10).optional().default(3),
+  placement: z.enum(PLACEMENTS).optional(),
 });
