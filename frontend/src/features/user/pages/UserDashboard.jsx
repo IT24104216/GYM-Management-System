@@ -20,6 +20,7 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import CampaignRoundedIcon from '@mui/icons-material/CampaignRounded';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
+import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
@@ -91,6 +92,14 @@ const SERVICES = [
     icon: CampaignRoundedIcon,
     link: ROUTES.USER_ADS_PROMOTIONS,
   },
+  {
+    title: 'Book Your Locker',
+    description: 'Request available lockers in your branch and get approval updates from admin.',
+    image:
+      'https://images.unsplash.com/photo-1599058917765-a780eda07a3e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    icon: LockRoundedIcon,
+    link: ROUTES.USER_LOCKERS,
+  },
 ];
 
 const STATS = [
@@ -100,8 +109,6 @@ const STATS = [
   { icon: TrackChangesOutlinedIcon, value: '1000+', label: 'Success Stories', tone: '#14b8a6' },
 ];
 
-const PROMO_POPUP_SESSION_KEY = 'gympro_user_promotions_popup_seen_v1';
-
 function UserDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -109,6 +116,7 @@ function UserDashboard() {
   const isDark = theme.palette.mode === 'dark';
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isPromotionsPopupOpen, setIsPromotionsPopupOpen] = useState(false);
+  const promoPopupSessionKey = `gympro.promoPopupSeen.${String(user?.id || 'guest')}`;
 
   const colors = {
     pageBg: theme.palette.background.default,
@@ -138,15 +146,23 @@ function UserDashboard() {
 
   useEffect(() => {
     if (user?.role !== 'user') return undefined;
-    const seen = sessionStorage.getItem(PROMO_POPUP_SESSION_KEY);
-    if (seen === '1') return undefined;
+    try {
+      if (sessionStorage.getItem(promoPopupSessionKey) === '1') return undefined;
+    } catch {
+      // ignore storage read issues
+    }
 
     const timeout = setTimeout(() => {
       setIsPromotionsPopupOpen(true);
-    }, 3000);
+      try {
+        sessionStorage.setItem(promoPopupSessionKey, '1');
+      } catch {
+        // ignore storage write issues
+      }
+    }, 5000);
 
     return () => clearTimeout(timeout);
-  }, [user?.role]);
+  }, [user?.role, promoPopupSessionKey]);
 
   const handlePrevImage = () => {
     setCurrentImageIndex((prevIndex) => (
@@ -160,7 +176,6 @@ function UserDashboard() {
 
   const closePromotionsPopup = () => {
     setIsPromotionsPopupOpen(false);
-    sessionStorage.setItem(PROMO_POPUP_SESSION_KEY, '1');
   };
 
   return (
@@ -600,9 +615,24 @@ function UserDashboard() {
             <Box>
               <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 2 }}>Support</Typography>
               <Stack spacing={1.2}>
-                {['Help Center', 'FAQs', 'Privacy Policy', 'Terms of Service'].map((item) => (
-                  <Link key={item} href="#" underline="none" sx={{ color: colors.footerMuted, '&:hover': { color: '#84cc16' } }}>
-                    {item}
+                {[
+                  { label: 'Help Center', route: '' },
+                  { label: 'FAQs', route: ROUTES.USER_FAQS },
+                  { label: 'Privacy Policy', route: '' },
+                  { label: 'Terms of Service', route: '' },
+                ].map((item) => (
+                  <Link
+                    key={item.label}
+                    href="#"
+                    onClick={(e) => {
+                      if (!item.route) return;
+                      e.preventDefault();
+                      navigate(item.route);
+                    }}
+                    underline="none"
+                    sx={{ color: colors.footerMuted, '&:hover': { color: '#84cc16' } }}
+                  >
+                    {item.label}
                   </Link>
                 ))}
               </Stack>
@@ -654,7 +684,11 @@ function UserDashboard() {
         </Box>
       </Box>
 
-      <UserPromotionsPopup open={isPromotionsPopupOpen} onClose={closePromotionsPopup} />
+      <UserPromotionsPopup
+        open={isPromotionsPopupOpen}
+        onClose={closePromotionsPopup}
+        placement="Dashboard Hero"
+      />
     </Box>
   );
 }
