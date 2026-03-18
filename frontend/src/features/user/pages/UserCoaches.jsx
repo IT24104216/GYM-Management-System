@@ -30,6 +30,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
   bookCoachAppointment,
+  createFeedback,
+  getFeedbacks,
   getPublicCoaches,
   getUserAppointments,
   updateAppointmentStatus,
@@ -93,14 +95,12 @@ const BOOKINGS = [
 const buildInitialCoachStats = (coachList = []) => {
   const stats = {};
   coachList.forEach((coach) => {
-    stats[coach.id] = { average: coach.rating, count: 0 };
+    stats[coach.id] = { average: 0, count: 0 };
   });
   return stats;
 };
 
 const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
-const FEEDBACK_STORAGE_KEY = 'gympro_feedbacks';
-
 const BOOKING_PROGRESS_META = {
   pending: { label: 'Pending', step: 0, color: '#16a34a' },
   confirmed: { label: 'Confirmed', step: 1, color: '#16a34a' },
@@ -180,6 +180,38 @@ const getCoachSlotRanges = (coach) => {
   return [fallbackRange];
 };
 
+const formatCoachSlotDateLabel = (coach) => {
+  if (!coach?.slotDate) {
+    return coach?.slots?.split(',')?.[0]?.trim() || 'Available';
+  }
+  const parsed = new Date(`${coach.slotDate}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return coach.slotDate;
+  const today = getTodayDate();
+  if (coach.slotDate === today) return 'Today';
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const getCoachSlotDisplayLines = (coach) => {
+  const ranges = getCoachSlotRanges(coach)
+    .map((range) => ({
+      start: toDisplayTime(range.start),
+      end: toDisplayTime(range.end),
+    }))
+    .filter((range) => range.start && range.end);
+
+  if (ranges.length) {
+    const dayLabel = formatCoachSlotDateLabel(coach);
+    return ranges.map((range) => `${dayLabel}, ${range.start} - ${range.end}`);
+  }
+
+  const raw = String(coach?.slots || '').replace(/\(\+\d+\s*more\)/gi, '').trim();
+  if (!raw) return ['No slot information'];
+  return raw
+    .split(/\s*[|;]\s*/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+};
+
 const isDateWithinCoachSchedule = (coach, dateValue) => {
   if (coach?.slotDate) {
     return dateValue === coach.slotDate;
@@ -236,6 +268,7 @@ function UserCoaches() {
   const [feedbackTarget, setFeedbackTarget] = useState(null);
   const [feedbackForm, setFeedbackForm] = useState({ rating: 0, comment: '' });
   const [feedbackError, setFeedbackError] = useState('');
+  const [submittedCoachFeedbackBookingIds, setSubmittedCoachFeedbackBookingIds] = useState(new Set());
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
@@ -299,6 +332,68 @@ function UserCoaches() {
     };
   };
 
+  const loadCoachFeedbackStats = async (coachList) => {
+    const baseStats = buildInitialCoachStats(coachList);
+    const coachNameToId = new Map(
+      (Array.isArray(coachList) ? coachList : [])
+        .map((coach) => [String(coach.name || '').trim(), String(coach.id || '')]),
+    );
+    try {
+      const { data } = await getFeedbacks({
+        subjectType: 'coach',
+        page: 1,
+        limit: 500,
+      });
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      rows.forEach((row) => {
+        const subjectId = String(row.subjectId || '');
+        const subjectName = String(row.subjectName || '').trim();
+        const key = (
+          (subjectId && baseStats[subjectId] && subjectId)
+          || (subjectName && coachNameToId.get(subjectName))
+          || ''
+        );
+        if (!key || !baseStats[key]) return;
+        const current = baseStats[key];
+        const nextCount = current.count + 1;
+        const nextAverage = ((current.average * current.count) + Number(row.rating || 0)) / nextCount;
+        baseStats[key] = {
+          average: Number(nextAverage.toFixed(1)),
+          count: nextCount,
+        };
+      });
+      setCoachStats(baseStats);
+    } catch {
+      setCoachStats(baseStats);
+    }
+  };
+
+  const loadSubmittedCoachFeedbackBookings = async () => {
+    const ownerId = String(user?.id || '');
+    if (!ownerId) {
+      setSubmittedCoachFeedbackBookingIds(new Set());
+      return;
+    }
+
+    try {
+      const { data } = await getFeedbacks({
+        subjectType: 'coach',
+        ownerId,
+        page: 1,
+        limit: 500,
+      });
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      const nextIds = new Set(
+        rows
+          .map((row) => String(row.bookingId || ''))
+          .filter(Boolean),
+      );
+      setSubmittedCoachFeedbackBookingIds(nextIds);
+    } catch {
+      setSubmittedCoachFeedbackBookingIds(new Set());
+    }
+  };
+
   const loadBookings = async () => {
     if (!user?.id) return;
     try {
@@ -323,7 +418,7 @@ function UserCoaches() {
       const { data } = await getPublicCoaches();
       const items = Array.isArray(data?.data) ? data.data : [];
       setCoaches(items);
-      setCoachStats(buildInitialCoachStats(items));
+      await loadCoachFeedbackStats(items);
     } catch {
       setCoaches([]);
       setCoachStats({});
@@ -341,6 +436,10 @@ function UserCoaches() {
     const interval = setInterval(loadBookings, 15000);
     return () => clearInterval(interval);
   }, [user?.id, coaches]);
+
+  useEffect(() => {
+    loadSubmittedCoachFeedbackBookings();
+  }, [user?.id]);
 
   const handleOpenBooking = (coach) => {
     setSelectedCoach(coach);
@@ -498,66 +597,39 @@ function UserCoaches() {
     setFeedbackForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const handleFeedbackSubmit = (event) => {
+  const handleFeedbackSubmit = async (event) => {
     event.preventDefault();
     if (!feedbackForm.rating) {
       setFeedbackError('Please select a rating before submitting.');
       return;
     }
 
-    console.log('Feedback payload:', {
-      bookingId: feedbackTarget?.id,
-      coachName: feedbackTarget?.coachName,
-      rating: feedbackForm.rating,
-      comment: feedbackForm.comment,
-    });
+    const subjectId = String(feedbackTarget?.coachId || '');
+    if (!subjectId) {
+      setFeedbackError('Unable to identify coach for feedback.');
+      return;
+    }
 
-    const newFeedback = {
-      id: `f-${Date.now()}`,
-      user: user?.name || 'Member',
-      authorEmail: user?.email || '',
-      rating: feedbackForm.rating,
-      comment: feedbackForm.comment,
-      date: getTodayDate(),
-    };
-
-    const rawFeedbacks = localStorage.getItem(FEEDBACK_STORAGE_KEY);
-    let storedFeedbacks = {};
     try {
-      storedFeedbacks = rawFeedbacks ? JSON.parse(rawFeedbacks) : {};
-    } catch {
-      storedFeedbacks = {};
-    }
-
-    const coachKey = feedbackTarget?.coachName || 'Coach';
-    const coachFeedbacks = Array.isArray(storedFeedbacks[coachKey]) ? storedFeedbacks[coachKey] : [];
-    localStorage.setItem(
-      FEEDBACK_STORAGE_KEY,
-      JSON.stringify({
-        ...storedFeedbacks,
-        [coachKey]: [newFeedback, ...coachFeedbacks],
-      }),
-    );
-
-    const targetCoach = coaches.find((item) => item.name === feedbackTarget?.coachName);
-    if (targetCoach) {
-      setCoachStats((prev) => {
-        const current = prev[targetCoach.id] || { average: targetCoach.rating, count: 0 };
-        const nextCount = current.count + 1;
-        const nextAverage = ((current.average * current.count) + feedbackForm.rating) / nextCount;
-
-        return {
-          ...prev,
-          [targetCoach.id]: {
-            average: Number(nextAverage.toFixed(1)),
-            count: nextCount,
-          },
-        };
+      await createFeedback({
+        ownerId: String(user?.id || ''),
+        ownerName: user?.name || 'Member',
+        subjectType: 'coach',
+        subjectId,
+        subjectName: feedbackTarget?.coachName || '',
+        bookingId: String(feedbackTarget?.id || ''),
+        rating: feedbackForm.rating,
+        comment: feedbackForm.comment,
       });
-    }
 
-    handleCloseFeedback();
-    setToastState({ open: true, message: 'Feedback submitted successfully' });
+      await loadCoachFeedbackStats(coaches);
+      await loadSubmittedCoachFeedbackBookings();
+      handleCloseFeedback();
+      setToastState({ open: true, message: 'Feedback submitted successfully' });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to submit feedback';
+      setFeedbackError(message);
+    }
   };
 
   const handleCancelBooking = async (bookingId) => {
@@ -665,7 +737,9 @@ function UserCoaches() {
                     <Typography
                       onClick={(event) => {
                         event.stopPropagation();
-                        navigate(`${ROUTES.USER_COACH_FEEDBACKS}?coach=${encodeURIComponent(coach.name)}`);
+                        navigate(
+                          `${ROUTES.USER_COACH_FEEDBACKS}?coach=${encodeURIComponent(coach.name)}&coachId=${encodeURIComponent(String(coach.id || ''))}`,
+                        );
                       }}
                       sx={{
                         color: theme.palette.text.secondary,
@@ -675,8 +749,9 @@ function UserCoaches() {
                         '&:hover': { textDecoration: 'underline', color: theme.palette.primary.main },
                       }}
                     >
-                      Rating {coachStat.average.toFixed(1)}
-                      {coachStat.count > 0 ? ` (${coachStat.count})` : ''}
+                      {coachStat.count > 0
+                        ? `Rating ${coachStat.average.toFixed(1)} (${coachStat.count})`
+                        : 'No ratings yet'}
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -685,11 +760,18 @@ function UserCoaches() {
                       Experience {coach.experience}
                     </Typography>
                   </Stack>
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
                     <AccessTimeRoundedIcon sx={{ color: '#8b5cf6', fontSize: 18 }} />
-                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
-                      {coach.slots}
-                    </Typography>
+                    <Stack spacing={0.2}>
+                      {getCoachSlotDisplayLines(coach).map((line, lineIndex) => (
+                        <Typography
+                          key={`${coach.id || coach.name || 'coach'}-slot-${lineIndex}`}
+                          sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}
+                        >
+                          {line}
+                        </Typography>
+                      ))}
+                    </Stack>
                   </Stack>
                 </Stack>
 
@@ -755,6 +837,7 @@ function UserCoaches() {
               const progress = BOOKING_PROGRESS_META[effectiveStatus] || BOOKING_PROGRESS_META.pending;
               const isCancelled = effectiveStatus === 'cancelled';
               const isCompleted = effectiveStatus === 'completed';
+              const feedbackAlreadySubmitted = submittedCoachFeedbackBookingIds.has(String(booking.id));
               const stepKeys = isCancelled ? ['pending', 'confirmed', 'cancelled'] : STATUS_STEPS;
               const displayTime = booking.fromTime && booking.toTime
                 ? `${toDisplayTime(booking.fromTime)} - ${toDisplayTime(booking.toTime)}`
@@ -911,14 +994,25 @@ function UserCoaches() {
 
                     {isCompleted && (
                       <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1.4 }}>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => handleOpenFeedback(booking)}
-                          sx={{ borderRadius: 2, fontWeight: 700 }}
-                        >
-                          Feedback
-                        </Button>
+                        {feedbackAlreadySubmitted ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Feedback Submitted
+                          </Button>
+                        ) : (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleOpenFeedback(booking)}
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Feedback
+                          </Button>
+                        )}
                       </Stack>
                     )}
                   </CardContent>
@@ -1018,9 +1112,19 @@ function UserCoaches() {
               />
             </Stack>
 
-            <Typography sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary }}>
-              Available slot: {selectedCoach?.slots || 'N/A'}
-            </Typography>
+            <Stack spacing={0.35}>
+              <Typography sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary, fontWeight: 700 }}>
+                Available slots:
+              </Typography>
+              {(selectedCoach ? getCoachSlotDisplayLines(selectedCoach) : ['N/A']).map((line, lineIndex) => (
+                <Typography
+                  key={`selected-coach-slot-${lineIndex}`}
+                  sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary }}
+                >
+                  {line}
+                </Typography>
+              ))}
+            </Stack>
 
             {slotError && (
               <Typography sx={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 600 }}>
