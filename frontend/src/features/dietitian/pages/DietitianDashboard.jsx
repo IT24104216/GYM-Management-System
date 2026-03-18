@@ -34,6 +34,7 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
+  deleteMealPlan,
   getDietitianClientPlans,
   createDietitianSchedulingSlot,
   deleteDietitianSchedulingSlot,
@@ -75,6 +76,23 @@ const createDietPlanForm = () => ({
   snacks: [createMealOption(), createMealOption(), createMealOption()],
   additionalNotes: '',
 });
+
+const hasAnyMealName = (form) =>
+  ['breakfast', 'lunch', 'dinner', 'snacks'].some((sectionKey) =>
+    Array.isArray(form?.[sectionKey])
+    && form[sectionKey].some((item) => String(item?.mealName || '').trim().length > 0),
+  );
+
+const sanitizePlanSection = (section = []) =>
+  (Array.isArray(section) ? section : []).map((item) => ({
+    mealName: String(item?.mealName || '').trim(),
+    description: String(item?.description || '').trim(),
+    calories: item?.calories ?? '',
+    protein: item?.protein ?? '',
+    carbs: item?.carbs ?? '',
+    lipids: item?.lipids ?? '',
+    vitamins: String(item?.vitamins || '').trim(),
+  }));
 
 const getNoteValue = (notes, key) => {
   if (!notes) return '';
@@ -445,30 +463,68 @@ function DietitianDashboard() {
     setDietPlanModal({ open: false, member: null });
   };
 
-  const saveDietPlan = async () => {
+  const upsertAndMaybeSubmitDietPlan = async (submitted = false) => {
     const memberId = dietPlanModal.member?.id;
     if (!memberId) return;
+    if (!dietitianId) {
+      setSlotError('Dietitian account is required.');
+      return;
+    }
+    if (!hasAnyMealName(dietPlanForm)) {
+      setSlotError('Add at least one meal name before submitting the diet plan.');
+      return;
+    }
     try {
       const payload = {
         dietitianId,
         userId: memberId,
         memberName: dietPlanModal.member?.name || '',
-        breakfast: dietPlanForm.breakfast,
-        lunch: dietPlanForm.lunch,
-        dinner: dietPlanForm.dinner,
-        snacks: dietPlanForm.snacks,
+        breakfast: sanitizePlanSection(dietPlanForm.breakfast),
+        lunch: sanitizePlanSection(dietPlanForm.lunch),
+        dinner: sanitizePlanSection(dietPlanForm.dinner),
+        snacks: sanitizePlanSection(dietPlanForm.snacks),
         additionalNotes: dietPlanForm.additionalNotes,
       };
       const { data } = await upsertDietitianClientPlan(payload);
       const plan = data?.data;
-      if (plan?._id) {
-        await submitMealPlan(String(plan._id), dietitianId, true);
-      }
+      const planId = String(plan?._id || plan?.id || savedDietPlans[memberId]?.id || '');
+      if (!planId) throw new Error('Plan id is missing after save');
+      await submitMealPlan(planId, dietitianId, submitted);
       await loadDietitianMealsAndPlans();
       closeDietPlanModal();
-      setSlotNotice({ open: true, message: 'Diet plan submitted successfully!' });
+      setSlotNotice({
+        open: true,
+        message: submitted ? 'Diet plan published successfully!' : 'Diet plan saved as draft.',
+      });
     } catch (error) {
-      setSlotError(error?.response?.data?.message || 'Failed to save diet plan.');
+      const apiMessage = error?.response?.data?.message || '';
+      if (error?.response?.status === 409) {
+        setSlotError('This client plan is already submitted and locked. Create for another client or unlock workflow first.');
+        return;
+      }
+      setSlotError(apiMessage || (submitted ? 'Failed to publish diet plan.' : 'Failed to save draft.'));
+    }
+  };
+
+  const saveDietPlanDraft = async () => {
+    await upsertAndMaybeSubmitDietPlan(false);
+  };
+
+  const publishDietPlan = async () => {
+    await upsertAndMaybeSubmitDietPlan(true);
+  };
+
+  const deleteDraftDietPlan = async () => {
+    const memberId = dietPlanModal.member?.id;
+    const existingPlan = memberId ? savedDietPlans[memberId] : null;
+    if (!existingPlan?.id || existingPlan?.isSubmitted) return;
+    try {
+      await deleteMealPlan(existingPlan.id, dietitianId);
+      await loadDietitianMealsAndPlans();
+      closeDietPlanModal();
+      setSlotNotice({ open: true, message: 'Draft diet plan deleted successfully.' });
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to delete draft diet plan.');
     }
   };
 
@@ -642,7 +698,9 @@ function DietitianDashboard() {
               gap: 2,
             }}
           >
-          {displayedMembers.map((member) => (
+          {displayedMembers.map((member) => {
+            const memberPlan = savedDietPlans[member.id];
+            return (
             <Box
               key={member.id}
               sx={{
@@ -673,6 +731,20 @@ function DietitianDashboard() {
                 Goal: {member.goal}
               </Typography>
 
+              {memberPlan && (
+                <Chip
+                  label={memberPlan.isSubmitted ? 'Published' : 'Draft'}
+                  size="small"
+                  sx={{
+                    mt: 1.2,
+                    alignSelf: 'flex-start',
+                    fontWeight: 800,
+                    bgcolor: memberPlan.isSubmitted ? '#22c55e1f' : '#f59e0b1f',
+                    color: memberPlan.isSubmitted ? '#22c55e' : '#f59e0b',
+                  }}
+                />
+              )}
+
               <Button
                 variant="contained"
                 fullWidth
@@ -687,10 +759,11 @@ function DietitianDashboard() {
                   '&:hover': { backgroundColor: '#cf0812' },
                 }}
               >
-                Create Diet Plan
+                {memberPlan ? (memberPlan.isSubmitted ? 'View Plan' : 'Edit Draft') : 'Create Diet Plan'}
               </Button>
             </Box>
-          ))}
+            );
+          })}
           </Box>
         </>
       )}
@@ -1160,6 +1233,13 @@ function DietitianDashboard() {
           },
         }}
       >
+        {(() => {
+          const currentPlan = savedDietPlans[dietPlanModal.member?.id];
+          const isSubmittedPlan = Boolean(currentPlan?.isSubmitted);
+          const isDraftPlan = Boolean(currentPlan?.id) && !isSubmittedPlan;
+
+          return (
+            <>
         <DialogTitle sx={{ pr: 6 }}>
           <Typography sx={{ fontWeight: 800, fontSize: '2rem', color: '#f8fafc' }}>
             Create Diet Plan
@@ -1184,7 +1264,8 @@ function DietitianDashboard() {
         </DialogTitle>
 
         <DialogContent sx={{ overflowY: 'auto', pb: 2 }}>
-          <Stack spacing={2}>
+          <Box component="fieldset" disabled={isSubmittedPlan} sx={{ m: 0, p: 0, border: 'none' }}>
+            <Stack spacing={2}>
             {mealSections.map((section) => (
               <Box key={section.key}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.1 }}>
@@ -1358,28 +1439,66 @@ function DietitianDashboard() {
                 }}
               />
             </Box>
-          </Stack>
+            </Stack>
+          </Box>
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            variant="contained"
-            startIcon={<AddRoundedIcon />}
-            onClick={saveDietPlan}
-            fullWidth
-            sx={{
-              textTransform: 'none',
-              fontWeight: 800,
-              borderRadius: 1.2,
-              py: 1,
-              fontSize: '1rem',
-              backgroundColor: '#f30612',
-              '&:hover': { backgroundColor: '#cf0812' },
-            }}
-          >
-            Create Diet Plan
-          </Button>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: '100%' }}>
+            {!isSubmittedPlan && (
+              <>
+                <Button
+                  variant="outlined"
+                  onClick={saveDietPlanDraft}
+                  fullWidth
+                  sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.2, py: 1 }}
+                >
+                  Save Draft
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<AddRoundedIcon />}
+                  onClick={publishDietPlan}
+                  fullWidth
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    borderRadius: 1.2,
+                    py: 1,
+                    fontSize: '1rem',
+                    backgroundColor: '#f30612',
+                    '&:hover': { backgroundColor: '#cf0812' },
+                  }}
+                >
+                  Publish Plan
+                </Button>
+              </>
+            )}
+            {isSubmittedPlan && (
+              <Button
+                variant="contained"
+                onClick={closeDietPlanModal}
+                fullWidth
+                sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.2, py: 1 }}
+              >
+                Close
+              </Button>
+            )}
+            {isDraftPlan && (
+              <Button
+                color="error"
+                variant="outlined"
+                onClick={deleteDraftDietPlan}
+                sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.2, py: 1, minWidth: { sm: 150 } }}
+              >
+                Delete Draft
+              </Button>
+            )}
+          </Stack>
         </DialogActions>
+            </>
+          );
+        })()}
       </Dialog>
     </Box>
   );

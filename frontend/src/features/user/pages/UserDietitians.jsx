@@ -30,6 +30,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
   bookDietitianAppointment,
+  createFeedback,
+  getFeedbacks,
   getPublicDietitians,
   getUserAppointments,
   updateAppointmentStatus,
@@ -95,14 +97,12 @@ const BOOKINGS = [];
 const buildInitialDietitianStats = (dietitians = []) => {
   const stats = {};
   dietitians.forEach((dietitian) => {
-    stats[dietitian.id] = { average: dietitian.rating, count: 0 };
+    stats[dietitian.id] = { average: 0, count: 0 };
   });
   return stats;
 };
 
 const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
-const DIETITIAN_FEEDBACK_STORAGE_KEY = 'gympro_dietitian_feedbacks';
-
 const BOOKING_PROGRESS_META = {
   pending: { label: 'Pending', step: 0 },
   confirmed: { label: 'Confirmed', step: 1 },
@@ -242,6 +242,7 @@ function UserDietitians() {
   const [feedbackTarget, setFeedbackTarget] = useState(null);
   const [feedbackForm, setFeedbackForm] = useState({ rating: 0, comment: '' });
   const [feedbackError, setFeedbackError] = useState('');
+  const [submittedDietitianFeedbackBookingIds, setSubmittedDietitianFeedbackBookingIds] = useState(new Set());
 
   const [bookingForm, setBookingForm] = useState({
     userName: '',
@@ -261,7 +262,7 @@ function UserDietitians() {
       const { data } = await getPublicDietitians();
       const items = Array.isArray(data?.data) ? data.data : [];
       setDietitians(items);
-      setDietitianStats(buildInitialDietitianStats(items));
+      await loadDietitianFeedbackStats(items);
     } catch {
       setDietitians(DIETITIANS);
       setDietitianStats(buildInitialDietitianStats(DIETITIANS));
@@ -310,6 +311,68 @@ function UserDietitians() {
     };
   };
 
+  const loadDietitianFeedbackStats = async (dietitianList) => {
+    const baseStats = buildInitialDietitianStats(dietitianList);
+    const dietitianNameToId = new Map(
+      (Array.isArray(dietitianList) ? dietitianList : [])
+        .map((dietitian) => [String(dietitian.name || '').trim(), String(dietitian.id || '')]),
+    );
+    try {
+      const { data } = await getFeedbacks({
+        subjectType: 'dietitian',
+        page: 1,
+        limit: 500,
+      });
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      rows.forEach((row) => {
+        const subjectId = String(row.subjectId || '');
+        const subjectName = String(row.subjectName || '').trim();
+        const key = (
+          (subjectId && baseStats[subjectId] && subjectId)
+          || (subjectName && dietitianNameToId.get(subjectName))
+          || ''
+        );
+        if (!key || !baseStats[key]) return;
+        const current = baseStats[key];
+        const nextCount = current.count + 1;
+        const nextAverage = ((current.average * current.count) + Number(row.rating || 0)) / nextCount;
+        baseStats[key] = {
+          average: Number(nextAverage.toFixed(1)),
+          count: nextCount,
+        };
+      });
+      setDietitianStats(baseStats);
+    } catch {
+      setDietitianStats(baseStats);
+    }
+  };
+
+  const loadSubmittedDietitianFeedbackBookings = async () => {
+    const ownerId = String(user?.id || '');
+    if (!ownerId) {
+      setSubmittedDietitianFeedbackBookingIds(new Set());
+      return;
+    }
+
+    try {
+      const { data } = await getFeedbacks({
+        subjectType: 'dietitian',
+        ownerId,
+        page: 1,
+        limit: 500,
+      });
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      const nextIds = new Set(
+        rows
+          .map((row) => String(row.bookingId || ''))
+          .filter(Boolean),
+      );
+      setSubmittedDietitianFeedbackBookingIds(nextIds);
+    } catch {
+      setSubmittedDietitianFeedbackBookingIds(new Set());
+    }
+  };
+
   const loadBookings = async () => {
     if (!user?.id) return;
     try {
@@ -337,6 +400,10 @@ function UserDietitians() {
     const interval = setInterval(loadBookings, 15000);
     return () => clearInterval(interval);
   }, [user?.id, dietitians]);
+
+  useEffect(() => {
+    loadSubmittedDietitianFeedbackBookings();
+  }, [user?.id]);
 
   const handleOpenBooking = (dietitian) => {
     setSelectedDietitian(dietitian);
@@ -492,59 +559,39 @@ function UserDietitians() {
     setFeedbackError('');
   };
 
-  const handleFeedbackSubmit = (event) => {
+  const handleFeedbackSubmit = async (event) => {
     event.preventDefault();
     if (!feedbackForm.rating) {
       setFeedbackError('Please select a rating before submitting.');
       return;
     }
 
-    const newFeedback = {
-      id: `df-${Date.now()}`,
-      user: user?.name || 'Member',
-      authorEmail: user?.email || '',
-      rating: feedbackForm.rating,
-      comment: feedbackForm.comment,
-      date: getTodayDate(),
-    };
+    const subjectId = String(feedbackTarget?.dietitianId || '');
+    if (!subjectId) {
+      setFeedbackError('Unable to identify dietitian for feedback.');
+      return;
+    }
 
-    const rawFeedbacks = localStorage.getItem(DIETITIAN_FEEDBACK_STORAGE_KEY);
-    let storedFeedbacks = {};
     try {
-      storedFeedbacks = rawFeedbacks ? JSON.parse(rawFeedbacks) : {};
-    } catch {
-      storedFeedbacks = {};
-    }
-
-    const dietitianKey = feedbackTarget?.dietitianName || 'Dietitian';
-    const dietitianFeedbacks = Array.isArray(storedFeedbacks[dietitianKey]) ? storedFeedbacks[dietitianKey] : [];
-    localStorage.setItem(
-      DIETITIAN_FEEDBACK_STORAGE_KEY,
-      JSON.stringify({
-        ...storedFeedbacks,
-        [dietitianKey]: [newFeedback, ...dietitianFeedbacks],
-      }),
-    );
-
-    const targetDietitian = dietitians.find((item) => item.name === feedbackTarget?.dietitianName);
-    if (targetDietitian) {
-      setDietitianStats((prev) => {
-        const current = prev[targetDietitian.id] || { average: targetDietitian.rating, count: 0 };
-        const nextCount = current.count + 1;
-        const nextAverage = ((current.average * current.count) + feedbackForm.rating) / nextCount;
-
-        return {
-          ...prev,
-          [targetDietitian.id]: {
-            average: Number(nextAverage.toFixed(1)),
-            count: nextCount,
-          },
-        };
+      await createFeedback({
+        ownerId: String(user?.id || ''),
+        ownerName: user?.name || 'Member',
+        subjectType: 'dietitian',
+        subjectId,
+        subjectName: feedbackTarget?.dietitianName || '',
+        bookingId: String(feedbackTarget?.id || ''),
+        rating: feedbackForm.rating,
+        comment: feedbackForm.comment,
       });
-    }
 
-    handleCloseFeedback();
-    setToastState({ open: true, message: 'Feedback submitted successfully' });
+      await loadDietitianFeedbackStats(dietitians);
+      await loadSubmittedDietitianFeedbackBookings();
+      handleCloseFeedback();
+      setToastState({ open: true, message: 'Feedback submitted successfully' });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to submit feedback';
+      setFeedbackError(message);
+    }
   };
 
   const handleCloseToast = (_, reason) => {
@@ -645,7 +692,9 @@ function UserDietitians() {
                     <Typography
                       onClick={(event) => {
                         event.stopPropagation();
-                        navigate(`${ROUTES.USER_DIETITIAN_FEEDBACKS}?dietitian=${encodeURIComponent(dietitian.name)}`);
+                        navigate(
+                          `${ROUTES.USER_DIETITIAN_FEEDBACKS}?dietitian=${encodeURIComponent(dietitian.name)}&dietitianId=${encodeURIComponent(String(dietitian.id || ''))}`,
+                        );
                       }}
                       sx={{
                         color: theme.palette.text.secondary,
@@ -655,8 +704,9 @@ function UserDietitians() {
                         '&:hover': { textDecoration: 'underline', color: theme.palette.primary.main },
                       }}
                     >
-                      Rating {dietitianStat.average.toFixed(1)}
-                      {dietitianStat.count > 0 ? ` (${dietitianStat.count})` : ''}
+                      {dietitianStat.count > 0
+                        ? `Rating ${dietitianStat.average.toFixed(1)} (${dietitianStat.count})`
+                        : 'No ratings yet'}
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -733,6 +783,7 @@ function UserDietitians() {
               const progress = BOOKING_PROGRESS_META[effectiveStatus] || BOOKING_PROGRESS_META.pending;
               const isCancelled = effectiveStatus === 'cancelled';
               const isCompleted = effectiveStatus === 'completed';
+              const feedbackAlreadySubmitted = submittedDietitianFeedbackBookingIds.has(String(booking.id));
               const stepKeys = isCancelled ? ['pending', 'confirmed', 'cancelled'] : STATUS_STEPS;
 
               return (
@@ -882,14 +933,25 @@ function UserDietitians() {
 
                     {isCompleted && (
                       <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1.4 }}>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => handleOpenFeedback(booking)}
-                          sx={{ borderRadius: 2, fontWeight: 700 }}
-                        >
-                          Feedback
-                        </Button>
+                        {feedbackAlreadySubmitted ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Feedback Submitted
+                          </Button>
+                        ) : (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleOpenFeedback(booking)}
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Feedback
+                          </Button>
+                        )}
                       </Stack>
                     )}
                   </CardContent>

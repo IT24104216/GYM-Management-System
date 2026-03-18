@@ -12,6 +12,7 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  IconButton,
   InputAdornment,
   MenuItem,
   Pagination,
@@ -25,6 +26,7 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import AssignmentTurnedInRoundedIcon from '@mui/icons-material/AssignmentTurnedInRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
@@ -183,6 +185,7 @@ function CoachWorkoutPlans() {
   const [publishSelectionByUser, setPublishSelectionByUser] = useState({});
   const [drafts, setDrafts] = useState({ weightGain: blankExercise(), weightLoss: blankExercise() });
   const [editCategory, setEditCategory] = useState({ open: false, id: '', categoryKey: '', name: '', amount: '', description: '' });
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
 
   const showToast = (message, severity = 'success') => setFeedback({ open: true, message, severity });
 
@@ -1016,7 +1019,25 @@ function CoachWorkoutPlans() {
       )}
 
       <Dialog open={Boolean(openPlan)} onClose={() => setOpenPlan(null)} fullWidth maxWidth="md">
-        <DialogTitle>{openPlan ? `Workout Plan: ${openPlan.name}` : 'Workout Plan'}</DialogTitle>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1.2 }}>
+          <Typography sx={{ fontWeight: 800 }}>
+            {openPlan ? `Workout Plan: ${openPlan.name}` : 'Workout Plan'}
+          </Typography>
+          <IconButton
+            size="small"
+            onClick={() => setHelpDialogOpen(true)}
+            sx={{
+              border: '1px solid',
+              borderColor: panelBorder,
+              color: theme.palette.text.primary,
+              bgcolor: isDark ? '#16233d' : '#f8fbff',
+              '&:hover': { bgcolor: isDark ? '#1e3152' : '#eaf3ff' },
+            }}
+            aria-label="Open workout plan workflow help"
+          >
+            <HelpOutlineRoundedIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <Typography sx={{ fontWeight: 800, fontSize: '0.98rem' }}>A. Program Info</Typography>
@@ -1249,6 +1270,57 @@ function CoachWorkoutPlans() {
             </Stack>
           </Stack>
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{
+          sx: {
+            bgcolor: isDark ? '#1b2b47' : '#ffffff',
+            color: theme.palette.text.primary,
+            border: '1px solid',
+            borderColor: isDark ? '#334b74' : '#dbe7f6',
+          },
+        }}
+      >
+        <DialogTitle sx={{ color: theme.palette.text.primary }}>Workout Plan Workflow</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.1} sx={{ mt: 0.5 }}>
+            <Typography sx={{ fontWeight: 700 }}>1. Program Info</Typography>
+            <Typography sx={{ color: mutedText, fontSize: '0.9rem' }}>
+              Fill program name, duration, days per week, start date, and notes.
+              If a week is already published, key fields are locked.
+            </Typography>
+
+            <Typography sx={{ fontWeight: 700, mt: 0.5 }}>2. Build Method</Typography>
+            <Typography sx={{ color: mutedText, fontSize: '0.9rem' }}>
+              Choose a template. Use Auto Generate Weeks to quickly prepare the schedule.
+            </Typography>
+
+            <Typography sx={{ fontWeight: 700, mt: 0.5 }}>3. Weekly Schedule</Typography>
+            <Typography sx={{ color: mutedText, fontSize: '0.9rem' }}>
+              Open each day and set Workout or Rest. Published weeks are read-only.
+            </Typography>
+
+            <Typography sx={{ fontWeight: 700, mt: 0.5 }}>4. Day Editor</Typography>
+            <Typography sx={{ color: mutedText, fontSize: '0.9rem' }}>
+              Add exercises, set assigned minutes, amount, and description, then click Apply To Day.
+            </Typography>
+
+            <Typography sx={{ fontWeight: 700, mt: 0.5 }}>5. Save / Publish</Typography>
+            <Typography sx={{ color: mutedText, fontSize: '0.9rem' }}>
+              Use Save Draft while editing. Publish only when the selected week or all plan days are complete.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button variant="contained" onClick={() => setHelpDialogOpen(false)} sx={{ textTransform: 'none' }}>
+            Got it
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog open={editCategory.open} onClose={() => setEditCategory({ open: false, id: '', categoryKey: '', name: '', amount: '', description: '' })} fullWidth maxWidth="sm">

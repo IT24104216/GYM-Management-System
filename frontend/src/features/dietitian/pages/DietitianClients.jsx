@@ -58,6 +58,23 @@ const createDietPlanForm = () => ({
   additionalNotes: '',
 });
 
+const hasAnyMealName = (form) =>
+  ['breakfast', 'lunch', 'dinner', 'snacks'].some((sectionKey) =>
+    Array.isArray(form?.[sectionKey])
+    && form[sectionKey].some((item) => String(item?.mealName || '').trim().length > 0),
+  );
+
+const sanitizePlanSection = (section = []) =>
+  (Array.isArray(section) ? section : []).map((item) => ({
+    mealName: String(item?.mealName || '').trim(),
+    description: String(item?.description || '').trim(),
+    calories: item?.calories ?? '',
+    protein: item?.protein ?? '',
+    carbs: item?.carbs ?? '',
+    lipids: item?.lipids ?? '',
+    vitamins: String(item?.vitamins || '').trim(),
+  }));
+
 function DietitianClients() {
   const theme = useTheme();
   const { user } = useAuth();
@@ -73,13 +90,6 @@ function DietitianClients() {
   const [confirmDelete, setConfirmDelete] = useState({ open: false, client: null });
   const [mealSuggestions, setMealSuggestions] = useState([]);
   const [page, setPage] = useState(1);
-
-  const getNoteValue = (notes, key) => {
-    if (!notes) return '';
-    const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
-    const match = notes.match(pattern);
-    return match?.[1]?.trim() || '';
-  };
 
   const loadApprovedClients = async () => {
     if (!dietitianId) return;
@@ -245,35 +255,63 @@ function DietitianClients() {
     return Math.round(calories.reduce((sum, value) => sum + value, 0) / calories.length);
   };
 
-  const saveDietPlan = async () => {
+  const upsertAndMaybeSubmitDietPlan = async (submitted = false) => {
     const clientId = dietPlanModal.client?.id;
     if (!clientId) return;
+    if (!dietitianId) {
+      setFeedback({ open: true, message: 'Dietitian account is required.', severity: 'error' });
+      return;
+    }
+    if (!hasAnyMealName(dietPlanForm)) {
+      setFeedback({ open: true, message: 'Add at least one meal name before submitting the diet plan.', severity: 'error' });
+      return;
+    }
     try {
       const payload = {
         dietitianId,
         userId: clientId,
         memberName: dietPlanModal.client?.name || '',
-        breakfast: dietPlanForm.breakfast,
-        lunch: dietPlanForm.lunch,
-        dinner: dietPlanForm.dinner,
-        snacks: dietPlanForm.snacks,
+        breakfast: sanitizePlanSection(dietPlanForm.breakfast),
+        lunch: sanitizePlanSection(dietPlanForm.lunch),
+        dinner: sanitizePlanSection(dietPlanForm.dinner),
+        snacks: sanitizePlanSection(dietPlanForm.snacks),
         additionalNotes: dietPlanForm.additionalNotes,
       };
       const { data } = await upsertDietitianClientPlan(payload);
       const plan = data?.data;
-      if (plan?._id) {
-        await submitMealPlan(String(plan._id), dietitianId, true);
-      }
+      const planId = String(plan?._id || plan?.id || savedPlans[clientId]?.id || '');
+      if (!planId) throw new Error('Plan id is missing after save');
+      await submitMealPlan(planId, dietitianId, submitted);
       await loadDietitianMealsAndPlans();
       setDietPlanModal({ open: false, client: null });
-      setFeedback({ open: true, message: 'Diet plan saved successfully.', severity: 'success' });
-    } catch (error) {
       setFeedback({
         open: true,
-        message: error?.response?.data?.message || 'Failed to save diet plan.',
+        message: submitted ? 'Diet plan published successfully.' : 'Diet plan saved as draft.',
+        severity: 'success',
+      });
+    } catch (error) {
+      if (error?.response?.status === 409) {
+        setFeedback({
+          open: true,
+          message: 'This client plan is already submitted and locked.',
+          severity: 'error',
+        });
+        return;
+      }
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || (submitted ? 'Failed to publish diet plan.' : 'Failed to save draft.'),
         severity: 'error',
       });
     }
+  };
+
+  const saveDietPlanDraft = async () => {
+    await upsertAndMaybeSubmitDietPlan(false);
+  };
+
+  const publishDietPlan = async () => {
+    await upsertAndMaybeSubmitDietPlan(true);
   };
 
   const deleteDietPlan = async () => {
@@ -372,14 +410,14 @@ function DietitianClients() {
 
             {savedPlans[client.id] && (
               <Chip
-                label="Done"
+                label={savedPlans[client.id].isSubmitted ? 'Published' : 'Draft'}
                 size="small"
                 sx={{
                   mt: 1.2,
                   alignSelf: 'flex-start',
                   fontWeight: 800,
-                  bgcolor: '#22c55e1f',
-                  color: '#22c55e',
+                  bgcolor: savedPlans[client.id].isSubmitted ? '#22c55e1f' : '#f59e0b1f',
+                  color: savedPlans[client.id].isSubmitted ? '#22c55e' : '#f59e0b',
                 }}
               />
             )}
@@ -397,17 +435,19 @@ function DietitianClients() {
                     color: '#d4e2f8',
                   }}
                 >
-                  Edit
+                  {savedPlans[client.id].isSubmitted ? 'View' : 'Edit'}
                 </Button>
-                <Button
-                  size="small"
-                  color="error"
-                  variant="outlined"
-                  onClick={() => setConfirmDelete({ open: true, client })}
-                  sx={{ textTransform: 'none', fontWeight: 700 }}
-                >
-                  Delete
-                </Button>
+                {!savedPlans[client.id].isSubmitted && (
+                  <Button
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    onClick={() => setConfirmDelete({ open: true, client })}
+                    sx={{ textTransform: 'none', fontWeight: 700 }}
+                  >
+                    Delete
+                  </Button>
+                )}
               </Stack>
             ) : (
               <Button
@@ -473,6 +513,11 @@ function DietitianClients() {
           },
         }}
       >
+        {(() => {
+          const currentPlan = savedPlans[dietPlanModal.client?.id];
+          const isSubmittedPlan = Boolean(currentPlan?.isSubmitted);
+          return (
+            <>
         <DialogTitle sx={{ pr: 6 }}>
           <Typography sx={{ fontWeight: 800, fontSize: '2rem', color: '#f8fafc' }}>
             Create Diet Plan
@@ -497,7 +542,8 @@ function DietitianClients() {
         </DialogTitle>
 
         <DialogContent sx={{ overflowY: 'auto', pb: 2 }}>
-          <Stack spacing={2}>
+          <Box component="fieldset" disabled={isSubmittedPlan} sx={{ m: 0, p: 0, border: 'none' }}>
+            <Stack spacing={2}>
             {mealSections.map((section) => (
               <Box key={section.key}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.1 }}>
@@ -671,28 +717,56 @@ function DietitianClients() {
                 }}
               />
             </Box>
-          </Stack>
+            </Stack>
+          </Box>
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            variant="contained"
-            startIcon={<AddRoundedIcon />}
-            onClick={saveDietPlan}
-            fullWidth
-            sx={{
-              textTransform: 'none',
-              fontWeight: 800,
-              borderRadius: 1.2,
-              py: 1,
-              fontSize: '1rem',
-              backgroundColor: '#f30612',
-              '&:hover': { backgroundColor: '#cf0812' },
-            }}
-          >
-            Create Diet Plan
-          </Button>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ width: '100%' }}>
+            {!isSubmittedPlan && (
+              <>
+                <Button
+                  variant="outlined"
+                  onClick={saveDietPlanDraft}
+                  fullWidth
+                  sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.2, py: 1 }}
+                >
+                  Save Draft
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<AddRoundedIcon />}
+                  onClick={publishDietPlan}
+                  fullWidth
+                  sx={{
+                    textTransform: 'none',
+                    fontWeight: 800,
+                    borderRadius: 1.2,
+                    py: 1,
+                    fontSize: '1rem',
+                    backgroundColor: '#f30612',
+                    '&:hover': { backgroundColor: '#cf0812' },
+                  }}
+                >
+                  Publish Plan
+                </Button>
+              </>
+            )}
+            {isSubmittedPlan && (
+              <Button
+                variant="contained"
+                onClick={closeDietPlanModal}
+                fullWidth
+                sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.2, py: 1 }}
+              >
+                Close
+              </Button>
+            )}
+          </Stack>
         </DialogActions>
+            </>
+          );
+        })()}
       </Dialog>
 
       <Dialog

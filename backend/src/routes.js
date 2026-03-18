@@ -12,6 +12,9 @@ import { mealPlansRouter } from './modules/mealPlans/mealPlans.routes.js';
 import { progressRouter } from './modules/progress/progress.routes.js';
 import { promotionsRouter } from './modules/promotions/promotions.routes.js';
 import { nutritionRouter } from './modules/nutrition/nutrition.routes.js';
+import { feedbacksRouter } from './modules/feedbacks/feedbacks.routes.js';
+import { lockersRouter } from './modules/lockers/lockers.routes.js';
+import { faqsRouter } from './modules/faqs/faqs.routes.js';
 
 const router = Router();
 
@@ -28,5 +31,8 @@ router.use('/meal-plans', mealPlansRouter);
 router.use('/progress', progressRouter);
 router.use('/promotions', promotionsRouter);
 router.use('/nutrition', nutritionRouter);
+router.use('/feedbacks', feedbacksRouter);
+router.use('/lockers', lockersRouter);
+router.use('/faqs', faqsRouter);
 
 export { router as apiRouter };
