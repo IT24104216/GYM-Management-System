@@ -2,69 +2,15 @@ import { Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogCont
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import { useTheme } from '@mui/material/styles';
 import Rating from '@mui/material/Rating';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { deleteFeedback, getFeedbacks, updateFeedback } from '@/features/user/api/user.api';
 
-const FEEDBACK_STORAGE_KEY = 'gympro_feedbacks';
-
-const MOCK_FEEDBACKS = {
-  'Emma Carter': [
-    {
-      id: 'f1',
-      user: 'Nimal Perera',
-      authorEmail: 'nimal@gmail.com',
-      rating: 5,
-      comment: 'Very supportive coaching and clear workout guidance.',
-      date: '2026-03-02',
-    },
-    {
-      id: 'f2',
-      user: 'Kavindi Silva',
-      authorEmail: 'kavindi@gmail.com',
-      rating: 4,
-      comment: 'Great coach. Sessions are well structured and practical.',
-      date: '2026-02-18',
-    },
-  ],
-  'Noah Bennett': [
-    {
-      id: 'f3',
-      user: 'Ayesha Fernando',
-      authorEmail: 'ayesha@gmail.com',
-      rating: 5,
-      comment: 'Excellent functional training plan and good motivation.',
-      date: '2026-03-01',
-    },
-    {
-      id: 'f4',
-      user: 'Ruwan Jayasuriya',
-      authorEmail: 'ruwan@gmail.com',
-      rating: 4,
-      comment: 'Helpful trainer with clear instructions and follow-up.',
-      date: '2026-02-14',
-    },
-  ],
-  'Sophia Reed': [
-    {
-      id: 'f5',
-      user: 'Shani Wickramasinghe',
-      authorEmail: 'shani@gmail.com',
-      rating: 5,
-      comment: 'Perfect for beginners. I gained confidence quickly.',
-      date: '2026-02-10',
-    },
-  ],
-  'Liam Hayes': [
-    {
-      id: 'f6',
-      user: 'Dilan Mendis',
-      authorEmail: 'dilan@gmail.com',
-      rating: 4,
-      comment: 'Very knowledgeable for muscle gain strategy and form.',
-      date: '2026-01-28',
-    },
-  ],
+const formatDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
 };
 
 function UserCoachFeedbacks() {
@@ -72,31 +18,44 @@ function UserCoachFeedbacks() {
   const theme = useTheme();
   const [searchParams] = useSearchParams();
   const coachName = searchParams.get('coach') || 'Coach';
-  const [feedbacksByCoach, setFeedbacksByCoach] = useState(() => {
-    const rawFeedbacks = localStorage.getItem(FEEDBACK_STORAGE_KEY);
-    let storedFeedbacks = {};
-    try {
-      storedFeedbacks = rawFeedbacks ? JSON.parse(rawFeedbacks) : {};
-    } catch {
-      storedFeedbacks = {};
-    }
-
-    const merged = { ...MOCK_FEEDBACKS };
-    Object.keys(storedFeedbacks).forEach((coachKey) => {
-      const persisted = Array.isArray(storedFeedbacks[coachKey]) ? storedFeedbacks[coachKey] : [];
-      const base = Array.isArray(merged[coachKey]) ? merged[coachKey] : [];
-      merged[coachKey] = [...persisted, ...base];
-    });
-    return merged;
-  });
+  const coachId = searchParams.get('coachId') || '';
+  const [feedbacks, setFeedbacks] = useState([]);
   const [editingFeedback, setEditingFeedback] = useState(null);
   const [editingForm, setEditingForm] = useState({ rating: 0, comment: '' });
   const [editingError, setEditingError] = useState('');
 
-  const feedbacks = useMemo(
-    () => feedbacksByCoach[coachName] || [],
-    [coachName, feedbacksByCoach],
-  );
+  const loadFeedbacks = async () => {
+    try {
+      const { data } = await getFeedbacks({
+        subjectType: 'coach',
+        ...(coachId ? { subjectId: coachId } : {}),
+        page: 1,
+        limit: 300,
+      });
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      const normalized = rows
+        .filter((row) => {
+          const byId = coachId && String(row.subjectId || '') === String(coachId);
+          const byName = String(row.subjectName || '').trim() === coachName;
+          return Boolean(byId || byName);
+        })
+        .map((row) => ({
+          id: row.id,
+          ownerId: String(row.ownerId),
+          user: row.ownerName || 'Member',
+          rating: Number(row.rating || 0),
+          comment: row.comment || '',
+          date: formatDate(row.createdAt),
+        }));
+      setFeedbacks(normalized);
+    } catch {
+      setFeedbacks([]);
+    }
+  };
+
+  useEffect(() => {
+    loadFeedbacks();
+  }, [coachId, coachName]);
 
   const averageRating = useMemo(() => {
     if (!feedbacks.length) return 0;
@@ -104,11 +63,13 @@ function UserCoachFeedbacks() {
     return (total / feedbacks.length).toFixed(1);
   }, [feedbacks]);
 
-  const handleDeleteFeedback = (feedbackId) => {
-    setFeedbacksByCoach((prev) => ({
-      ...prev,
-      [coachName]: (prev[coachName] || []).filter((item) => item.id !== feedbackId),
-    }));
+  const handleDeleteFeedback = async (feedbackId) => {
+    try {
+      await deleteFeedback(feedbackId, String(user?.id || ''));
+      await loadFeedbacks();
+    } catch (error) {
+      setEditingError(error?.response?.data?.message || 'Failed to delete feedback');
+    }
   };
 
   const handleOpenEdit = (feedback) => {
@@ -122,23 +83,24 @@ function UserCoachFeedbacks() {
     setEditingError('');
   };
 
-  const handleEditSubmit = (event) => {
+  const handleEditSubmit = async (event) => {
     event.preventDefault();
     if (!editingForm.rating) {
       setEditingError('Please select a rating.');
       return;
     }
 
-    setFeedbacksByCoach((prev) => ({
-      ...prev,
-      [coachName]: (prev[coachName] || []).map((item) => (
-        item.id === editingFeedback?.id
-          ? { ...item, rating: editingForm.rating, comment: editingForm.comment }
-          : item
-      )),
-    }));
-
-    handleCloseEdit();
+    try {
+      await updateFeedback(editingFeedback?.id, {
+        ownerId: String(user?.id || ''),
+        rating: editingForm.rating,
+        comment: editingForm.comment,
+      });
+      await loadFeedbacks();
+      handleCloseEdit();
+    } catch (error) {
+      setEditingError(error?.response?.data?.message || 'Failed to update feedback');
+    }
   };
 
   return (
@@ -197,7 +159,7 @@ function UserCoachFeedbacks() {
                     {item.comment}
                   </Typography>
 
-                  {item.authorEmail === user?.email && (
+                  {item.ownerId === String(user?.id || '') && (
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
                       <Button
                         size="small"

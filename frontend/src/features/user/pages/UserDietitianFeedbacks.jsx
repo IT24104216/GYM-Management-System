@@ -15,69 +15,15 @@ import {
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import { useTheme } from '@mui/material/styles';
 import Rating from '@mui/material/Rating';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { deleteFeedback, getFeedbacks, updateFeedback } from '@/features/user/api/user.api';
 
-const DIETITIAN_FEEDBACK_STORAGE_KEY = 'gympro_dietitian_feedbacks';
-
-const MOCK_DIETITIAN_FEEDBACKS = {
-  'Olivia Martin': [
-    {
-      id: 'df1',
-      user: 'Nimal Perera',
-      authorEmail: 'nimal@gmail.com',
-      rating: 5,
-      comment: 'Practical meal plan and excellent follow-up support.',
-      date: '2026-03-04',
-    },
-    {
-      id: 'df2',
-      user: 'Kavindi Silva',
-      authorEmail: 'kavindi@gmail.com',
-      rating: 4,
-      comment: 'Good nutrition guidance and easy recipes to follow.',
-      date: '2026-02-22',
-    },
-  ],
-  'Daniel Perera': [
-    {
-      id: 'df3',
-      user: 'Ayesha Fernando',
-      authorEmail: 'ayesha@gmail.com',
-      rating: 5,
-      comment: 'Great advice for performance nutrition and recovery.',
-      date: '2026-03-01',
-    },
-    {
-      id: 'df4',
-      user: 'Ruwan Jayasuriya',
-      authorEmail: 'ruwan@gmail.com',
-      rating: 4,
-      comment: 'Clear supplement and macro strategy for training days.',
-      date: '2026-02-16',
-    },
-  ],
-  'Ayesha Fernando': [
-    {
-      id: 'df5',
-      user: 'Shani Wickramasinghe',
-      authorEmail: 'shani@gmail.com',
-      rating: 5,
-      comment: 'Perfect plan for diabetes-friendly meals and habits.',
-      date: '2026-02-11',
-    },
-  ],
-  'Michael Silva': [
-    {
-      id: 'df6',
-      user: 'Dilan Mendis',
-      authorEmail: 'dilan@gmail.com',
-      rating: 4,
-      comment: 'Very knowledgeable on gut health and food intolerance.',
-      date: '2026-01-30',
-    },
-  ],
+const formatDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
 };
 
 function UserDietitianFeedbacks() {
@@ -85,31 +31,44 @@ function UserDietitianFeedbacks() {
   const theme = useTheme();
   const [searchParams] = useSearchParams();
   const dietitianName = searchParams.get('dietitian') || 'Dietitian';
-  const [feedbacksByDietitian, setFeedbacksByDietitian] = useState(() => {
-    const rawFeedbacks = localStorage.getItem(DIETITIAN_FEEDBACK_STORAGE_KEY);
-    let storedFeedbacks = {};
-    try {
-      storedFeedbacks = rawFeedbacks ? JSON.parse(rawFeedbacks) : {};
-    } catch {
-      storedFeedbacks = {};
-    }
-
-    const merged = { ...MOCK_DIETITIAN_FEEDBACKS };
-    Object.keys(storedFeedbacks).forEach((dietitianKey) => {
-      const persisted = Array.isArray(storedFeedbacks[dietitianKey]) ? storedFeedbacks[dietitianKey] : [];
-      const base = Array.isArray(merged[dietitianKey]) ? merged[dietitianKey] : [];
-      merged[dietitianKey] = [...persisted, ...base];
-    });
-    return merged;
-  });
+  const dietitianId = searchParams.get('dietitianId') || '';
+  const [feedbacks, setFeedbacks] = useState([]);
   const [editingFeedback, setEditingFeedback] = useState(null);
   const [editingForm, setEditingForm] = useState({ rating: 0, comment: '' });
   const [editingError, setEditingError] = useState('');
 
-  const feedbacks = useMemo(
-    () => feedbacksByDietitian[dietitianName] || [],
-    [dietitianName, feedbacksByDietitian],
-  );
+  const loadFeedbacks = async () => {
+    try {
+      const { data } = await getFeedbacks({
+        subjectType: 'dietitian',
+        ...(dietitianId ? { subjectId: dietitianId } : {}),
+        page: 1,
+        limit: 300,
+      });
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      const normalized = rows
+        .filter((row) => {
+          const byId = dietitianId && String(row.subjectId || '') === String(dietitianId);
+          const byName = String(row.subjectName || '').trim() === dietitianName;
+          return Boolean(byId || byName);
+        })
+        .map((row) => ({
+          id: row.id,
+          ownerId: String(row.ownerId),
+          user: row.ownerName || 'Member',
+          rating: Number(row.rating || 0),
+          comment: row.comment || '',
+          date: formatDate(row.createdAt),
+        }));
+      setFeedbacks(normalized);
+    } catch {
+      setFeedbacks([]);
+    }
+  };
+
+  useEffect(() => {
+    loadFeedbacks();
+  }, [dietitianId, dietitianName]);
 
   const averageRating = useMemo(() => {
     if (!feedbacks.length) return 0;
@@ -117,11 +76,13 @@ function UserDietitianFeedbacks() {
     return (total / feedbacks.length).toFixed(1);
   }, [feedbacks]);
 
-  const handleDeleteFeedback = (feedbackId) => {
-    setFeedbacksByDietitian((prev) => ({
-      ...prev,
-      [dietitianName]: (prev[dietitianName] || []).filter((item) => item.id !== feedbackId),
-    }));
+  const handleDeleteFeedback = async (feedbackId) => {
+    try {
+      await deleteFeedback(feedbackId, String(user?.id || ''));
+      await loadFeedbacks();
+    } catch (error) {
+      setEditingError(error?.response?.data?.message || 'Failed to delete feedback');
+    }
   };
 
   const handleOpenEdit = (feedback) => {
@@ -135,23 +96,24 @@ function UserDietitianFeedbacks() {
     setEditingError('');
   };
 
-  const handleEditSubmit = (event) => {
+  const handleEditSubmit = async (event) => {
     event.preventDefault();
     if (!editingForm.rating) {
       setEditingError('Please select a rating.');
       return;
     }
 
-    setFeedbacksByDietitian((prev) => ({
-      ...prev,
-      [dietitianName]: (prev[dietitianName] || []).map((item) => (
-        item.id === editingFeedback?.id
-          ? { ...item, rating: editingForm.rating, comment: editingForm.comment }
-          : item
-      )),
-    }));
-
-    handleCloseEdit();
+    try {
+      await updateFeedback(editingFeedback?.id, {
+        ownerId: String(user?.id || ''),
+        rating: editingForm.rating,
+        comment: editingForm.comment,
+      });
+      await loadFeedbacks();
+      handleCloseEdit();
+    } catch (error) {
+      setEditingError(error?.response?.data?.message || 'Failed to update feedback');
+    }
   };
 
   return (
@@ -210,7 +172,7 @@ function UserDietitianFeedbacks() {
                     {item.comment}
                   </Typography>
 
-                  {item.authorEmail === user?.email && (
+                  {item.ownerId === String(user?.id || '') && (
                     <Stack direction="row" spacing={1} justifyContent="flex-end">
                       <Button
                         size="small"
