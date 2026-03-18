@@ -9,6 +9,10 @@ import {
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
+import {
+  createNotification,
+  createNotificationForAdmins,
+} from '../notifications/notifications.service.js';
 
 function parseOrThrow(schema, payload) {
   const result = schema.safeParse(payload);
@@ -22,6 +26,18 @@ function buildDateRange(dateText) {
   const start = new Date(`${dateText}T00:00:00.000Z`);
   const end = new Date(`${dateText}T23:59:59.999Z`);
   return { start, end };
+}
+
+function getProviderLabel(sessionType) {
+  return sessionType === 'nutrition' ? 'dietitian' : 'coach';
+}
+
+function statusToTitle(status) {
+  if (status === 'approved') return 'Booking Approved';
+  if (status === 'rejected') return 'Booking Rejected';
+  if (status === 'cancelled') return 'Booking Cancelled';
+  if (status === 'completed') return 'Session Completed';
+  return 'Booking Updated';
 }
 
 export const createAppointment = asyncHandler(async (req, res) => {
@@ -46,6 +62,35 @@ export const createAppointment = asyncHandler(async (req, res) => {
   }
 
   const created = await Appointment.create(payload);
+
+  await Promise.allSettled([
+    createNotification({
+      recipientId: payload.userId,
+      recipientRole: 'user',
+      type: 'booking',
+      title: 'Booking Request Sent',
+      message: `Your ${payload.sessionType} booking request was submitted successfully.`,
+      entityType: 'appointment',
+      entityId: String(created._id),
+    }),
+    payload[providerField]
+      ? createNotification({
+          recipientId: payload[providerField],
+          recipientRole: payload.sessionType === 'nutrition' ? 'dietitian' : 'coach',
+          type: 'booking',
+          title: 'New Booking Request',
+          message: `You received a new ${payload.sessionType} booking request.`,
+          entityType: 'appointment',
+          entityId: String(created._id),
+        })
+      : Promise.resolve(null),
+    createNotificationForAdmins({
+      title: 'New Booking Received',
+      message: `A new ${payload.sessionType} booking request was created.`,
+      entityType: 'appointment',
+      entityId: String(created._id),
+    }),
+  ]);
 
   res.status(HTTP_STATUS.CREATED).json({
     message: 'Appointment created successfully',
@@ -112,6 +157,24 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
   }
 
   await item.save();
+
+  await Promise.allSettled([
+    createNotification({
+      recipientId: item.userId,
+      recipientRole: 'user',
+      type: 'booking',
+      title: statusToTitle(payload.status),
+      message: `Your booking was ${payload.status} by ${getProviderLabel(item.sessionType)}.`,
+      entityType: 'appointment',
+      entityId: String(item._id),
+    }),
+    createNotificationForAdmins({
+      title: 'Booking Status Changed',
+      message: `A booking was marked as ${payload.status}.`,
+      entityType: 'appointment',
+      entityId: String(item._id),
+    }),
+  ]);
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Appointment status updated',

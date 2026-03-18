@@ -3,6 +3,10 @@ import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { User } from '../users/users.model.js';
+import {
+  createNotification,
+  createNotificationForAdmins,
+} from '../notifications/notifications.service.js';
 import { CoachProfile } from './coachProfile.model.js';
 import { CoachScheduling } from './coachScheduling.model.js';
 
@@ -219,6 +223,24 @@ export const upsertCoachProfile = asyncHandler(async (req, res) => {
     { new: true, upsert: true, setDefaultsOnInsert: true },
   );
 
+  await Promise.allSettled([
+    createNotification({
+      recipientId: coachId,
+      recipientRole: 'coach',
+      type: 'profile',
+      title: 'Profile Updated',
+      message: 'Your coach profile was updated successfully.',
+      entityType: 'coach-profile',
+      entityId: String(profile?._id || ''),
+    }),
+    createNotificationForAdmins({
+      title: 'Coach Profile Updated',
+      message: `${coachUser.name} updated coach profile details.`,
+      entityType: 'coach-profile',
+      entityId: String(profile?._id || ''),
+    }),
+  ]);
+
   res.status(HTTP_STATUS.OK).json({
     message: 'Coach profile saved successfully',
     data: toProfileDto(coachUser, profile),
@@ -232,6 +254,24 @@ export const deleteCoachProfile = asyncHandler(async (req, res) => {
   }
 
   await CoachProfile.findOneAndDelete({ coachId });
+
+  await Promise.allSettled([
+    createNotification({
+      recipientId: coachId,
+      recipientRole: 'coach',
+      type: 'profile',
+      title: 'Profile Deleted',
+      message: 'Your coach profile was deleted.',
+      entityType: 'coach-profile',
+      entityId: coachId,
+    }),
+    createNotificationForAdmins({
+      title: 'Coach Profile Deleted',
+      message: `A coach profile was deleted for coach id ${coachId}.`,
+      entityType: 'coach-profile',
+      entityId: coachId,
+    }),
+  ]);
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Coach profile deleted successfully',

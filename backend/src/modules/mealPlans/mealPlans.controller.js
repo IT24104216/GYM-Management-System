@@ -7,6 +7,10 @@ import { DietitianProfile } from '../dietitian/dietitianProfile.model.js';
 import { DietPlan, FoodLog, MealLibraryItem } from './mealPlans.model.js';
 import { NutritionFood } from '../nutrition/nutrition.model.js';
 import {
+  createNotification,
+  createNotificationForAdmins,
+} from '../notifications/notifications.service.js';
+import {
   createFoodLogSchema,
   createMealLibrarySchema,
   foodLogOwnerQuerySchema,
@@ -235,6 +239,26 @@ export const submitDietPlan = asyncHandler(async (req, res) => {
   plan.isSubmitted = Boolean(payload.submitted);
   plan.submittedAt = plan.isSubmitted ? new Date() : null;
   await plan.save();
+
+  if (plan.isSubmitted) {
+    await Promise.allSettled([
+      createNotification({
+        recipientId: plan.userId,
+        recipientRole: 'user',
+        type: 'meal',
+        title: 'Meal Plan Published',
+        message: 'Your dietitian submitted your meal plan.',
+        entityType: 'meal-plan',
+        entityId: String(plan._id),
+      }),
+      createNotificationForAdmins({
+        title: 'Meal Plan Submitted',
+        message: 'A dietitian submitted a meal plan for a client.',
+        entityType: 'meal-plan',
+        entityId: String(plan._id),
+      }),
+    ]);
+  }
 
   res.status(HTTP_STATUS.OK).json({
     message: plan.isSubmitted ? 'Diet plan submitted successfully' : 'Diet plan moved to draft',

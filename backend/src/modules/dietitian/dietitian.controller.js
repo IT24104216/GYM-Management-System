@@ -2,6 +2,10 @@ import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { User } from '../users/users.model.js';
+import {
+  createNotification,
+  createNotificationForAdmins,
+} from '../notifications/notifications.service.js';
 import { DietitianProfile } from './dietitianProfile.model.js';
 import { DietitianScheduling } from './dietitianScheduling.model.js';
 import {
@@ -188,6 +192,24 @@ export const upsertDietitianProfile = asyncHandler(async (req, res) => {
     { new: true, upsert: true, setDefaultsOnInsert: true },
   );
 
+  await Promise.allSettled([
+    createNotification({
+      recipientId: dietitianId,
+      recipientRole: 'dietitian',
+      type: 'profile',
+      title: 'Profile Updated',
+      message: 'Your dietitian profile was updated successfully.',
+      entityType: 'dietitian-profile',
+      entityId: String(profile?._id || ''),
+    }),
+    createNotificationForAdmins({
+      title: 'Dietitian Profile Updated',
+      message: `${dietitianUser.name} updated dietitian profile details.`,
+      entityType: 'dietitian-profile',
+      entityId: String(profile?._id || ''),
+    }),
+  ]);
+
   res.status(HTTP_STATUS.OK).json({
     message: 'Dietitian profile saved successfully',
     data: toProfileDto(dietitianUser, profile),
@@ -197,6 +219,24 @@ export const upsertDietitianProfile = asyncHandler(async (req, res) => {
 export const deleteDietitianProfile = asyncHandler(async (req, res) => {
   const { dietitianId } = parseOrThrow(dietitianIdParamsSchema, req.params);
   await DietitianProfile.findOneAndDelete({ dietitianId });
+
+  await Promise.allSettled([
+    createNotification({
+      recipientId: dietitianId,
+      recipientRole: 'dietitian',
+      type: 'profile',
+      title: 'Profile Deleted',
+      message: 'Your dietitian profile was deleted.',
+      entityType: 'dietitian-profile',
+      entityId: dietitianId,
+    }),
+    createNotificationForAdmins({
+      title: 'Dietitian Profile Deleted',
+      message: `A dietitian profile was deleted for dietitian id ${dietitianId}.`,
+      entityType: 'dietitian-profile',
+      entityId: dietitianId,
+    }),
+  ]);
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Dietitian profile deleted successfully',
@@ -347,4 +387,3 @@ export const deleteDietitianSlot = asyncHandler(async (req, res) => {
     message: 'Time slot deleted successfully',
   });
 });
-

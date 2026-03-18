@@ -4,6 +4,10 @@ import { env } from '../../config/env.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
+import {
+  createNotification,
+  createNotificationForAdmins,
+} from '../notifications/notifications.service.js';
 import { ExerciseCategory, WorkoutPlan } from './workouts.model.js';
 import {
   categoryIdParamsSchema,
@@ -432,6 +436,24 @@ export const submitWorkoutPlan = asyncHandler(async (req, res) => {
     plan.submittedAt = allWeeksPublished ? new Date() : null;
     await plan.save();
 
+    await Promise.allSettled([
+      createNotification({
+        recipientId: plan.userId,
+        recipientRole: 'user',
+        type: 'workout',
+        title: `Week ${weekNumber} Workout Published`,
+        message: `Your coach published week ${weekNumber} of your workout plan.`,
+        entityType: 'workout-plan',
+        entityId: String(plan._id),
+      }),
+      createNotificationForAdmins({
+        title: 'Workout Week Published',
+        message: `Coach published week ${weekNumber} for a client workout plan.`,
+        entityType: 'workout-plan',
+        entityId: String(plan._id),
+      }),
+    ]);
+
     return res.status(HTTP_STATUS.OK).json({
       message: allWeeksPublished
         ? 'Workout plan submitted successfully'
@@ -453,6 +475,24 @@ export const submitWorkoutPlan = asyncHandler(async (req, res) => {
   plan.submittedAt = plan.isSubmitted ? new Date() : null;
 
   await plan.save();
+
+  await Promise.allSettled([
+    createNotification({
+      recipientId: plan.userId,
+      recipientRole: 'user',
+      type: 'workout',
+      title: 'Workout Plan Published',
+      message: 'Your coach published your full workout plan.',
+      entityType: 'workout-plan',
+      entityId: String(plan._id),
+    }),
+    createNotificationForAdmins({
+      title: 'Workout Plan Submitted',
+      message: 'A coach submitted a full workout plan for a client.',
+      entityType: 'workout-plan',
+      entityId: String(plan._id),
+    }),
+  ]);
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Workout plan submitted successfully',
