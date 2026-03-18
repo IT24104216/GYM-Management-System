@@ -87,3 +87,26 @@ export const saveUserMeasurement = (userId, data) =>
 
 export const getPublicPromotions = (params = {}) =>
   axiosClient.get('/promotions/public', { params });
+
+export const getFeedbacks = (params = {}) =>
+  axiosClient.get('/feedbacks/list', { params });
+
+export const createFeedback = (data) =>
+  axiosClient.post('/feedbacks', data);
+
+export const updateFeedback = (id, data) =>
+  axiosClient.put(`/feedbacks/${id}`, data);
+
+export const deleteFeedback = (id, ownerId) =>
+  axiosClient.delete(`/feedbacks/${id}`, {
+    data: { ownerId },
+  });
+
+export const getUserLockers = (params = {}) =>
+  axiosClient.get('/lockers/list', { params });
+
+export const getUserLockerBookings = (params = {}) =>
+  axiosClient.get('/lockers/bookings', { params });
+
+export const createLockerBookingRequest = (data) =>
+  axiosClient.post('/lockers/bookings', data);
