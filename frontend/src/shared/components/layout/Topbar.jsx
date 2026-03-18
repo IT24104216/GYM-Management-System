@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Button,
@@ -30,6 +30,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useAppTheme } from '@/shared/hooks/useAppTheme';
 import { ROUTES, ROLES } from '@/shared/utils/constants';
+import {
+  getUserNotifications,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+} from '@/shared/api/notifications.api';
 import {
   deleteCoachProfile as deleteCoachProfileApi,
   getCoachProfile as getCoachProfileApi,
@@ -75,40 +80,27 @@ const defaultCoachProfile = {
   joinedDate: '',
 };
 
-const initialNotifications = [
-  {
-    id: 1,
-    title: 'New Workout Assigned',
-    message: 'Coach Marcus added "Upper Body Power" to your schedule.',
-    time: '2h ago',
-    read: false,
-    type: 'workout',
-  },
-  {
-    id: 2,
-    title: 'Appointment Confirmed',
-    message: 'Your consultation with Dr. Sarah is confirmed for tomorrow.',
-    time: '5h ago',
-    read: false,
-    type: 'appointment',
-  },
-  {
-    id: 3,
-    title: 'Goal Reached!',
-    message: 'Congratulations! You hit your protein goal 7 days in a row.',
-    time: '1d ago',
-    read: true,
-    type: 'achievement',
-  },
-  {
-    id: 4,
-    title: 'System Update',
-    message: 'We have updated our privacy policy.',
-    time: '2d ago',
-    read: true,
-    type: 'system',
-  },
-];
+const roleToApiRole = {
+  [ROLES.USER]: 'user',
+  [ROLES.COACH]: 'coach',
+  [ROLES.DIETITIAN]: 'dietitian',
+  [ROLES.ADMIN]: 'admin',
+};
+
+const isExternalUrl = (value = '') => /^https?:\/\//i.test(String(value || '').trim());
+
+const toRelativeTime = (input) => {
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return 'just now';
+  const diffMs = Math.max(Date.now() - date.getTime(), 0);
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+};
 
 const hasProfileData = (profile) =>
   Boolean(
@@ -162,7 +154,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [coachFeedbackOpen, setCoachFeedbackOpen] = useState(false);
   const [coachDeleteFeedbackOpen, setCoachDeleteFeedbackOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const [notifications, setNotifications] = useState([]);
   const [dietitianProfile, setDietitianProfile] = useState(defaultDietitianProfile);
   const [editDietitianProfile, setEditDietitianProfile] = useState(defaultDietitianProfile);
   const [userProfile, setUserProfile] = useState(defaultUserProfile);
@@ -174,6 +166,44 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const isMemberUser = user?.role === ROLES.USER;
   const isCoach = user?.role === ROLES.COACH;
   const userProfileStorageKey = `${USER_PROFILE_STORAGE_KEY}.${user?.id || 'guest'}`;
+  const notificationRole = roleToApiRole[user?.role] || 'user';
+
+  useEffect(() => {
+    let isMounted = true;
+    const userId = String(user?.id || '');
+
+    const loadNotifications = async () => {
+      if (!userId) return;
+      try {
+        const { data } = await getUserNotifications({
+          userId,
+          role: notificationRole,
+          limit: 80,
+        });
+        if (!isMounted) return;
+        const rows = Array.isArray(data?.data) ? data.data : [];
+        setNotifications(rows.map((item) => ({
+          id: item.id,
+          title: item.title,
+          message: item.message,
+          time: toRelativeTime(item.time || item.createdAt),
+          read: Boolean(item.read),
+          type: item.type || 'system',
+          entityType: item.entityType || '',
+          actionUrl: item.actionUrl || '',
+        })));
+      } catch {
+        if (isMounted) setNotifications([]);
+      }
+    };
+
+    loadNotifications();
+    const intervalId = setInterval(loadNotifications, 15000);
+    return () => {
+      clearInterval(intervalId);
+      isMounted = false;
+    };
+  }, [user?.id, notificationRole]);
 
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -343,16 +373,54 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
 
   const unreadNotifications = notifications.filter((item) => !item.read).length;
 
-  const markAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+  const markAllNotificationsRead = async () => {
+    const userId = String(user?.id || '');
+    if (!userId) return;
+    try {
+      await markAllNotificationsAsRead({
+        userId,
+        role: notificationRole,
+      });
+      setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+    } catch {
+      // keep existing UI behavior
+    }
   };
 
-  const markNotificationRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, read: true } : item,
-      ),
+  const markNotificationRead = async (id) => {
+    const userId = String(user?.id || '');
+    if (!userId) return;
+    try {
+      await markNotificationAsRead(id, {
+        userId,
+        role: notificationRole,
+      });
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === id ? { ...item, read: true } : item,
+        ),
+      );
+    } catch {
+      // keep existing UI behavior
+    }
+  };
+
+  const handleNotificationClick = async (notif) => {
+    if (!notif?.id) return;
+    await markNotificationRead(notif.id);
+
+    const canOpenPromotionLink = (
+      notif.type === 'promotion'
+      && notif.entityType === 'promotion-homepage'
+      && notif.actionUrl
     );
+    if (!canOpenPromotionLink) return;
+
+    if (isExternalUrl(notif.actionUrl)) {
+      window.open(notif.actionUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    navigate(notif.actionUrl);
   };
 
   return (
@@ -1510,6 +1578,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
           notifications={notifications}
           onMarkAllRead={markAllNotificationsRead}
           onMarkRead={markNotificationRead}
+          onNotificationClick={handleNotificationClick}
         />
       </Toolbar>
     </AppBar>
