@@ -14,3 +14,12 @@ export const env = {
   CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
   USDA_API_KEY: process.env.USDA_API_KEY || '',
 };
+
+if (env.NODE_ENV !== 'test') {
+  if (!env.JWT_ACCESS_SECRET) {
+    throw new Error('JWT_ACCESS_SECRET is required');
+  }
+  if (!env.JWT_REFRESH_SECRET) {
+    throw new Error('JWT_REFRESH_SECRET is required');
+  }
+}

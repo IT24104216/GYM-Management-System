@@ -40,8 +40,24 @@ function statusToTitle(status) {
   return 'Booking Updated';
 }
 
+function enforceAppointmentAccess(item, authUser) {
+  const role = String(authUser?.role || '');
+  const authUserId = String(authUser?.id || '');
+  if (!item || !role || !authUserId) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
+  if (role === 'admin') return;
+  if (role === 'user' && String(item.userId) === authUserId) return;
+  if (role === 'coach' && String(item.coachId || '') === authUserId) return;
+  if (role === 'dietitian' && String(item.dietitianId || '') === authUserId) return;
+  throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+}
+
 export const createAppointment = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(createAppointmentSchema, req.body);
+  if (req.user?.role !== 'admin' && String(payload.userId) !== String(req.user?.id || '')) {
+    throw new AppError('Forbidden: userId mismatch', HTTP_STATUS.FORBIDDEN);
+  }
   const providerField = payload.sessionType === 'nutrition' ? 'dietitianId' : 'coachId';
   const providerValue = payload[providerField];
 
@@ -100,11 +116,23 @@ export const createAppointment = asyncHandler(async (req, res) => {
 
 export const getAppointments = asyncHandler(async (req, res) => {
   const query = parseOrThrow(appointmentQuerySchema, req.query);
+  const authRole = String(req.user?.role || '');
+  const authUserId = String(req.user?.id || '');
 
   const filter = {};
-  if (query.coachId) filter.coachId = query.coachId;
-  if (query.dietitianId) filter.dietitianId = query.dietitianId;
-  if (query.userId) filter.userId = query.userId;
+  if (authRole === 'admin') {
+    if (query.coachId) filter.coachId = query.coachId;
+    if (query.dietitianId) filter.dietitianId = query.dietitianId;
+    if (query.userId) filter.userId = query.userId;
+  } else if (authRole === 'user') {
+    filter.userId = authUserId;
+  } else if (authRole === 'coach') {
+    filter.coachId = authUserId;
+  } else if (authRole === 'dietitian') {
+    filter.dietitianId = authUserId;
+  } else {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
   if (query.status) filter.status = query.status;
   if (query.sessionType) filter.sessionType = query.sessionType;
 
@@ -138,6 +166,7 @@ export const getAppointmentById = asyncHandler(async (req, res) => {
   if (!item) {
     throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
   }
+  enforceAppointmentAccess(item, req.user);
 
   res.status(HTTP_STATUS.OK).json({ data: item });
 });
@@ -149,6 +178,10 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
   const item = await Appointment.findById(id);
   if (!item) {
     throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
+  }
+  enforceAppointmentAccess(item, req.user);
+  if (req.user?.role === 'user') {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
   }
 
   item.status = payload.status;
@@ -190,6 +223,10 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   if (!item) {
     throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
   }
+  enforceAppointmentAccess(item, req.user);
+  if (!['admin', 'user'].includes(String(req.user?.role || ''))) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
 
   const providerField = item.sessionType === 'nutrition' ? 'dietitianId' : 'coachId';
   const providerValue = item[providerField];
@@ -225,10 +262,15 @@ export const updateAppointment = asyncHandler(async (req, res) => {
 export const deleteAppointment = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(appointmentIdParamsSchema, req.params);
 
-  const deleted = await Appointment.findByIdAndDelete(id);
-  if (!deleted) {
+  const item = await Appointment.findById(id);
+  if (!item) {
     throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
   }
+  enforceAppointmentAccess(item, req.user);
+  if (!['admin', 'user'].includes(String(req.user?.role || ''))) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
+  await item.deleteOne();
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Appointment deleted successfully',

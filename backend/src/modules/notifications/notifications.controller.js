@@ -44,6 +44,24 @@ const toDto = (item) => ({
   actionUrl: item.actionUrl || '',
 });
 
+const getScopedNotificationOwner = (req, userId, role) => {
+  const authUserId = String(req.user?.id || '');
+  const authRole = String(req.user?.role || '');
+  if (!authUserId || !authRole) {
+    throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+  }
+  if (authRole === 'admin') {
+    return {
+      userId: String(userId || ''),
+      role: String(role || 'user'),
+    };
+  }
+  return {
+    userId: authUserId,
+    role: authRole,
+  };
+};
+
 export const getnotificationsStatus = (_req, res) => {
   res.json({
     module: 'notifications',
@@ -53,9 +71,10 @@ export const getnotificationsStatus = (_req, res) => {
 
 export const getNotifications = asyncHandler(async (req, res) => {
   const query = parseOrThrow(querySchema, req.query || {});
+  const scope = getScopedNotificationOwner(req, query.userId, query.role);
   const rows = await Notification.find({
-    recipientId: query.userId,
-    recipientRole: query.role,
+    recipientId: scope.userId,
+    recipientRole: scope.role,
   })
     .sort({ createdAt: -1 })
     .limit(query.limit);
@@ -68,11 +87,12 @@ export const getNotifications = asyncHandler(async (req, res) => {
 export const markNotificationRead = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(idParamsSchema, req.params);
   const payload = parseOrThrow(markBodySchema, req.body || {});
+  const scope = getScopedNotificationOwner(req, payload.userId, payload.role);
 
   const row = await Notification.findOne({
     _id: id,
-    recipientId: payload.userId,
-    recipientRole: payload.role,
+    recipientId: scope.userId,
+    recipientRole: scope.role,
   });
 
   if (!row) {
@@ -90,11 +110,12 @@ export const markNotificationRead = asyncHandler(async (req, res) => {
 
 export const markAllNotificationsRead = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(markBodySchema, req.body || {});
+  const scope = getScopedNotificationOwner(req, payload.userId, payload.role);
 
   await Notification.updateMany(
     {
-      recipientId: payload.userId,
-      recipientRole: payload.role,
+      recipientId: scope.userId,
+      recipientRole: scope.role,
       isRead: false,
     },
     { $set: { isRead: true } },

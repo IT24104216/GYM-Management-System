@@ -41,7 +41,7 @@ function signAccessToken(user) {
       email: user.email,
       name: user.name,
     },
-    env.JWT_ACCESS_SECRET || 'dev_access_secret',
+    env.JWT_ACCESS_SECRET,
     { expiresIn: '7d' }
   );
 }
@@ -52,7 +52,7 @@ function signRefreshToken(user) {
       sub: user.id,
       role: user.role,
     },
-    env.JWT_REFRESH_SECRET || 'dev_refresh_secret',
+    env.JWT_REFRESH_SECRET,
     { expiresIn: '30d' }
   );
 }
@@ -148,7 +148,7 @@ export const refresh = asyncHandler(async (req, res) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(payload.token, env.JWT_REFRESH_SECRET || 'dev_refresh_secret');
+    decoded = jwt.verify(payload.token, env.JWT_REFRESH_SECRET);
   } catch {
     throw new AppError('Invalid refresh token', HTTP_STATUS.UNAUTHORIZED);
   }
