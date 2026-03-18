@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { DEFAULT_BRANCH } from '../../shared/constants/branches.js';
 
 const userSchema = new mongoose.Schema(
   {
@@ -31,6 +32,12 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ['active', 'inactive', 'suspended'],
       default: 'active',
+    },
+    branch: {
+      type: String,
+      trim: true,
+      default: DEFAULT_BRANCH,
+      index: true,
     },
     roleChangedAt: {
       type: Date,

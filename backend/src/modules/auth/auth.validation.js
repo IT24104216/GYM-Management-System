@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { BRANCH_OPTIONS } from '../../shared/constants/branches.js';
 
 export const registerSchema = z.object({
   name: z.string().trim().min(2).max(80),
   email: z.string().trim().email(),
+  branch: z.enum(BRANCH_OPTIONS),
   password: z
     .string()
     .min(8, 'password must be at least 8 characters')

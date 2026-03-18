@@ -5,6 +5,7 @@ import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { env } from '../../config/env.js';
+import { createNotificationForAdmins } from '../notifications/notifications.service.js';
 import { loginSchema, refreshSchema, registerSchema } from './auth.validation.js';
 
 function parseOrThrow(schema, payload) {
@@ -28,6 +29,7 @@ function toPublicUser(userDoc) {
     email: userDoc.email,
     role: normalizedRole,
     status: userDoc.status,
+    branch: userDoc.branch || '',
   };
 }
 
@@ -68,6 +70,7 @@ export const register = asyncHandler(async (req, res) => {
   const user = await User.create({
     name: payload.name,
     email: payload.email.toLowerCase(),
+    branch: payload.branch,
     passwordHash,
     role: 'user',
     status: 'active',
@@ -76,6 +79,15 @@ export const register = asyncHandler(async (req, res) => {
   const safeUser = toPublicUser(user);
   const token = signAccessToken(safeUser);
   const refreshToken = signRefreshToken(safeUser);
+
+  await Promise.allSettled([
+    createNotificationForAdmins({
+      title: 'New User Registration',
+      message: `${safeUser.name} joined the platform.`,
+      entityType: 'user',
+      entityId: safeUser.id,
+    }),
+  ]);
 
   res.status(HTTP_STATUS.CREATED).json({
     message: 'Registration successful',

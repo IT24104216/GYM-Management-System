@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   TextField,
   Typography,
   Alert,
@@ -12,6 +16,7 @@ import {
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { ROUTES } from '@/shared/utils/constants';
+import { BRANCH_OPTIONS } from '@/shared/utils/branches';
 
 function RegisterPage() {
   const { register } = useAuth();
@@ -22,6 +27,7 @@ function RegisterPage() {
   const [form, setForm] = useState({
     name: '',
     email: '',
+    branch: BRANCH_OPTIONS[0],
     password: '',
     confirmPassword: '',
   });
@@ -75,6 +81,10 @@ function RegisterPage() {
 
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match.');
+      return;
+    }
+    if (!form.branch) {
+      setError('Please select your branch.');
       return;
     }
 
@@ -178,6 +188,20 @@ function RegisterPage() {
             InputLabelProps={{ shrink: true }}
             sx={inputSx}
           />
+          <FormControl fullWidth required sx={inputSx}>
+            <InputLabel id="branch-label">Branch</InputLabel>
+            <Select
+              labelId="branch-label"
+              label="Branch"
+              name="branch"
+              value={form.branch}
+              onChange={handleChange}
+            >
+              {BRANCH_OPTIONS.map((branch) => (
+                <MenuItem key={branch} value={branch}>{branch}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <TextField
             label="Password"
             name="password"
