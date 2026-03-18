@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer,
   PieChart,
@@ -39,6 +40,7 @@ import IcecreamRoundedIcon from '@mui/icons-material/IcecreamRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { ROUTES } from '@/shared/utils/constants';
 import {
   createUserFoodLog,
   deleteUserFoodLog,
@@ -67,6 +69,7 @@ const itemVariants = {
 };
 
 const yAxisTicks = [650, 1300, 1950, 2600];
+const RISK_WINDOW_DAYS = 7;
 
 const toIsoDate = (date) => {
   const d = new Date(date);
@@ -82,6 +85,114 @@ const shiftIsoDate = (isoDate, offsetDays) => {
   if (Number.isNaN(base.getTime())) return isoDate;
   base.setDate(base.getDate() + Number(offsetDays || 0));
   return toIsoDate(base);
+};
+
+const buildDailySummaries = (logs = [], endIso, days = RISK_WINDOW_DAYS) => {
+  const grouped = new Map();
+  (Array.isArray(logs) ? logs : []).forEach((log) => {
+    const dateKey = String(log?.logDate || '').slice(0, 10);
+    if (!dateKey) return;
+    const prev = grouped.get(dateKey) || { calories: 0, protein: 0, carbs: 0, fat: 0, mealCount: 0 };
+    grouped.set(dateKey, {
+      calories: prev.calories + Number(log?.calories || 0),
+      protein: prev.protein + Number(log?.protein || 0),
+      carbs: prev.carbs + Number(log?.carbs || 0),
+      fat: prev.fat + Number(log?.fat || 0),
+      mealCount: prev.mealCount + 1,
+    });
+  });
+
+  return Array.from({ length: days }).map((_, idx) => {
+    const offset = idx - (days - 1);
+    const iso = shiftIsoDate(endIso, offset);
+    const totals = grouped.get(iso) || { calories: 0, protein: 0, carbs: 0, fat: 0, mealCount: 0 };
+    return { iso, ...totals };
+  });
+};
+
+const evaluateMealQuality = (daySummary) => {
+  const calories = Number(daySummary?.calories || 0);
+  const protein = Number(daySummary?.protein || 0);
+  const carbs = Number(daySummary?.carbs || 0);
+  const fat = Number(daySummary?.fat || 0);
+  const mealCount = Number(daySummary?.mealCount || 0);
+
+  if (mealCount === 0) {
+    return {
+      level: 'neutral',
+      score: 0,
+      label: 'No logs yet',
+      message: 'Add your meals to get personalized safety feedback for your My Plan.',
+      reasons: [],
+    };
+  }
+
+  const totalKcal = Math.max(calories, (protein * 4) + (carbs * 4) + (fat * 9), 1);
+  const proteinShare = (protein * 4) / totalKcal;
+  const carbShare = (carbs * 4) / totalKcal;
+  const fatShare = (fat * 9) / totalKcal;
+
+  let score = 100;
+  const reasons = [];
+
+  if (calories < 1000) {
+    score -= 30;
+    reasons.push('Calories are too low for training recovery.');
+  } else if (calories < 1400) {
+    score -= 15;
+    reasons.push('Calories are a bit low for an active gym routine.');
+  }
+
+  if (protein < 60 || proteinShare < 0.15) {
+    score -= 25;
+    reasons.push('Protein is low for muscle recovery and performance.');
+  }
+
+  if (carbShare < 0.35) {
+    score -= 12;
+    reasons.push('Carbs are low, which can reduce workout energy.');
+  } else if (carbShare > 0.65) {
+    score -= 10;
+    reasons.push('Carbs are high compared to the rest of your macros.');
+  }
+
+  if (fatShare > 0.4) {
+    score -= 12;
+    reasons.push('Fat ratio is high and may reduce macro balance.');
+  }
+
+  if (mealCount < 2) {
+    score -= 8;
+    reasons.push('Too few meals logged for a balanced daily pattern.');
+  }
+
+  score = Math.max(0, Math.round(score));
+
+  if (score >= 80) {
+    return {
+      level: 'green',
+      score,
+      label: 'Balanced',
+      message: 'Plan is balanced today. Keep this consistency for better gym results.',
+      reasons,
+    };
+  }
+  if (score >= 55) {
+    return {
+      level: 'yellow',
+      score,
+      label: 'Moderate risk',
+      message: 'Moderate risk: your current meal balance may slow progress if repeated.',
+      reasons,
+    };
+  }
+  return {
+    level: 'red',
+    score,
+    label: 'High risk',
+    message: 'High risk if continued: poor recovery, fatigue risk, and possible muscle-loss trend.',
+    reasons,
+  };
 };
 
 const mealSectionConfig = {
@@ -137,6 +248,7 @@ function CalorieTooltip({ active, payload, label }) {
 function UserMealPlan() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const navigate = useNavigate();
   const { user } = useAuth();
   const userId = String(user?.id || user?._id || '');
   const [planMode, setPlanMode] = useState('dietitian');
@@ -418,6 +530,49 @@ function UserMealPlan() {
     [displayMeals],
   );
 
+  const riskMonitor = useMemo(() => {
+    const merged = [...allFoodLogs];
+    foodLogs.forEach((item) => {
+      const id = String(item?._id || '');
+      if (id && merged.some((x) => String(x?._id || '') === id)) return;
+      merged.push(item);
+    });
+
+    const daily = buildDailySummaries(merged, todayIso, RISK_WINDOW_DAYS);
+    const evaluated = daily.map((entry) => ({
+      ...entry,
+      evaluation: evaluateMealQuality(entry),
+    }));
+    const today = evaluated[evaluated.length - 1] || {
+      evaluation: {
+        level: 'neutral',
+        score: 0,
+        label: 'No logs yet',
+        message: 'Add your meals to get personalized safety feedback for your My Plan.',
+        reasons: [],
+      },
+    };
+
+    let riskStreak = 0;
+    for (let i = evaluated.length - 1; i >= 0; i -= 1) {
+      const level = evaluated[i]?.evaluation?.level;
+      if (level === 'yellow' || level === 'red') riskStreak += 1;
+      else break;
+    }
+
+    let goodStreak = 0;
+    for (let i = evaluated.length - 1; i >= 0; i -= 1) {
+      if (evaluated[i]?.evaluation?.level === 'green') goodStreak += 1;
+      else break;
+    }
+
+    return {
+      today: today.evaluation,
+      riskStreak,
+      goodStreak,
+    };
+  }, [allFoodLogs, foodLogs, todayIso]);
+
   const resetLogForm = (mealType = 'breakfast') => {
     setLogForm({
       mealType,
@@ -600,6 +755,112 @@ function UserMealPlan() {
             </Stack>
           </Stack>
         </MotionBox>
+
+        {planMode === 'custom' && (
+          <MotionCard
+            initial={{ opacity: 0, y: 12 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              boxShadow: riskMonitor.today.level === 'red'
+                ? ['0 0 0 rgba(239,68,68,0.00)', '0 0 0 8px rgba(239,68,68,0.16)', '0 0 0 rgba(239,68,68,0.00)']
+                : 'none',
+            }}
+            transition={{
+              duration: riskMonitor.today.level === 'red' ? 1.2 : 0.35,
+              repeat: riskMonitor.today.level === 'red' ? Infinity : 0,
+            }}
+            sx={{
+              mb: 2,
+              borderRadius: 2.4,
+              border: `1px solid ${
+                riskMonitor.today.level === 'green'
+                  ? '#16a34a55'
+                  : riskMonitor.today.level === 'yellow'
+                    ? '#f59e0b66'
+                    : riskMonitor.today.level === 'red'
+                      ? '#ef444466'
+                      : (isDark ? '#27384f' : '#e7edf6')
+              }`,
+              bgcolor: riskMonitor.today.level === 'green'
+                ? (isDark ? '#0d2a1d' : '#ecfdf5')
+                : riskMonitor.today.level === 'yellow'
+                  ? (isDark ? '#2f230b' : '#fffbeb')
+                  : riskMonitor.today.level === 'red'
+                    ? (isDark ? '#311315' : '#fef2f2')
+                    : theme.palette.background.paper,
+            }}
+          >
+            <CardContent>
+              <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.2}>
+                <Box>
+                  <Typography sx={{ fontWeight: 900, fontSize: '1.08rem' }}>
+                    My Plan Safety Monitor
+                  </Typography>
+                  <Typography sx={{ mt: 0.4, color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                    {riskMonitor.today.message}
+                  </Typography>
+                </Box>
+                <Chip
+                  label={riskMonitor.today.level === 'neutral' ? 'No data yet' : `${riskMonitor.today.label} • Score ${riskMonitor.today.score}`}
+                  sx={{
+                    alignSelf: { xs: 'flex-start', md: 'center' },
+                    fontWeight: 800,
+                    borderRadius: 2,
+                    bgcolor: riskMonitor.today.level === 'green'
+                      ? '#16a34a'
+                      : riskMonitor.today.level === 'yellow'
+                        ? '#f59e0b'
+                        : riskMonitor.today.level === 'red'
+                          ? '#ef4444'
+                          : (isDark ? '#334155' : '#e2e8f0'),
+                    color: '#fff',
+                  }}
+                />
+              </Stack>
+
+              {riskMonitor.today.reasons?.length > 0 && (
+                <Box sx={{ mt: 1 }}>
+                  {riskMonitor.today.reasons.slice(0, 3).map((reason, idx) => (
+                    <Typography key={`risk-reason-${idx}`} sx={{ fontSize: '0.88rem', color: theme.palette.text.secondary, mt: 0.35 }}>
+                      • {reason}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+
+              {riskMonitor.goodStreak >= 3 && (
+                <Typography sx={{ mt: 1.1, fontSize: '0.9rem', fontWeight: 700, color: '#16a34a' }}>
+                  Great job. You have maintained a balanced meal pattern for {riskMonitor.goodStreak} day(s) continuously.
+                </Typography>
+              )}
+
+              {riskMonitor.riskStreak >= 3 && (
+                <Box sx={{ mt: 1.2 }}>
+                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, color: '#ef4444' }}>
+                    Warning: risk has continued for {riskMonitor.riskStreak} day(s). It is safer to switch to a dietitian-guided plan.
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
+                    <Button
+                      variant="contained"
+                      onClick={() => setPlanMode('dietitian')}
+                      sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.8, bgcolor: '#0D9488', '&:hover': { bgcolor: '#0f766e' } }}
+                    >
+                      Switch to Dietitian Plan
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => navigate(ROUTES.USER_DIETITIANS)}
+                      sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.8 }}
+                    >
+                      Book Appointment
+                    </Button>
+                  </Stack>
+                </Box>
+              )}
+            </CardContent>
+          </MotionCard>
+        )}
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 2fr' }, gap: 1.8, mb: 2.4 }}>
           <MotionCard variants={itemVariants} sx={{ borderRadius: 2.4, border: `1px solid ${isDark ? '#27384f' : '#e7edf6'}` }}>
@@ -811,16 +1072,32 @@ function UserMealPlan() {
               )}
 
               {dietitianPlan && (
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2.4} sx={{ mt: 1.2 }}>
-                  <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
-                    Focus: <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>{dietitianPlan?.dietitian?.specialization || 'Nutrition'}</Box>
-                  </Typography>
-                  <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
-                    Updated: <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>
-                      {dietitianPlan?.submittedAt ? new Date(dietitianPlan.submittedAt).toLocaleDateString() : '-'}
+                <>
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2.4} sx={{ mt: 1.2 }}>
+                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                      Focus: <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>{dietitianPlan?.dietitian?.specialization || 'Nutrition'}</Box>
+                    </Typography>
+                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                      Updated: <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>
+                        {dietitianPlan?.submittedAt ? new Date(dietitianPlan.submittedAt).toLocaleDateString() : '-'}
+                      </Box>
+                    </Typography>
+                  </Stack>
+                  <Typography
+                    sx={{
+                      mt: 0.9,
+                      color: theme.palette.text.secondary,
+                      fontSize: '0.92rem',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    Dietitian Notes:{' '}
+                    <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>
+                      {dietitianPlan?.additionalNotes?.trim() || '-'}
                     </Box>
                   </Typography>
-                </Stack>
+                </>
               )}
             </CardContent>
           </MotionCard>
