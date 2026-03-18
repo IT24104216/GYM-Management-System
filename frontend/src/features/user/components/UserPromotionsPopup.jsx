@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -17,15 +17,16 @@ import { ROUTES } from '@/shared/utils/constants';
 
 const MotionBox = motion(Box);
 
-function UserPromotionsPopup({ open, onClose }) {
+function UserPromotionsPopup({ open, onClose, placement = 'Dashboard Hero' }) {
   const navigate = useNavigate();
   const [index, setIndex] = useState(0);
   const [slides, setSlides] = useState([]);
 
   useEffect(() => {
+    if (!open) return undefined;
     const loadPromotions = async () => {
       try {
-        const { data } = await getPublicPromotions({ limit: 3 });
+        const { data } = await getPublicPromotions({ limit: 3, placement });
         const rows = Array.isArray(data?.data) ? data.data : [];
         setSlides(rows.map((item) => ({
           id: item.id,
@@ -42,7 +43,8 @@ function UserPromotionsPopup({ open, onClose }) {
       }
     };
     loadPromotions();
-  }, []);
+    return undefined;
+  }, [open, placement]);
 
   useEffect(() => {
     if (!open || slides.length <= 1) return undefined;
@@ -52,17 +54,10 @@ function UserPromotionsPopup({ open, onClose }) {
     return () => clearInterval(interval);
   }, [open, slides.length]);
 
-  useEffect(() => {
-    if (!slides.length) {
-      setIndex(0);
-      return;
-    }
-    setIndex((prev) => (prev >= slides.length ? 0 : prev));
-  }, [slides]);
-
   if (!slides.length) return null;
 
-  const activeSlide = slides[index];
+  const activeIndex = index >= slides.length ? 0 : index;
+  const activeSlide = slides[activeIndex];
 
   const handleNavigate = () => {
     navigate(activeSlide.link);
@@ -227,14 +222,14 @@ function UserPromotionsPopup({ open, onClose }) {
               type="button"
               onClick={() => setIndex(dotIndex)}
               sx={{
-                width: dotIndex === index ? 24 : 9,
+                width: dotIndex === activeIndex ? 24 : 9,
                 height: 9,
                 borderRadius: 99,
                 border: 0,
                 p: 0,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                bgcolor: dotIndex === index ? '#ffffff' : 'rgba(255,255,255,0.48)',
+                bgcolor: dotIndex === activeIndex ? '#ffffff' : 'rgba(255,255,255,0.48)',
               }}
             />
           ))}

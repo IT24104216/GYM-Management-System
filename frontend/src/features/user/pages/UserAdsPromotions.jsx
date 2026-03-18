@@ -6,6 +6,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Pagination,
   Stack,
   Typography,
 } from '@mui/material';
@@ -17,16 +18,18 @@ import { getPublicPromotions } from '@/features/user/api/user.api';
 import { ROUTES } from '@/shared/utils/constants';
 
 const MotionBox = motion(Box);
+const ITEMS_PER_PAGE = 6;
 
 function UserAdsPromotions() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [promotions, setPromotions] = useState([]);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const loadPromotions = async () => {
       try {
-        const { data } = await getPublicPromotions({ limit: 100 });
+        const { data } = await getPublicPromotions({ limit: 10, placement: 'Promotions Page' });
         const rows = Array.isArray(data?.data) ? data.data : [];
         setPromotions(rows.map((item) => ({
           id: item.id,
@@ -45,6 +48,13 @@ function UserAdsPromotions() {
 
     loadPromotions();
   }, []);
+
+  const pageCount = Math.max(1, Math.ceil(promotions.length / ITEMS_PER_PAGE));
+  const activePage = Math.min(page, pageCount);
+  const visiblePromotions = promotions.slice(
+    (activePage - 1) * ITEMS_PER_PAGE,
+    activePage * ITEMS_PER_PAGE,
+  );
 
   return (
     <Box sx={{ px: { xs: 1.5, md: 2.2 }, py: { xs: 1.4, md: 2.2 } }}>
@@ -89,7 +99,7 @@ function UserAdsPromotions() {
           gap: 2,
         }}
       >
-        {promotions.map((item, index) => (
+        {visiblePromotions.map((item, index) => (
           <MotionBox
             key={item.id}
             initial={{ opacity: 0, y: 22 }}
@@ -148,6 +158,23 @@ function UserAdsPromotions() {
           </MotionBox>
         ))}
       </Box>
+
+      {promotions.length > ITEMS_PER_PAGE && (
+        <Stack sx={{ mt: 2.5 }} alignItems="center">
+          <Pagination
+            count={pageCount}
+            page={activePage}
+            onChange={(_, value) => setPage(value)}
+            shape="rounded"
+            color="primary"
+            sx={{
+              '& .MuiPaginationItem-root': {
+                fontWeight: 700,
+              },
+            }}
+          />
+        </Stack>
+      )}
     </Box>
   );
 }
