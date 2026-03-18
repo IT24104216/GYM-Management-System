@@ -8,6 +8,8 @@ import CampaignIcon from '@mui/icons-material/Campaign';
 import RestaurantMenuIcon from '@mui/icons-material/RestaurantMenu';
 import SportsIcon from '@mui/icons-material/Sports';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import LockRoundedIcon from '@mui/icons-material/LockRounded';
+import QuizRoundedIcon from '@mui/icons-material/QuizRounded';
 import { ROLES, ROUTES } from '@/shared/utils/constants';
 
 export const NAV_CONFIG = {
@@ -15,6 +17,8 @@ export const NAV_CONFIG = {
     { label: 'Dashboard', path: ROUTES.USER_DASHBOARD, icon: DashboardIcon },
     { label: 'Ads & Promotions', path: ROUTES.USER_ADS_PROMOTIONS, icon: CampaignIcon },
     { label: 'Workouts', path: ROUTES.USER_WORKOUTS, icon: FitnessCenterIcon },
+    { label: 'Lockers', path: ROUTES.USER_LOCKERS, icon: LockRoundedIcon },
+    { label: 'FAQs', path: ROUTES.USER_FAQS, icon: QuizRoundedIcon },
     { label: 'Profile', path: ROUTES.USER_PROFILE, icon: PersonIcon },
   ],
   [ROLES.ADMIN]: [
@@ -22,6 +26,8 @@ export const NAV_CONFIG = {
     { label: 'Users', path: ROUTES.ADMIN_USERS, icon: GroupIcon },
     { label: 'Reports', path: ROUTES.ADMIN_REPORTS, icon: AssessmentIcon },
     { label: 'Promotions', path: ROUTES.ADMIN_PROMOTIONS, icon: CampaignIcon },
+    { label: 'Lockers', path: ROUTES.ADMIN_LOCKERS, icon: LockRoundedIcon },
+    { label: 'FAQs', path: ROUTES.ADMIN_FAQS, icon: QuizRoundedIcon },
     { label: 'Settings', path: ROUTES.ADMIN_SETTINGS, icon: SettingsIcon },
   ],
   [ROLES.DIETITIAN]: [
