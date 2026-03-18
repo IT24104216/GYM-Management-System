@@ -25,63 +25,21 @@ import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  bookCoachAppointment,
+  createFeedback,
+  getFeedbacks,
+  getPublicCoaches,
+  getUserAppointments,
+  updateAppointmentStatus,
+  updateUserAppointment,
+} from '@/features/user/api/user.api';
 import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
-
-const COACHES = [
-  {
-    id: 'c1',
-    name: 'Emma Carter',
-    specialty: 'Strength and Conditioning',
-    experience: '8 years',
-    rating: 4.9,
-    slots: 'Mon - Fri, 6:00 AM - 10:00 AM',
-    qualification: 'BSc Sports Science',
-    certificates: 'NASM-CPT, TRX Certified',
-    avatar: 'EC',
-    tags: ['Fat Loss', 'Strength', 'Mobility'],
-  },
-  {
-    id: 'c2',
-    name: 'Noah Bennett',
-    specialty: 'Functional Training',
-    experience: '6 years',
-    rating: 4.8,
-    slots: 'Mon - Sat, 5:00 PM - 9:00 PM',
-    qualification: 'BSc Exercise Physiology',
-    certificates: 'ACE-CPT, Kettlebell L1',
-    avatar: 'NB',
-    tags: ['Athletic', 'Core', 'Endurance'],
-  },
-  {
-    id: 'c3',
-    name: 'Sophia Reed',
-    specialty: 'Beginner Transformation',
-    experience: '5 years',
-    rating: 4.7,
-    slots: 'Tue - Sun, 7:00 AM - 1:00 PM',
-    qualification: 'Diploma in Fitness Coaching',
-    certificates: 'ISSA CPT, Mobility Coach',
-    avatar: 'SR',
-    tags: ['Beginner', 'Weight Training', 'Form'],
-  },
-  {
-    id: 'c4',
-    name: 'Liam Hayes',
-    specialty: 'Power and Muscle Gain',
-    experience: '9 years',
-    rating: 5.0,
-    slots: 'Mon - Fri, 1:00 PM - 7:00 PM',
-    qualification: 'MSc Strength and Conditioning',
-    certificates: 'NSCA-CSCS, Nutrition Specialist',
-    avatar: 'LH',
-    tags: ['Bulking', 'Powerlifting', 'Nutrition'],
-  },
-];
 
 const BOOKINGS = [
   {
@@ -134,17 +92,15 @@ const BOOKINGS = [
   },
 ];
 
-const buildInitialCoachStats = () => {
+const buildInitialCoachStats = (coachList = []) => {
   const stats = {};
-  COACHES.forEach((coach) => {
-    stats[coach.id] = { average: coach.rating, count: 0 };
+  coachList.forEach((coach) => {
+    stats[coach.id] = { average: 0, count: 0 };
   });
   return stats;
 };
 
 const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
-const FEEDBACK_STORAGE_KEY = 'gympro_feedbacks';
-
 const BOOKING_PROGRESS_META = {
   pending: { label: 'Pending', step: 0, color: '#16a34a' },
   confirmed: { label: 'Confirmed', step: 1, color: '#16a34a' },
@@ -206,16 +162,61 @@ const toDisplayTime = (time24h) => {
   return `${String(h12).padStart(2, '0')}:${String(mRaw).padStart(2, '0')} ${meridiem}`;
 };
 
-const getCoachSlotRange = (coach) => {
+const getCoachSlotRanges = (coach) => {
+  if (Array.isArray(coach?.slotRanges) && coach.slotRanges.length > 0) {
+    return coach.slotRanges.map((range) => ({
+      start: normalizeTimeTo24h(range?.startTime),
+      end: normalizeTimeTo24h(range?.endTime),
+    }));
+  }
+
   const slotPart = coach?.slots?.split(',')?.[1]?.trim() || '';
   const [startRaw, endRaw] = slotPart.split('-').map((t) => t.trim());
-  return {
+  const fallbackRange = {
     start: normalizeTimeTo24h(startRaw),
     end: normalizeTimeTo24h(endRaw),
   };
+  if (!fallbackRange.start || !fallbackRange.end) return [];
+  return [fallbackRange];
+};
+
+const formatCoachSlotDateLabel = (coach) => {
+  if (!coach?.slotDate) {
+    return coach?.slots?.split(',')?.[0]?.trim() || 'Available';
+  }
+  const parsed = new Date(`${coach.slotDate}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return coach.slotDate;
+  const today = getTodayDate();
+  if (coach.slotDate === today) return 'Today';
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const getCoachSlotDisplayLines = (coach) => {
+  const ranges = getCoachSlotRanges(coach)
+    .map((range) => ({
+      start: toDisplayTime(range.start),
+      end: toDisplayTime(range.end),
+    }))
+    .filter((range) => range.start && range.end);
+
+  if (ranges.length) {
+    const dayLabel = formatCoachSlotDateLabel(coach);
+    return ranges.map((range) => `${dayLabel}, ${range.start} - ${range.end}`);
+  }
+
+  const raw = String(coach?.slots || '').replace(/\(\+\d+\s*more\)/gi, '').trim();
+  if (!raw) return ['No slot information'];
+  return raw
+    .split(/\s*[|;]\s*/)
+    .map((value) => value.trim())
+    .filter(Boolean);
 };
 
 const isDateWithinCoachSchedule = (coach, dateValue) => {
+  if (coach?.slotDate) {
+    return dateValue === coach.slotDate;
+  }
+
   if (!coach?.slots || !dateValue) return false;
 
   const dayPart = coach.slots.split(',')?.[0]?.trim() || '';
@@ -236,6 +237,19 @@ const isDateWithinCoachSchedule = (coach, dateValue) => {
   return selectedDay >= fromIndex || selectedDay <= toIndex;
 };
 
+const isWithinAnyCoachRange = (ranges, fromMinutes, toMinutes) => {
+  return ranges.some((range) => {
+    const coachStart = toMinuteValue(range.start);
+    const coachEnd = toMinuteValue(range.end);
+    return (
+      !Number.isNaN(coachStart)
+      && !Number.isNaN(coachEnd)
+      && fromMinutes >= coachStart
+      && toMinutes <= coachEnd
+    );
+  });
+};
+
 function UserCoaches() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -245,14 +259,16 @@ function UserCoaches() {
   const [selectedCoach, setSelectedCoach] = useState(null);
   const [bookingView, setBookingView] = useState('upcoming');
   const [toastState, setToastState] = useState({ open: false, message: '' });
-  const [bookings, setBookings] = useState(BOOKINGS);
-  const [coachStats, setCoachStats] = useState(buildInitialCoachStats);
+  const [coaches, setCoaches] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [coachStats, setCoachStats] = useState({});
   const [editingBookingId, setEditingBookingId] = useState(null);
   const [slotError, setSlotError] = useState('');
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [feedbackTarget, setFeedbackTarget] = useState(null);
   const [feedbackForm, setFeedbackForm] = useState({ rating: 0, comment: '' });
   const [feedbackError, setFeedbackError] = useState('');
+  const [submittedCoachFeedbackBookingIds, setSubmittedCoachFeedbackBookingIds] = useState(new Set());
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
@@ -266,13 +282,172 @@ function UserCoaches() {
     medicalConditions: '',
   });
 
+  const getNoteValue = (notes, key) => {
+    if (!notes) return '';
+    const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+    const match = notes.match(pattern);
+    return match?.[1]?.trim() || '';
+  };
+
+  const mapAppointmentToBooking = (item) => {
+    const startsAt = new Date(item.startsAt);
+    const endsAt = new Date(item.endsAt);
+    const date = Number.isNaN(startsAt.getTime())
+      ? getTodayDate()
+      : startsAt.toISOString().split('T')[0];
+    const fromTime = Number.isNaN(startsAt.getTime())
+      ? ''
+      : `${String(startsAt.getHours()).padStart(2, '0')}:${String(startsAt.getMinutes()).padStart(2, '0')}`;
+    const toTime = Number.isNaN(endsAt.getTime())
+      ? ''
+      : `${String(endsAt.getHours()).padStart(2, '0')}:${String(endsAt.getMinutes()).padStart(2, '0')}`;
+    const coach = coaches.find((row) => String(row.id) === String(item.coachId));
+
+    const statusMap = {
+      pending: 'pending',
+      approved: 'confirmed',
+      completed: 'completed',
+      cancelled: 'cancelled',
+      rejected: 'cancelled',
+    };
+    const progressStatus = statusMap[item.status] || 'pending';
+    const status = endsAt.getTime() < Date.now() || progressStatus === 'completed' ? 'past' : 'upcoming';
+
+    return {
+      id: item._id,
+      coachId: item.coachId,
+      coachName: coach?.name || String(item.coachId),
+      date,
+      fromTime,
+      toTime,
+      time: toDisplayTime(fromTime),
+      appointmentType: getNoteValue(item.notes, 'Appointment Type')
+        || (item.sessionType === 'training' ? 'In-person' : 'Online'),
+      goal: getNoteValue(item.notes, 'Goal') || 'Weight Gaining',
+      description: getNoteValue(item.notes, 'Description'),
+      medicalConditions: getNoteValue(item.notes, 'Medical'),
+      status,
+      progressStatus,
+      rawStatus: item.status,
+    };
+  };
+
+  const loadCoachFeedbackStats = async (coachList) => {
+    const baseStats = buildInitialCoachStats(coachList);
+    const coachNameToId = new Map(
+      (Array.isArray(coachList) ? coachList : [])
+        .map((coach) => [String(coach.name || '').trim(), String(coach.id || '')]),
+    );
+    try {
+      const { data } = await getFeedbacks({
+        subjectType: 'coach',
+        page: 1,
+        limit: 500,
+      });
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      rows.forEach((row) => {
+        const subjectId = String(row.subjectId || '');
+        const subjectName = String(row.subjectName || '').trim();
+        const key = (
+          (subjectId && baseStats[subjectId] && subjectId)
+          || (subjectName && coachNameToId.get(subjectName))
+          || ''
+        );
+        if (!key || !baseStats[key]) return;
+        const current = baseStats[key];
+        const nextCount = current.count + 1;
+        const nextAverage = ((current.average * current.count) + Number(row.rating || 0)) / nextCount;
+        baseStats[key] = {
+          average: Number(nextAverage.toFixed(1)),
+          count: nextCount,
+        };
+      });
+      setCoachStats(baseStats);
+    } catch {
+      setCoachStats(baseStats);
+    }
+  };
+
+  const loadSubmittedCoachFeedbackBookings = async () => {
+    const ownerId = String(user?.id || '');
+    if (!ownerId) {
+      setSubmittedCoachFeedbackBookingIds(new Set());
+      return;
+    }
+
+    try {
+      const { data } = await getFeedbacks({
+        subjectType: 'coach',
+        ownerId,
+        page: 1,
+        limit: 500,
+      });
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      const nextIds = new Set(
+        rows
+          .map((row) => String(row.bookingId || ''))
+          .filter(Boolean),
+      );
+      setSubmittedCoachFeedbackBookingIds(nextIds);
+    } catch {
+      setSubmittedCoachFeedbackBookingIds(new Set());
+    }
+  };
+
+  const loadBookings = async () => {
+    if (!user?.id) return;
+    try {
+      const { data } = await getUserAppointments({
+        userId: String(user.id),
+        page: 1,
+        limit: 100,
+      });
+      const items = Array.isArray(data?.data)
+        ? data.data
+            .filter((item) => item.sessionType !== 'nutrition')
+            .map(mapAppointmentToBooking)
+        : [];
+      setBookings(items);
+    } catch {
+      setBookings(BOOKINGS);
+    }
+  };
+
+  const loadCoaches = async () => {
+    try {
+      const { data } = await getPublicCoaches();
+      const items = Array.isArray(data?.data) ? data.data : [];
+      setCoaches(items);
+      await loadCoachFeedbackStats(items);
+    } catch {
+      setCoaches([]);
+      setCoachStats({});
+    }
+  };
+
+  useEffect(() => {
+    loadCoaches();
+    const interval = setInterval(loadCoaches, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    loadBookings();
+    const interval = setInterval(loadBookings, 15000);
+    return () => clearInterval(interval);
+  }, [user?.id, coaches]);
+
+  useEffect(() => {
+    loadSubmittedCoachFeedbackBookings();
+  }, [user?.id]);
+
   const handleOpenBooking = (coach) => {
     setSelectedCoach(coach);
     setBookingForm({
       userName: user?.name || '',
       userEmail: user?.email || '',
       mobileNumber: user?.mobileNumber || user?.mobile || user?.phone || '',
-      date: getTodayDate(),
+      date: coach?.slotDate || getTodayDate(),
       fromTime: '',
       toTime: '',
       appointmentType: '',
@@ -286,7 +461,7 @@ function UserCoaches() {
   };
 
   const handleEditBooking = (booking) => {
-    const coach = COACHES.find((item) => item.name === booking.coachName) || null;
+    const coach = coaches.find((item) => item.name === booking.coachName) || null;
     setSelectedCoach(coach);
     setBookingForm({
       userName: user?.name || '',
@@ -316,8 +491,13 @@ function UserCoaches() {
     setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const handleSubmitBooking = (event) => {
+  const handleSubmitBooking = async (event) => {
     event.preventDefault();
+    const selectedCoachId = selectedCoach?.id || selectedCoach?._id;
+    if (!selectedCoachId) {
+      setSlotError('Selected coach is unavailable. Please refresh and try again.');
+      return;
+    }
 
     const isDateAvailable = isDateWithinCoachSchedule(selectedCoach, bookingForm.date);
     if (!isDateAvailable) {
@@ -332,15 +512,8 @@ function UserCoaches() {
       return;
     }
 
-    const selectedRange = getCoachSlotRange(selectedCoach);
-    const coachStart = toMinuteValue(selectedRange.start);
-    const coachEnd = toMinuteValue(selectedRange.end);
-    const isWithinCoachRange = (
-      !Number.isNaN(coachStart)
-      && !Number.isNaN(coachEnd)
-      && fromMinutes >= coachStart
-      && toMinutes <= coachEnd
-    );
+    const selectedRanges = getCoachSlotRanges(selectedCoach);
+    const isWithinCoachRange = isWithinAnyCoachRange(selectedRanges, fromMinutes, toMinutes);
 
     if (!isWithinCoachRange) {
       setSlotError('Unavailable at that time. Please choose an available time slot.');
@@ -349,48 +522,57 @@ function UserCoaches() {
 
     setSlotError('');
 
-    const nextBookingPayload = {
-      coachName: selectedCoach?.name || '',
-      date: bookingForm.date,
-      fromTime: bookingForm.fromTime,
-      toTime: bookingForm.toTime,
-      time: toDisplayTime(bookingForm.fromTime),
-      appointmentType: bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online',
-      goal: bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing',
-      description: bookingForm.description,
-      medicalConditions: bookingForm.medicalConditions,
-      status: 'upcoming',
-      progressStatus: editingBookingId ? 'pending' : 'pending',
-    };
+    try {
+      const startsAt = new Date(`${bookingForm.date}T${bookingForm.fromTime}:00`);
+      const endsAt = new Date(`${bookingForm.date}T${bookingForm.toTime}:00`);
 
-    if (editingBookingId) {
-      setBookings((prev) => prev.map((item) => (
-        item.id === editingBookingId
-          ? { ...item, ...nextBookingPayload }
-          : item
-      )));
-    } else {
-      setBookings((prev) => [
-        {
-          id: `b${Date.now()}`,
-          ...nextBookingPayload,
-        },
-        ...prev,
-      ]);
+      const sessionTypeMap = {
+        inperson: 'training',
+        online: 'consultation',
+      };
+
+      const notes = [
+        `CoachId: ${selectedCoachId}`,
+        `Coach: ${selectedCoach?.name || ''}`,
+        `User Name: ${bookingForm.userName || user?.name || ''}`,
+        `User Email: ${bookingForm.userEmail || user?.email || ''}`,
+        `Appointment Type: ${bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online'}`,
+        `Goal: ${bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing'}`,
+        bookingForm.description ? `Description: ${bookingForm.description}` : '',
+        bookingForm.medicalConditions ? `Medical: ${bookingForm.medicalConditions}` : '',
+        bookingForm.mobileNumber ? `Mobile: ${bookingForm.mobileNumber}` : '',
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      if (editingBookingId) {
+        await updateUserAppointment(editingBookingId, {
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          sessionType: sessionTypeMap[bookingForm.appointmentType] || 'consultation',
+          notes,
+        });
+      } else {
+        await bookCoachAppointment({
+          userId: String(user?.id || bookingForm.userEmail || bookingForm.userName || 'guest-user'),
+          coachId: String(selectedCoachId),
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+          sessionType: sessionTypeMap[bookingForm.appointmentType] || 'consultation',
+          notes,
+        });
+      }
+
+      await loadBookings();
+      handleCloseBooking();
+      setToastState({
+        open: true,
+        message: editingBookingId ? 'Booking updated and saved to database' : 'Booking confirmed and saved to database',
+      });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to save booking. Please try again.';
+      setToastState({ open: true, message });
     }
-
-    // Placeholder until API integration is added in the next step.
-    console.log('Booking payload:', {
-      coachId: selectedCoach?.id,
-      coachName: selectedCoach?.name,
-      ...bookingForm,
-    });
-
-    handleCloseBooking();
-    setToastState({
-      open: true,
-      message: editingBookingId ? 'Booking updated successfully' : 'Booking confirmed successfully',
-    });
   };
 
   const handleCloseSuccess = (_, reason) => {
@@ -415,74 +597,50 @@ function UserCoaches() {
     setFeedbackForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const handleFeedbackSubmit = (event) => {
+  const handleFeedbackSubmit = async (event) => {
     event.preventDefault();
     if (!feedbackForm.rating) {
       setFeedbackError('Please select a rating before submitting.');
       return;
     }
 
-    console.log('Feedback payload:', {
-      bookingId: feedbackTarget?.id,
-      coachName: feedbackTarget?.coachName,
-      rating: feedbackForm.rating,
-      comment: feedbackForm.comment,
-    });
+    const subjectId = String(feedbackTarget?.coachId || '');
+    if (!subjectId) {
+      setFeedbackError('Unable to identify coach for feedback.');
+      return;
+    }
 
-    const newFeedback = {
-      id: `f-${Date.now()}`,
-      user: user?.name || 'Member',
-      authorEmail: user?.email || '',
-      rating: feedbackForm.rating,
-      comment: feedbackForm.comment,
-      date: getTodayDate(),
-    };
-
-    const rawFeedbacks = localStorage.getItem(FEEDBACK_STORAGE_KEY);
-    let storedFeedbacks = {};
     try {
-      storedFeedbacks = rawFeedbacks ? JSON.parse(rawFeedbacks) : {};
-    } catch {
-      storedFeedbacks = {};
-    }
-
-    const coachKey = feedbackTarget?.coachName || 'Coach';
-    const coachFeedbacks = Array.isArray(storedFeedbacks[coachKey]) ? storedFeedbacks[coachKey] : [];
-    localStorage.setItem(
-      FEEDBACK_STORAGE_KEY,
-      JSON.stringify({
-        ...storedFeedbacks,
-        [coachKey]: [newFeedback, ...coachFeedbacks],
-      }),
-    );
-
-    const targetCoach = COACHES.find((item) => item.name === feedbackTarget?.coachName);
-    if (targetCoach) {
-      setCoachStats((prev) => {
-        const current = prev[targetCoach.id] || { average: targetCoach.rating, count: 0 };
-        const nextCount = current.count + 1;
-        const nextAverage = ((current.average * current.count) + feedbackForm.rating) / nextCount;
-
-        return {
-          ...prev,
-          [targetCoach.id]: {
-            average: Number(nextAverage.toFixed(1)),
-            count: nextCount,
-          },
-        };
+      await createFeedback({
+        ownerId: String(user?.id || ''),
+        ownerName: user?.name || 'Member',
+        subjectType: 'coach',
+        subjectId,
+        subjectName: feedbackTarget?.coachName || '',
+        bookingId: String(feedbackTarget?.id || ''),
+        rating: feedbackForm.rating,
+        comment: feedbackForm.comment,
       });
-    }
 
-    handleCloseFeedback();
-    setToastState({ open: true, message: 'Feedback submitted successfully' });
+      await loadCoachFeedbackStats(coaches);
+      await loadSubmittedCoachFeedbackBookings();
+      handleCloseFeedback();
+      setToastState({ open: true, message: 'Feedback submitted successfully' });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to submit feedback';
+      setFeedbackError(message);
+    }
   };
 
-  const handleCancelBooking = (bookingId) => {
-    setBookings((prev) => prev.map((item) => (
-      item.id === bookingId
-        ? { ...item, progressStatus: 'cancelled' }
-        : item
-    )));
+  const handleCancelBooking = async (bookingId) => {
+    try {
+      await updateAppointmentStatus(bookingId, { status: 'cancelled' });
+      await loadBookings();
+      setToastState({ open: true, message: 'Booking cancelled successfully' });
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to cancel booking. Please try again.';
+      setToastState({ open: true, message });
+    }
   };
 
   const filteredBookings = bookings.filter((booking) => booking.status === bookingView);
@@ -519,7 +677,7 @@ function UserCoaches() {
             gap: 3,
           }}
         >
-          {COACHES.map((coach, index) => (
+          {coaches.map((coach, index) => (
             (() => {
               const coachStat = coachStats[coach.id] || { average: coach.rating, count: 0 };
 
@@ -579,7 +737,9 @@ function UserCoaches() {
                     <Typography
                       onClick={(event) => {
                         event.stopPropagation();
-                        navigate(`${ROUTES.USER_COACH_FEEDBACKS}?coach=${encodeURIComponent(coach.name)}`);
+                        navigate(
+                          `${ROUTES.USER_COACH_FEEDBACKS}?coach=${encodeURIComponent(coach.name)}&coachId=${encodeURIComponent(String(coach.id || ''))}`,
+                        );
                       }}
                       sx={{
                         color: theme.palette.text.secondary,
@@ -589,8 +749,9 @@ function UserCoaches() {
                         '&:hover': { textDecoration: 'underline', color: theme.palette.primary.main },
                       }}
                     >
-                      Rating {coachStat.average.toFixed(1)}
-                      {coachStat.count > 0 ? ` (${coachStat.count})` : ''}
+                      {coachStat.count > 0
+                        ? `Rating ${coachStat.average.toFixed(1)} (${coachStat.count})`
+                        : 'No ratings yet'}
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -599,11 +760,18 @@ function UserCoaches() {
                       Experience {coach.experience}
                     </Typography>
                   </Stack>
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
                     <AccessTimeRoundedIcon sx={{ color: '#8b5cf6', fontSize: 18 }} />
-                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
-                      {coach.slots}
-                    </Typography>
+                    <Stack spacing={0.2}>
+                      {getCoachSlotDisplayLines(coach).map((line, lineIndex) => (
+                        <Typography
+                          key={`${coach.id || coach.name || 'coach'}-slot-${lineIndex}`}
+                          sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}
+                        >
+                          {line}
+                        </Typography>
+                      ))}
+                    </Stack>
                   </Stack>
                 </Stack>
 
@@ -669,6 +837,7 @@ function UserCoaches() {
               const progress = BOOKING_PROGRESS_META[effectiveStatus] || BOOKING_PROGRESS_META.pending;
               const isCancelled = effectiveStatus === 'cancelled';
               const isCompleted = effectiveStatus === 'completed';
+              const feedbackAlreadySubmitted = submittedCoachFeedbackBookingIds.has(String(booking.id));
               const stepKeys = isCancelled ? ['pending', 'confirmed', 'cancelled'] : STATUS_STEPS;
               const displayTime = booking.fromTime && booking.toTime
                 ? `${toDisplayTime(booking.fromTime)} - ${toDisplayTime(booking.toTime)}`
@@ -825,14 +994,25 @@ function UserCoaches() {
 
                     {isCompleted && (
                       <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1.4 }}>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => handleOpenFeedback(booking)}
-                          sx={{ borderRadius: 2, fontWeight: 700 }}
-                        >
-                          Feedback
-                        </Button>
+                        {feedbackAlreadySubmitted ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Feedback Submitted
+                          </Button>
+                        ) : (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleOpenFeedback(booking)}
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Feedback
+                          </Button>
+                        )}
                       </Stack>
                     )}
                   </CardContent>
@@ -932,9 +1112,19 @@ function UserCoaches() {
               />
             </Stack>
 
-            <Typography sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary }}>
-              Available slot: {selectedCoach?.slots || 'N/A'}
-            </Typography>
+            <Stack spacing={0.35}>
+              <Typography sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary, fontWeight: 700 }}>
+                Available slots:
+              </Typography>
+              {(selectedCoach ? getCoachSlotDisplayLines(selectedCoach) : ['N/A']).map((line, lineIndex) => (
+                <Typography
+                  key={`selected-coach-slot-${lineIndex}`}
+                  sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary }}
+                >
+                  {line}
+                </Typography>
+              ))}
+            </Stack>
 
             {slotError && (
               <Typography sx={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 600 }}>

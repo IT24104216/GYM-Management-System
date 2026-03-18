@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Autocomplete,
   Box,
@@ -32,45 +32,22 @@ import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
-import { loadDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
+import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  getDietitianClientPlans,
+  createDietitianSchedulingSlot,
+  deleteDietitianSchedulingSlot,
+  getDietitianAppointments,
+  getMealLibraryItems,
+  getDietitianSchedulingSlots,
+  submitMealPlan,
+  upsertDietitianClientPlan,
+  updateDietitianAppointmentStatus,
+  updateDietitianSchedulingSlot,
+} from '../api/dietitian.api';
 
-const mockMembers = [
-  {
-    id: 1,
-    name: 'John Doe',
-    joinedDate: '2025-01-15',
-    age: 28,
-    weight: 75,
-    height: 175,
-    goal: 'Build muscle and increase strength',
-  },
-];
-const mockAppointments = [
-  {
-    id: 201,
-    member: 'John Doe',
-    date: '2026-03-15',
-    time: '10:00 AM',
-    goal: 'Weight Management',
-    status: 'Pending',
-  },
-  {
-    id: 202,
-    member: 'Jane Silva',
-    date: '2026-03-16',
-    time: '02:30 PM',
-    goal: 'Muscle Gain Nutrition',
-    status: 'Pending',
-  },
-  {
-    id: 203,
-    member: 'Kavindu Perera',
-    date: '2026-03-17',
-    time: '09:15 AM',
-    goal: 'Fat Loss Meal Plan',
-    status: 'Pending',
-  },
-];
+const mockMembers = [];
+const mockAppointments = [];
 
 const tabItems = ['Members', 'Appointments', 'Time Slots'];
 
@@ -99,9 +76,19 @@ const createDietPlanForm = () => ({
   additionalNotes: '',
 });
 
+const getNoteValue = (notes, key) => {
+  if (!notes) return '';
+  const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+  const match = notes.match(pattern);
+  return match?.[1]?.trim() || '';
+};
+
 function DietitianDashboard() {
   const navigate = useNavigate();
   const theme = useTheme();
+  const { user } = useAuth();
+  const dietitianId = String(user?.id || user?._id || '');
+  const dietitianName = String(user?.name || '').trim().toLowerCase();
   const isDark = theme.palette.mode === 'dark';
   const [activeTab, setActiveTab] = useState('Members');
   const [searchText, setSearchText] = useState('');
@@ -113,6 +100,7 @@ function DietitianDashboard() {
     endTime: '08:15',
   });
   const [timeSlots, setTimeSlots] = useState([]);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
   const [slotNotice, setSlotNotice] = useState({ open: false, message: '' });
   const [slotError, setSlotError] = useState('');
   const [editSlotState, setEditSlotState] = useState({
@@ -132,8 +120,155 @@ function DietitianDashboard() {
     member: null,
   });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
-  const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
+  const [mealSuggestions, setMealSuggestions] = useState([]);
   const [savedDietPlans, setSavedDietPlans] = useState({});
+
+  const loadTimeSlots = async () => {
+    if (!dietitianId) return;
+    setIsSlotsLoading(true);
+    setSlotError('');
+    try {
+      const { data } = await getDietitianSchedulingSlots(String(dietitianId));
+      const items = Array.isArray(data?.data) ? data.data : [];
+      setTimeSlots(items.map((slot) => ({
+        id: slot._id,
+        date: slot.date,
+        day: getWeekdayLabel(slot.date),
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      })));
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to load time slots');
+    } finally {
+      setIsSlotsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTimeSlots();
+  }, [dietitianId]);
+
+  const toClientPlanForm = (plan) => ({
+    breakfast: Array.isArray(plan?.breakfast) ? plan.breakfast : [createMealOption(), createMealOption(), createMealOption()],
+    lunch: Array.isArray(plan?.lunch) ? plan.lunch : [createMealOption(), createMealOption(), createMealOption()],
+    dinner: Array.isArray(plan?.dinner) ? plan.dinner : [createMealOption(), createMealOption(), createMealOption()],
+    snacks: Array.isArray(plan?.snacks) ? plan.snacks : [createMealOption(), createMealOption(), createMealOption()],
+    additionalNotes: plan?.additionalNotes || '',
+  });
+
+  const loadDietitianMealsAndPlans = async () => {
+    if (!dietitianId) return;
+    try {
+      const [{ data: mealsData }, { data: plansData }] = await Promise.all([
+        getMealLibraryItems({ dietitianId }),
+        getDietitianClientPlans({ dietitianId }),
+      ]);
+
+      const meals = Array.isArray(mealsData?.data) ? mealsData.data : [];
+      setMealSuggestions(meals);
+
+      const plans = Array.isArray(plansData?.data) ? plansData.data : [];
+      const nextPlans = {};
+      plans.forEach((plan) => {
+        if (!plan?.userId) return;
+        nextPlans[String(plan.userId)] = {
+          id: String(plan._id),
+          isSubmitted: Boolean(plan.isSubmitted),
+          data: toClientPlanForm(plan),
+        };
+      });
+      setSavedDietPlans(nextPlans);
+    } catch (error) {
+      setMealSuggestions([]);
+      setSavedDietPlans({});
+      setSlotError(error?.response?.data?.message || 'Failed to load diet plans.');
+    }
+  };
+
+  useEffect(() => {
+    loadDietitianMealsAndPlans();
+  }, [dietitianId]);
+
+  const mapAppointmentRow = (item) => {
+    const startsAt = new Date(item.startsAt);
+    const date = Number.isNaN(startsAt.getTime())
+      ? ''
+      : startsAt.toISOString().split('T')[0];
+    const time = Number.isNaN(startsAt.getTime())
+      ? ''
+      : startsAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const statusLabelByValue = {
+      pending: 'Pending',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
+      completed: 'Completed',
+    };
+
+    return {
+      id: item._id,
+      userId: item.userId,
+      member: getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`,
+      date,
+      time,
+      goal: getNoteValue(item.notes, 'Goal') || 'Meal Planning',
+      status: statusLabelByValue[item.status] || 'Pending',
+      rawStatus: item.status,
+      email: getNoteValue(item.notes, 'User Email') || '-',
+      phone: getNoteValue(item.notes, 'Mobile') || '-',
+    };
+  };
+
+  const loadDietitianAppointments = async () => {
+    if (!dietitianId) return;
+    try {
+      const { data } = await getDietitianAppointments({
+        sessionType: 'nutrition',
+        page: 1,
+        limit: 500,
+      });
+
+      const allNutritionItems = Array.isArray(data?.data) ? data.data : [];
+      const items = allNutritionItems.filter((item) => {
+        const byId = String(item.dietitianId || '') === String(dietitianId);
+        const byNoteId = String(getNoteValue(item.notes, 'DietitianId') || '') === String(dietitianId);
+        const byName = getNoteValue(item.notes, 'Dietitian').trim().toLowerCase() === dietitianName;
+        return byId || byNoteId || byName;
+      });
+      const mapped = items.map(mapAppointmentRow);
+      setAppointments(mapped);
+
+      const approvedMembersMap = new Map();
+      mapped
+        .filter((item) => item.rawStatus === 'approved' || item.rawStatus === 'completed')
+        .forEach((item) => {
+          if (!approvedMembersMap.has(item.userId)) {
+            approvedMembersMap.set(item.userId, {
+              id: String(item.userId),
+              name: item.member,
+              joinedDate: item.date || new Date().toISOString().split('T')[0],
+              age: 27,
+              weight: 70,
+              height: 170,
+              goal: item.goal || 'Meal Planning',
+            });
+          }
+        });
+
+      setMembers(Array.from(approvedMembersMap.values()));
+    } catch (error) {
+      setAppointments(mockAppointments);
+      setMembers(mockMembers);
+      setSlotError(error?.response?.data?.message || 'Failed to load dietitian appointments.');
+    }
+  };
+
+  useEffect(() => {
+    loadDietitianAppointments();
+    const interval = setInterval(loadDietitianAppointments, 15000);
+    return () => clearInterval(interval);
+  }, [dietitianId]);
 
   const pageBg = isDark
     ? 'radial-gradient(circle at 15% 10%, #1b355b 0%, #0f1e3d 60%, #0b1731 100%)'
@@ -156,6 +291,7 @@ function DietitianDashboard() {
       ),
     [members, searchText],
   );
+  const displayedMembers = filteredMembers.slice(0, 3);
 
   const stats = [
     { label: 'Total Members', value: members.length, icon: GroupRoundedIcon },
@@ -164,34 +300,26 @@ function DietitianDashboard() {
     { label: 'Appointments', value: appointments.length, icon: CalendarMonthRoundedIcon },
   ];
 
-  const approveAppointment = (appointment) => {
-    setAppointments((prev) =>
-      prev.map((item) =>
-        item.id === appointment.id ? { ...item, status: 'Approved' } : item,
-      ),
-    );
+  const approveAppointment = async (appointment) => {
+    try {
+      await updateDietitianAppointmentStatus(appointment.id, { status: 'approved' });
+      await loadDietitianAppointments();
+      setSlotNotice({ open: true, message: 'Appointment approved successfully!' });
+      setActiveTab('Members');
+      setSearchText('');
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to approve appointment.');
+    }
+  };
 
-    setMembers((prev) => {
-      const exists = prev.some(
-        (member) => member.name.toLowerCase() === appointment.member.toLowerCase(),
-      );
-      if (exists) return prev;
-      return [
-        ...prev,
-        {
-          id: Date.now(),
-          name: appointment.member,
-          joinedDate: appointment.date,
-          age: 27,
-          weight: 70,
-          height: 170,
-          goal: appointment.goal,
-        },
-      ];
-    });
-
-    setActiveTab('Members');
-    setSearchText('');
+  const rejectAppointment = async (appointment) => {
+    try {
+      await updateDietitianAppointmentStatus(appointment.id, { status: 'rejected' });
+      await loadDietitianAppointments();
+      setSlotNotice({ open: true, message: 'Appointment rejected successfully!' });
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to reject appointment.');
+    }
   };
 
   const getWeekdayLabel = (isoDate) => {
@@ -211,7 +339,12 @@ function DietitianDashboard() {
     return `${String(converted).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${suffix}`;
   };
 
-  const addTimeSlot = () => {
+  const addTimeSlot = async () => {
+    if (!dietitianId) {
+      setSlotError('Dietitian account is required.');
+      return;
+    }
+
     if (!slotForm.date || !slotForm.startTime || !slotForm.endTime) {
       setSlotError('Please fill date, start time, and end time.');
       return;
@@ -223,17 +356,17 @@ function DietitianDashboard() {
       return;
     }
     setSlotError('');
-    setTimeSlots((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
+    try {
+      await createDietitianSchedulingSlot(String(dietitianId), {
         date: slotForm.date,
-        day: getWeekdayLabel(slotForm.date),
         startTime: slotForm.startTime,
         endTime: slotForm.endTime,
-      },
-    ]);
-    setSlotNotice({ open: true, message: 'Time slot created successfully!' });
+      });
+      await loadTimeSlots();
+      setSlotNotice({ open: true, message: 'Time slot created successfully!' });
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to create time slot.');
+    }
   };
 
   const openEditSlot = (slot) => {
@@ -246,7 +379,12 @@ function DietitianDashboard() {
     });
   };
 
-  const saveEditedSlot = () => {
+  const saveEditedSlot = async () => {
+    if (!dietitianId) {
+      setSlotError('Dietitian account is required.');
+      return;
+    }
+
     const { id, date, startTime, endTime } = editSlotState;
     if (!date || !startTime || !endTime) {
       setSlotError('Please fill date, start time, and end time.');
@@ -259,15 +397,18 @@ function DietitianDashboard() {
       return;
     }
     setSlotError('');
-    setTimeSlots((prev) =>
-      prev.map((slot) =>
-        slot.id === id
-          ? { ...slot, date, day: getWeekdayLabel(date), startTime, endTime }
-          : slot,
-      ),
-    );
-    setEditSlotState({ open: false, id: null, date: '', startTime: '', endTime: '' });
-    setSlotNotice({ open: true, message: 'Time slot updated successfully!' });
+    try {
+      await updateDietitianSchedulingSlot(String(dietitianId), String(id), {
+        date,
+        startTime,
+        endTime,
+      });
+      await loadTimeSlots();
+      setEditSlotState({ open: false, id: null, date: '', startTime: '', endTime: '' });
+      setSlotNotice({ open: true, message: 'Time slot updated successfully!' });
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to update time slot.');
+    }
   };
 
   const openDeleteSlot = (slot) => {
@@ -278,15 +419,25 @@ function DietitianDashboard() {
     });
   };
 
-  const confirmDeleteSlot = () => {
-    setTimeSlots((prev) => prev.filter((slot) => slot.id !== deleteSlotState.id));
-    setDeleteSlotState({ open: false, id: null, label: '' });
-    setSlotNotice({ open: true, message: 'Time slot deleted successfully!' });
+  const confirmDeleteSlot = async () => {
+    if (!dietitianId) {
+      setSlotError('Dietitian account is required.');
+      return;
+    }
+
+    try {
+      await deleteDietitianSchedulingSlot(String(dietitianId), String(deleteSlotState.id));
+      await loadTimeSlots();
+      setDeleteSlotState({ open: false, id: null, label: '' });
+      setSlotNotice({ open: true, message: 'Time slot deleted successfully!' });
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to delete time slot.');
+    }
   };
 
   const openDietPlanModal = (member) => {
-    setMealSuggestions(loadDietitianMeals());
-    setDietPlanForm(createDietPlanForm());
+    const existingPlan = savedDietPlans[member.id]?.data;
+    setDietPlanForm(existingPlan || createDietPlanForm());
     setDietPlanModal({ open: true, member });
   };
 
@@ -294,11 +445,31 @@ function DietitianDashboard() {
     setDietPlanModal({ open: false, member: null });
   };
 
-  const saveDietPlan = () => {
+  const saveDietPlan = async () => {
     const memberId = dietPlanModal.member?.id;
     if (!memberId) return;
-    setSavedDietPlans((prev) => ({ ...prev, [memberId]: dietPlanForm }));
-    closeDietPlanModal();
+    try {
+      const payload = {
+        dietitianId,
+        userId: memberId,
+        memberName: dietPlanModal.member?.name || '',
+        breakfast: dietPlanForm.breakfast,
+        lunch: dietPlanForm.lunch,
+        dinner: dietPlanForm.dinner,
+        snacks: dietPlanForm.snacks,
+        additionalNotes: dietPlanForm.additionalNotes,
+      };
+      const { data } = await upsertDietitianClientPlan(payload);
+      const plan = data?.data;
+      if (plan?._id) {
+        await submitMealPlan(String(plan._id), dietitianId, true);
+      }
+      await loadDietitianMealsAndPlans();
+      closeDietPlanModal();
+      setSlotNotice({ open: true, message: 'Diet plan submitted successfully!' });
+    } catch (error) {
+      setSlotError(error?.response?.data?.message || 'Failed to save diet plan.');
+    }
   };
 
   const updateMealField = (sectionKey, index, field, value) => {
@@ -471,7 +642,7 @@ function DietitianDashboard() {
               gap: 2,
             }}
           >
-          {filteredMembers.map((member) => (
+          {displayedMembers.map((member) => (
             <Box
               key={member.id}
               sx={{
@@ -597,13 +768,7 @@ function DietitianDashboard() {
                           size="small"
                           variant="outlined"
                           color="error"
-                          onClick={() =>
-                            setAppointments((prev) =>
-                              prev.map((item) =>
-                                item.id === row.id ? { ...item, status: 'Rejected' } : item,
-                              ),
-                            )
-                          }
+                          onClick={() => rejectAppointment(row)}
                           sx={{ textTransform: 'none', fontWeight: 700, minWidth: 76 }}
                         >
                           Reject
@@ -782,7 +947,11 @@ function DietitianDashboard() {
                 minHeight: 92,
               }}
             >
-              {timeSlots.length === 0 ? (
+              {isSlotsLoading ? (
+                <Typography sx={{ color: mutedText, textAlign: 'center', mt: 2, fontSize: '1rem' }}>
+                  Loading time slots...
+                </Typography>
+              ) : timeSlots.length === 0 ? (
                 <Typography sx={{ color: mutedText, textAlign: 'center', mt: 2, fontSize: '1rem' }}>
                   No time slots created yet. Add one to get started!
                 </Typography>

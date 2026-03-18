@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Box,
@@ -22,6 +23,7 @@ import {
   LineChart,
   Line,
 } from 'recharts';
+import { getAdminReportsOverview } from '@/features/admin/api/admin.api';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
@@ -133,6 +135,76 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 function AdminReports() {
+  const [reportData, setReportData] = useState(null);
+
+  useEffect(() => {
+    const loadReports = async () => {
+      try {
+        const { data } = await getAdminReportsOverview();
+        setReportData(data?.data || null);
+      } catch {
+        setReportData(null);
+      }
+    };
+
+    loadReports();
+  }, []);
+
+  const liveKpis = useMemo(() => {
+    if (!reportData?.kpis) return kpiCards;
+
+    const revenue = Number(reportData.kpis.totalRevenue?.value || 0);
+    const members = Number(reportData.kpis.activeMembers?.value || 0);
+    const retention = Number(reportData.kpis.retentionRate?.value || 0);
+    const satisfaction = Number(reportData.kpis.avgSatisfaction?.value || 0);
+
+    return kpiCards.map((card) => {
+      if (card.id === 'revenue') {
+        return {
+          ...card,
+          value: `$${revenue.toLocaleString()}`,
+          trend: reportData.kpis.totalRevenue?.trend || card.trend,
+        };
+      }
+      if (card.id === 'members') {
+        return {
+          ...card,
+          value: members.toLocaleString(),
+          trend: reportData.kpis.activeMembers?.trend || card.trend,
+        };
+      }
+      if (card.id === 'retention') {
+        return {
+          ...card,
+          value: `${retention}%`,
+          trend: reportData.kpis.retentionRate?.trend || card.trend,
+        };
+      }
+      if (card.id === 'satisfaction') {
+        return {
+          ...card,
+          value: `${satisfaction}/5`,
+          trend: reportData.kpis.avgSatisfaction?.trend || card.trend,
+        };
+      }
+      return card;
+    });
+  }, [reportData]);
+
+  const liveRevenueData = useMemo(
+    () => (Array.isArray(reportData?.charts?.revenueTrend) && reportData.charts.revenueTrend.length
+      ? reportData.charts.revenueTrend
+      : revenueData),
+    [reportData],
+  );
+
+  const liveUserGrowthData = useMemo(
+    () => (Array.isArray(reportData?.charts?.userGrowth) && reportData.charts.userGrowth.length
+      ? reportData.charts.userGrowth
+      : activeUsersData),
+    [reportData],
+  );
+
   return (
     <MotionBox variants={containerVariants} initial="hidden" animate="visible" sx={{ pb: 2.4 }}>
       <MotionBox variants={itemVariants} mb={1.8}>
@@ -149,7 +221,7 @@ function AdminReports() {
           mb: 2.05,
         }}
       >
-        {kpiCards.map((item) => {
+        {liveKpis.map((item) => {
           const Icon = item.icon;
           return (
             <MotionCard
@@ -199,7 +271,7 @@ function AdminReports() {
             <Typography sx={{ fontWeight: 900, fontSize: '1.72rem', mb: 1.6 }}>Revenue Trend</Typography>
             <Box sx={{ width: '100%', height: 335 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={revenueData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <BarChart data={liveRevenueData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
@@ -216,7 +288,7 @@ function AdminReports() {
             <Typography sx={{ fontWeight: 900, fontSize: '1.72rem', mb: 1.6 }}>User Growth</Typography>
             <Box sx={{ width: '100%', height: 335 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={activeUsersData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <LineChart data={liveUserGrowthData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />

@@ -30,10 +30,15 @@ import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import VerifiedUserRoundedIcon from '@mui/icons-material/VerifiedUserRounded';
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
+import {
+  deleteUser as deleteUserApi,
+  getAllUsers,
+  getPlatformStats,
+  updateUser as updateUserApi,
+} from '@/features/admin/api/admin.api';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
-const MOCK_USERS_KEY = 'gympro_mock_users';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -89,17 +94,6 @@ const summaryCards = [
   },
 ];
 
-const initialUsers = [
-  { id: 1, name: 'Alex Johnson', email: 'alex@example.com', role: 'Member', status: 'Active', joined: 'Jan 15, 2025', avatar: 'AJ' },
-  { id: 2, name: 'Coach Marcus', email: 'marcus@example.com', role: 'Coach', status: 'Active', joined: 'Mar 2, 2024', avatar: 'CM' },
-  { id: 3, name: 'Dr. Sarah Mitchell', email: 'sarah@example.com', role: 'Dietician', status: 'Active', joined: 'Feb 10, 2024', avatar: 'SM' },
-  { id: 4, name: 'Tom Bradley', email: 'tom@example.com', role: 'Member', status: 'Inactive', joined: 'Nov 5, 2024', avatar: 'TB' },
-  { id: 5, name: 'Lisa Chen', email: 'lisa@example.com', role: 'Coach', status: 'Active', joined: 'Apr 18, 2024', avatar: 'LC' },
-  { id: 6, name: 'Admin User', email: 'admin@gympro.com', role: 'Admin', status: 'Active', joined: 'Jan 1, 2024', avatar: 'AU' },
-  { id: 7, name: 'Ryan Martinez', email: 'ryan@example.com', role: 'Member', status: 'Suspended', joined: 'Dec 1, 2024', avatar: 'RM' },
-  { id: 8, name: 'Priya Sharma', email: 'priya@example.com', role: 'Dietician', status: 'Active', joined: 'Jun 20, 2024', avatar: 'PS' },
-];
-
 const roleStyles = {
   Member: { bg: 'rgba(132, 204, 22, 0.14)', color: '#65A30D' },
   Coach: { bg: 'rgba(13, 148, 136, 0.14)', color: '#0F766E' },
@@ -120,83 +114,16 @@ const displayToAuthRole = {
   Admin: 'admin',
 };
 
-const authToDisplayRole = {
-  user: 'Member',
-  coach: 'Coach',
-  dietitian: 'Dietician',
-  admin: 'Admin',
-};
-
-const normalizeDisplayStatus = (status) => {
-  if (!status) return 'Active';
-  const normalized = String(status).trim().toLowerCase();
-  if (normalized === 'inactive') return 'Inactive';
-  if (normalized === 'suspended') return 'Suspended';
-  return 'Active';
-};
-
-const getAvatar = (name = '') => {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return 'U';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-};
-
-const readMockUsers = () => {
-  try {
-    const raw = localStorage.getItem(MOCK_USERS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const getInitialUsers = () => {
-  const stored = readMockUsers();
-  if (!stored.length) return initialUsers;
-
-  return stored
-    .filter((item) => item?.email)
-    .map((item, index) => {
-      const fallback = initialUsers.find((entry) => entry.email === item.email);
-      return {
-        id: item.id || fallback?.id || (10000 + index),
-        name: item.name || fallback?.name || 'Member',
-        email: item.email,
-        role: authToDisplayRole[item.role] || fallback?.role || 'Member',
-        status: normalizeDisplayStatus(item.status),
-        joined: fallback?.joined || 'Jan 1, 2025',
-        avatar: fallback?.avatar || getAvatar(item.name || fallback?.name || 'Member'),
-      };
-    });
-};
-
-const persistUsersToMockStore = (uiUsers) => {
-  const existing = readMockUsers();
-  const existingByEmail = new Map(existing.map((item) => [item.email, item]));
-
-  const nextMapped = uiUsers.map((user) => {
-    const current = existingByEmail.get(user.email) || {};
-    return {
-      ...current,
-      id: current.id || user.id,
-      name: user.name,
-      email: user.email,
-      role: displayToAuthRole[user.role] || 'user',
-      status: user.status.toLowerCase(),
-      password: current.password || 'User@123',
-    };
-  });
-
-  const visibleEmails = new Set(uiUsers.map((item) => item.email));
-  const untouched = existing.filter((item) => !visibleEmails.has(item.email));
-  localStorage.setItem(MOCK_USERS_KEY, JSON.stringify([...nextMapped, ...untouched]));
+const filterToRole = {
+  Members: 'Member',
+  Coaches: 'Coach',
+  Dieticians: 'Dietician',
+  Admins: 'Admin',
 };
 
 function AdminUsers() {
-  const [users, setUsers] = useState(() => getInitialUsers());
+  const [users, setUsers] = useState([]);
+  const [stats, setStats] = useState(null);
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -207,13 +134,13 @@ function AdminUsers() {
   const filters = ['All', 'Members', 'Coaches', 'Dieticians', 'Admins'];
 
   const filteredUsers = useMemo(() => users.filter((user) => {
-    const roleMatch = filter === 'All' ? true : user.role === filter.slice(0, -1);
+    const roleMatch = filter === 'All' ? true : user.role === filterToRole[filter];
     const query = search.trim().toLowerCase();
     const searchMatch = !query
       || user.name.toLowerCase().includes(query)
       || user.email.toLowerCase().includes(query);
     return roleMatch && searchMatch;
-  }), [filter, search]);
+  }), [users, filter, search]);
 
   const pageSize = 6;
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
@@ -221,9 +148,28 @@ function AdminUsers() {
   const pagedUsers = filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
   const roleOptions = ['Member', 'Coach', 'Dietician', 'Admin'];
 
+  const loadUsers = async () => {
+    try {
+      const { data } = await getAllUsers();
+      setUsers(Array.isArray(data?.data) ? data.data : []);
+    } catch (error) {
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to load users' });
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const { data } = await getPlatformStats();
+      setStats(data?.data || null);
+    } catch {
+      setStats(null);
+    }
+  };
+
   useEffect(() => {
-    persistUsersToMockStore(users);
-  }, [users]);
+    loadUsers();
+    loadStats();
+  }, []);
 
   const handleOpenEditRole = (user) => {
     setEditingUser(user);
@@ -234,31 +180,47 @@ function AdminUsers() {
     setEditingUser(null);
   };
 
-  const handleSaveRole = () => {
+  const handleSaveRole = async () => {
     if (!editingUser) return;
-    setUsers((prev) => prev.map((item) => (
-      item.id === editingUser.id ? { ...item, role: nextRole } : item
-    )));
-    setToast({ open: true, message: `${editingUser.name} promoted to ${nextRole}.` });
-    setEditingUser(null);
+    try {
+      const { data } = await updateUserApi(editingUser.id, { role: displayToAuthRole[nextRole] || 'user' });
+      await loadUsers();
+      await loadStats();
+      const changedAt = data?.data?.roleChangedAtLabel;
+      const timeSuffix = changedAt ? ` at ${changedAt}` : '';
+      setToast({ open: true, message: `${editingUser.name} updated to ${nextRole}${timeSuffix}.` });
+      setEditingUser(null);
+    } catch (error) {
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to update role' });
+    }
   };
 
-  const handleToggleStatus = (user) => {
+  const handleToggleStatus = async (user) => {
     const nextStatus = user.status === 'Active' ? 'Inactive' : 'Active';
-    setUsers((prev) => prev.map((item) => (
-      item.id === user.id ? { ...item, status: nextStatus } : item
-    )));
-    setToast({ open: true, message: `${user.name} marked as ${nextStatus}.` });
+    try {
+      await updateUserApi(user.id, { status: nextStatus.toLowerCase() });
+      await loadUsers();
+      await loadStats();
+      setToast({ open: true, message: `${user.name} marked as ${nextStatus}.` });
+    } catch (error) {
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to update status' });
+    }
   };
 
-  const handleDeleteUser = (user) => {
+  const handleDeleteUser = async (user) => {
     if (user.status !== 'Inactive') {
       setToast({ open: true, message: 'Only inactive users can be deleted.' });
       return;
     }
 
-    setUsers((prev) => prev.filter((item) => item.id !== user.id));
-    setToast({ open: true, message: `${user.name} deleted.` });
+    try {
+      await deleteUserApi(user.id);
+      await loadUsers();
+      await loadStats();
+      setToast({ open: true, message: `${user.name} deleted.` });
+    } catch (error) {
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to delete user' });
+    }
   };
 
   const handleCloseToast = (_, reason) => {
@@ -287,6 +249,14 @@ function AdminUsers() {
       >
         {summaryCards.map((item) => {
           const Icon = item.icon;
+          const liveValue = stats
+            ? {
+              total: stats.total,
+              staff: stats.staff,
+              diet: stats.diet,
+              verified: stats.verified,
+            }[item.id]
+            : item.value;
           return (
             <MotionCard
               key={item.id}
@@ -313,7 +283,7 @@ function AdminUsers() {
                   />
                 </Stack>
 
-                <Typography sx={{ fontWeight: 900, fontSize: '2rem', lineHeight: 1.05 }}>{item.value}</Typography>
+                <Typography sx={{ fontWeight: 900, fontSize: '2rem', lineHeight: 1.05 }}>{liveValue}</Typography>
                 <Typography sx={{ fontSize: '0.76rem', color: 'rgba(255,255,255,0.9)', mt: 0.3 }}>{item.label}</Typography>
                 <Typography sx={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.82)', mt: 0.45 }}>{item.delta}</Typography>
               </CardContent>

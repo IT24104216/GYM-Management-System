@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer,
   PieChart,
@@ -13,12 +14,20 @@ import {
   Tooltip,
 } from 'recharts';
 import {
+  Autocomplete,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
@@ -28,6 +37,18 @@ import FreeBreakfastRoundedIcon from '@mui/icons-material/FreeBreakfastRounded';
 import LunchDiningRoundedIcon from '@mui/icons-material/LunchDiningRounded';
 import DinnerDiningRoundedIcon from '@mui/icons-material/DinnerDiningRounded';
 import IcecreamRoundedIcon from '@mui/icons-material/IcecreamRounded';
+import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
+import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { ROUTES } from '@/shared/utils/constants';
+import {
+  createUserFoodLog,
+  deleteUserFoodLog,
+  getUserDietitianMealPlan,
+  getUserFoodLogs,
+  searchNutritionFoods,
+  updateUserFoodLog,
+} from '../api/user.api';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
@@ -47,72 +68,156 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 },
 };
 
-const macroData = [
-  { name: 'Protein', value: 140, color: '#0D9488' },
-  { name: 'Carbs', value: 220, color: '#F59E0B' },
-  { name: 'Fat', value: 65, color: '#8B5CF6' },
-];
-
-const weeklyCals = [
-  { day: 'M', cals: 2100 },
-  { day: 'T', cals: 2300 },
-  { day: 'W', cals: 1950 },
-  { day: 'T', cals: 2400 },
-  { day: 'F', cals: 2150 },
-  { day: 'S', cals: 2600 },
-  { day: 'S', cals: 2200 },
-];
-
-const meals = [
-  {
-    type: 'Breakfast',
-    icon: FreeBreakfastRoundedIcon,
-    tone: '#d97706',
-    bg: '#fef3c7',
-    items: [
-      { name: 'Oatmeal with Berries', cals: 350, p: 12, c: 60, f: 6 },
-      { name: 'Whey Protein Shake', cals: 120, p: 24, c: 3, f: 1 },
-    ],
-    total: 470,
-  },
-  {
-    type: 'Lunch',
-    icon: LunchDiningRoundedIcon,
-    tone: '#059669',
-    bg: '#d1fae5',
-    items: [
-      { name: 'Grilled Chicken Salad', cals: 450, p: 45, c: 15, f: 22 },
-      { name: 'Apple', cals: 95, p: 0, c: 25, f: 0 },
-    ],
-    total: 545,
-  },
-  {
-    type: 'Dinner',
-    icon: DinnerDiningRoundedIcon,
-    tone: '#2563eb',
-    bg: '#dbeafe',
-    items: [
-      { name: 'Salmon & Asparagus', cals: 520, p: 38, c: 12, f: 32 },
-      { name: 'Quinoa', cals: 220, p: 8, c: 39, f: 4 },
-    ],
-    total: 740,
-  },
-  {
-    type: 'Snacks',
-    icon: IcecreamRoundedIcon,
-    tone: '#7c3aed',
-    bg: '#ede9fe',
-    items: [
-      { name: 'Greek Yogurt', cals: 120, p: 15, c: 8, f: 0 },
-    ],
-    total: 120,
-  },
-];
-
 const yAxisTicks = [650, 1300, 1950, 2600];
+const RISK_WINDOW_DAYS = 7;
+
+const toIsoDate = (date) => {
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const shiftIsoDate = (isoDate, offsetDays) => {
+  const base = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(base.getTime())) return isoDate;
+  base.setDate(base.getDate() + Number(offsetDays || 0));
+  return toIsoDate(base);
+};
+
+const buildDailySummaries = (logs = [], endIso, days = RISK_WINDOW_DAYS) => {
+  const grouped = new Map();
+  (Array.isArray(logs) ? logs : []).forEach((log) => {
+    const dateKey = String(log?.logDate || '').slice(0, 10);
+    if (!dateKey) return;
+    const prev = grouped.get(dateKey) || { calories: 0, protein: 0, carbs: 0, fat: 0, mealCount: 0 };
+    grouped.set(dateKey, {
+      calories: prev.calories + Number(log?.calories || 0),
+      protein: prev.protein + Number(log?.protein || 0),
+      carbs: prev.carbs + Number(log?.carbs || 0),
+      fat: prev.fat + Number(log?.fat || 0),
+      mealCount: prev.mealCount + 1,
+    });
+  });
+
+  return Array.from({ length: days }).map((_, idx) => {
+    const offset = idx - (days - 1);
+    const iso = shiftIsoDate(endIso, offset);
+    const totals = grouped.get(iso) || { calories: 0, protein: 0, carbs: 0, fat: 0, mealCount: 0 };
+    return { iso, ...totals };
+  });
+};
+
+const evaluateMealQuality = (daySummary) => {
+  const calories = Number(daySummary?.calories || 0);
+  const protein = Number(daySummary?.protein || 0);
+  const carbs = Number(daySummary?.carbs || 0);
+  const fat = Number(daySummary?.fat || 0);
+  const mealCount = Number(daySummary?.mealCount || 0);
+
+  if (mealCount === 0) {
+    return {
+      level: 'neutral',
+      score: 0,
+      label: 'No logs yet',
+      message: 'Add your meals to get personalized safety feedback for your My Plan.',
+      reasons: [],
+    };
+  }
+
+  const totalKcal = Math.max(calories, (protein * 4) + (carbs * 4) + (fat * 9), 1);
+  const proteinShare = (protein * 4) / totalKcal;
+  const carbShare = (carbs * 4) / totalKcal;
+  const fatShare = (fat * 9) / totalKcal;
+
+  let score = 100;
+  const reasons = [];
+
+  if (calories < 1000) {
+    score -= 30;
+    reasons.push('Calories are too low for training recovery.');
+  } else if (calories < 1400) {
+    score -= 15;
+    reasons.push('Calories are a bit low for an active gym routine.');
+  }
+
+  if (protein < 60 || proteinShare < 0.15) {
+    score -= 25;
+    reasons.push('Protein is low for muscle recovery and performance.');
+  }
+
+  if (carbShare < 0.35) {
+    score -= 12;
+    reasons.push('Carbs are low, which can reduce workout energy.');
+  } else if (carbShare > 0.65) {
+    score -= 10;
+    reasons.push('Carbs are high compared to the rest of your macros.');
+  }
+
+  if (fatShare > 0.4) {
+    score -= 12;
+    reasons.push('Fat ratio is high and may reduce macro balance.');
+  }
+
+  if (mealCount < 2) {
+    score -= 8;
+    reasons.push('Too few meals logged for a balanced daily pattern.');
+  }
+
+  score = Math.max(0, Math.round(score));
+
+  if (score >= 80) {
+    return {
+      level: 'green',
+      score,
+      label: 'Balanced',
+      message: 'Plan is balanced today. Keep this consistency for better gym results.',
+      reasons,
+    };
+  }
+  if (score >= 55) {
+    return {
+      level: 'yellow',
+      score,
+      label: 'Moderate risk',
+      message: 'Moderate risk: your current meal balance may slow progress if repeated.',
+      reasons,
+    };
+  }
+  return {
+    level: 'red',
+    score,
+    label: 'High risk',
+    message: 'High risk if continued: poor recovery, fatigue risk, and possible muscle-loss trend.',
+    reasons,
+  };
+};
+
+const mealSectionConfig = {
+  breakfast: { label: 'Breakfast', icon: FreeBreakfastRoundedIcon, tone: '#d97706', bg: '#fef3c7' },
+  lunch: { label: 'Lunch', icon: LunchDiningRoundedIcon, tone: '#059669', bg: '#d1fae5' },
+  dinner: { label: 'Dinner', icon: DinnerDiningRoundedIcon, tone: '#2563eb', bg: '#dbeafe' },
+  snacks: { label: 'Snacks', icon: IcecreamRoundedIcon, tone: '#7c3aed', bg: '#ede9fe' },
+};
+const mealSectionOrder = ['breakfast', 'lunch', 'dinner', 'snacks'];
+
+const formatSuggestionSource = (source) => {
+  const value = String(source || '').trim().toLowerCase();
+  if (!value) return 'Unknown';
+  if (value === 'usda') return 'USDA';
+  if (value.includes('sri-lanka') || value.includes('local')) return 'Local DB';
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
 
 function CalorieTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
+  const point = payload[0]?.payload || {};
 
   return (
     <Box
@@ -126,11 +231,16 @@ function CalorieTooltip({ active, payload, label }) {
       }}
     >
       <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-        {label}
+        {point.fullDate || label}
       </Typography>
       <Typography sx={{ mt: 0.45, fontSize: '0.88rem', fontWeight: 800, color: '#84cc16', lineHeight: 1.2 }}>
         cals : {payload[0].value}
       </Typography>
+      {Number(point.mealCount || 0) > 0 && (
+        <Typography sx={{ mt: 0.35, fontSize: '0.78rem', fontWeight: 700, color: '#334155', lineHeight: 1.2 }}>
+          meals: {point.mealCount} | P {point.protein || 0}g | C {point.carbs || 0}g | F {point.fat || 0}g
+        </Typography>
+      )}
     </Box>
   );
 }
@@ -138,9 +248,463 @@ function CalorieTooltip({ active, payload, label }) {
 function UserMealPlan() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const userId = String(user?.id || user?._id || '');
   const [planMode, setPlanMode] = useState('dietitian');
+  const [dietitianPlan, setDietitianPlan] = useState(null);
+  const [planError, setPlanError] = useState('');
+  const [isPlanLoading, setIsPlanLoading] = useState(false);
+  const [foodLogs, setFoodLogs] = useState([]);
+  const [allFoodLogs, setAllFoodLogs] = useState([]);
+  const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
+  const [editingLogId, setEditingLogId] = useState(null);
+  const [logForm, setLogForm] = useState({
+    mealType: 'breakfast',
+    name: '',
+  });
+  const [logNutrition, setLogNutrition] = useState({
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    notes: '',
+  });
+  const [nutritionOptions, setNutritionOptions] = useState([]);
+  const [isNutritionLoading, setIsNutritionLoading] = useState(false);
 
-  const totalConsumed = useMemo(() => meals.reduce((sum, meal) => sum + meal.total, 0), []);
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [customTrendDate, setCustomTrendDate] = useState(todayIso);
+  const [customTrendRange, setCustomTrendRange] = useState(7);
+
+  useEffect(() => {
+    const loadDietitianPlan = async () => {
+      if (!userId) return;
+      try {
+        setIsPlanLoading(true);
+        setPlanError('');
+        const { data } = await getUserDietitianMealPlan(userId);
+        setDietitianPlan(data?.data || null);
+      } catch (error) {
+        setDietitianPlan(null);
+        setPlanError(error?.response?.data?.message || 'Failed to load dietitian plan');
+      } finally {
+        setIsPlanLoading(false);
+      }
+    };
+
+    loadDietitianPlan();
+  }, [userId]);
+
+  useEffect(() => {
+    const loadFoodLogs = async () => {
+      if (!userId) return;
+      try {
+        const { data } = await getUserFoodLogs(userId, todayIso);
+        setFoodLogs(Array.isArray(data?.data) ? data.data : []);
+      } catch {
+        setFoodLogs([]);
+      }
+    };
+
+    loadFoodLogs();
+  }, [todayIso, userId]);
+
+  useEffect(() => {
+    const loadAllFoodLogs = async () => {
+      if (!userId || planMode !== 'custom') return;
+      try {
+        const { data } = await getUserFoodLogs(userId);
+        setAllFoodLogs(Array.isArray(data?.data) ? data.data : []);
+      } catch {
+        setAllFoodLogs([]);
+      }
+    };
+
+    loadAllFoodLogs();
+  }, [planMode, userId]);
+
+  useEffect(() => {
+    if (!isLogDialogOpen) return;
+    const query = String(logForm.name || '').trim();
+    if (query.length < 2) {
+      setNutritionOptions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsNutritionLoading(true);
+        const { data } = await searchNutritionFoods(query);
+        setNutritionOptions(Array.isArray(data?.data) ? data.data : []);
+      } catch {
+        setNutritionOptions([]);
+      } finally {
+        setIsNutritionLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [isLogDialogOpen, logForm.name]);
+
+  const meals = useMemo(() => {
+    const sectionByKey = new Map();
+    (dietitianPlan?.sections || []).forEach((section) => {
+      const key = String(section?.key || '').toLowerCase();
+      if (!mealSectionOrder.includes(key)) return;
+      sectionByKey.set(key, Array.isArray(section.items) ? section.items : []);
+    });
+
+    return mealSectionOrder.map((mealType) => {
+      const config = mealSectionConfig[mealType];
+      const planItems = (sectionByKey.get(mealType) || []).map((item) => ({
+        name: item.name,
+        cals: Number(item.cals || 0),
+        p: Number(item.p || 0),
+        c: Number(item.c || 0),
+        f: Number(item.f || 0),
+        notes: item.description || '',
+        isLogged: false,
+      }));
+      const items = [...planItems];
+
+      return {
+        key: mealType,
+        type: config.label,
+        icon: config.icon || RestaurantRoundedIcon,
+        tone: config.tone,
+        bg: config.bg,
+        items,
+        total: items.reduce((sum, item) => sum + Number(item.cals || 0), 0),
+      };
+    });
+  }, [dietitianPlan]);
+
+  const myPlanMeals = useMemo(
+    () =>
+      mealSectionOrder.map((mealType) => {
+        const config = mealSectionConfig[mealType];
+        const items = foodLogs
+          .filter((log) => log.mealType === mealType)
+          .map((log) => ({
+            id: String(log._id),
+            name: log.name,
+            cals: Number(log.calories || 0),
+            p: Number(log.protein || 0),
+            c: Number(log.carbs || 0),
+            f: Number(log.fat || 0),
+            notes: log.notes || '',
+            isLogged: true,
+          }));
+        return {
+          key: mealType,
+          type: config.label,
+          icon: config.icon || RestaurantRoundedIcon,
+          tone: config.tone,
+          bg: config.bg,
+          items,
+          total: items.reduce((sum, item) => sum + Number(item.cals || 0), 0),
+        };
+      }),
+    [foodLogs],
+  );
+
+  const macroData = useMemo(() => {
+    if (!meals.length) {
+      return [
+        { name: 'Protein', value: 0, color: '#0D9488' },
+        { name: 'Carbs', value: 0, color: '#F59E0B' },
+        { name: 'Fat', value: 0, color: '#8B5CF6' },
+      ];
+    }
+    const totals = meals.reduce(
+      (acc, meal) => {
+        meal.items.forEach((item) => {
+          acc.protein += Number(item.p || 0);
+          acc.carbs += Number(item.c || 0);
+          acc.fat += Number(item.f || 0);
+        });
+        return acc;
+      },
+      { protein: 0, carbs: 0, fat: 0 },
+    );
+    return [
+      { name: 'Protein', value: Number(totals.protein || 0), color: '#0D9488' },
+      { name: 'Carbs', value: Number(totals.carbs || 0), color: '#F59E0B' },
+      { name: 'Fat', value: Number(totals.fat || 0), color: '#8B5CF6' },
+    ];
+  }, [meals]);
+
+  const weeklyCals = useMemo(() => {
+    const total = meals.reduce((sum, meal) => sum + Number(meal.total || 0), 0);
+    if (!total) {
+      return [
+        { day: 'M', cals: 0 },
+        { day: 'T', cals: 0 },
+        { day: 'W', cals: 0 },
+        { day: 'T', cals: 0 },
+        { day: 'F', cals: 0 },
+        { day: 'S', cals: 0 },
+        { day: 'S', cals: 0 },
+      ];
+    }
+    const base = Math.round(total);
+    return [
+      { day: 'M', cals: Math.max(0, base - 180) },
+      { day: 'T', cals: Math.max(0, base - 60) },
+      { day: 'W', cals: Math.max(0, base - 220) },
+      { day: 'T', cals: Math.max(0, base + 40) },
+      { day: 'F', cals: Math.max(0, base - 80) },
+      { day: 'S', cals: Math.max(0, base + 120) },
+      { day: 'S', cals: Math.max(0, base - 30) },
+    ];
+  }, [meals]);
+
+  const myPlanMacroData = useMemo(() => {
+    const totals = myPlanMeals.reduce(
+      (acc, meal) => {
+        meal.items.forEach((item) => {
+          acc.protein += Number(item.p || 0);
+          acc.carbs += Number(item.c || 0);
+          acc.fat += Number(item.f || 0);
+        });
+        return acc;
+      },
+      { protein: 0, carbs: 0, fat: 0 },
+    );
+    return [
+      { name: 'Protein', value: Number(totals.protein || 0), color: '#0D9488' },
+      { name: 'Carbs', value: Number(totals.carbs || 0), color: '#F59E0B' },
+      { name: 'Fat', value: Number(totals.fat || 0), color: '#8B5CF6' },
+    ];
+  }, [myPlanMeals]);
+
+  const myPlanRangeCals = useMemo(() => {
+    const grouped = new Map();
+    allFoodLogs.forEach((log) => {
+      const dateKey = String(log?.logDate || '').slice(0, 10);
+      if (!dateKey) return;
+      const prev = grouped.get(dateKey) || { cals: 0, protein: 0, carbs: 0, fat: 0, count: 0 };
+      grouped.set(dateKey, {
+        cals: prev.cals + Number(log?.calories || 0),
+        protein: prev.protein + Number(log?.protein || 0),
+        carbs: prev.carbs + Number(log?.carbs || 0),
+        fat: prev.fat + Number(log?.fat || 0),
+        count: prev.count + 1,
+      });
+    });
+
+    const endIso = toIsoDate(customTrendDate) || todayIso;
+    const range = [1, 7, 30].includes(Number(customTrendRange)) ? Number(customTrendRange) : 7;
+    const items = Array.from({ length: range }).map((_, idx) => {
+      const offset = idx - (range - 1);
+      const iso = shiftIsoDate(endIso, offset);
+      const entry = grouped.get(iso) || { cals: 0, protein: 0, carbs: 0, fat: 0, count: 0 };
+      const parsed = new Date(`${iso}T00:00:00`);
+      const label = range === 30
+        ? parsed.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+        : parsed.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0);
+      return {
+        day: label,
+        fullDate: parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        cals: Math.round(entry.cals),
+        protein: Math.round(entry.protein),
+        carbs: Math.round(entry.carbs),
+        fat: Math.round(entry.fat),
+        mealCount: entry.count,
+      };
+    });
+
+    return items;
+  }, [allFoodLogs, customTrendDate, customTrendRange, todayIso]);
+
+  const displayMeals = planMode === 'dietitian' ? meals : myPlanMeals;
+  const displayMacroData = planMode === 'dietitian' ? macroData : myPlanMacroData;
+  const displayWeeklyCals = planMode === 'dietitian' ? weeklyCals : myPlanRangeCals;
+  const trendLabel = planMode === 'dietitian'
+    ? 'Last 7 Days'
+    : (Number(customTrendRange) === 1 ? '1 Day' : `${customTrendRange} Days`);
+
+  const totalConsumed = useMemo(
+    () => displayMeals.reduce((sum, meal) => sum + Number(meal.total || 0), 0),
+    [displayMeals],
+  );
+
+  const riskMonitor = useMemo(() => {
+    const merged = [...allFoodLogs];
+    foodLogs.forEach((item) => {
+      const id = String(item?._id || '');
+      if (id && merged.some((x) => String(x?._id || '') === id)) return;
+      merged.push(item);
+    });
+
+    const daily = buildDailySummaries(merged, todayIso, RISK_WINDOW_DAYS);
+    const evaluated = daily.map((entry) => ({
+      ...entry,
+      evaluation: evaluateMealQuality(entry),
+    }));
+    const today = evaluated[evaluated.length - 1] || {
+      evaluation: {
+        level: 'neutral',
+        score: 0,
+        label: 'No logs yet',
+        message: 'Add your meals to get personalized safety feedback for your My Plan.',
+        reasons: [],
+      },
+    };
+
+    let riskStreak = 0;
+    for (let i = evaluated.length - 1; i >= 0; i -= 1) {
+      const level = evaluated[i]?.evaluation?.level;
+      if (level === 'yellow' || level === 'red') riskStreak += 1;
+      else break;
+    }
+
+    let goodStreak = 0;
+    for (let i = evaluated.length - 1; i >= 0; i -= 1) {
+      if (evaluated[i]?.evaluation?.level === 'green') goodStreak += 1;
+      else break;
+    }
+
+    return {
+      today: today.evaluation,
+      riskStreak,
+      goodStreak,
+    };
+  }, [allFoodLogs, foodLogs, todayIso]);
+
+  const resetLogForm = (mealType = 'breakfast') => {
+    setLogForm({
+      mealType,
+      name: '',
+    });
+    setLogNutrition({
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      notes: '',
+    });
+    setEditingLogId(null);
+    setNutritionOptions([]);
+  };
+
+  const openCreateLogDialog = (mealType = 'breakfast') => {
+    resetLogForm(mealType);
+    setIsLogDialogOpen(true);
+  };
+
+  const openEditLogDialog = (logItem, mealType) => {
+    setEditingLogId(logItem.id);
+    setLogForm({
+      mealType,
+      name: logItem.name || '',
+    });
+    setLogNutrition({
+      calories: Number(logItem.cals || 0),
+      protein: Number(logItem.p || 0),
+      carbs: Number(logItem.c || 0),
+      fat: Number(logItem.f || 0),
+      notes: logItem.notes || '',
+    });
+    setIsLogDialogOpen(true);
+  };
+
+  const closeLogDialog = () => {
+    setIsLogDialogOpen(false);
+    resetLogForm();
+  };
+
+  const handleLogFormChange = (field) => (event) => {
+    setLogForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handleNutritionSelect = (_event, option) => {
+    if (!option) return;
+    setLogForm((prev) => ({
+      ...prev,
+      name: option.name || prev.name,
+    }));
+    setLogNutrition({
+      calories: Number(option.calories || 0),
+      protein: Number(option.protein || 0),
+      carbs: Number(option.carbs || 0),
+      fat: Number(option.fat || 0),
+      notes: option.notes || '',
+    });
+  };
+
+  const refreshFoodLogs = async () => {
+    if (!userId) return;
+    const { data } = await getUserFoodLogs(userId, todayIso);
+    setFoodLogs(Array.isArray(data?.data) ? data.data : []);
+  };
+
+  const refreshAllFoodLogs = async () => {
+    if (!userId) return;
+    const { data } = await getUserFoodLogs(userId);
+    setAllFoodLogs(Array.isArray(data?.data) ? data.data : []);
+  };
+
+  const handleSaveLog = async () => {
+    try {
+      if (planMode !== 'custom') return;
+      if (!String(logForm.name || '').trim()) {
+        setPlanError('Food name is required');
+        return;
+      }
+      let effectiveNutrition = { ...logNutrition };
+      if (!effectiveNutrition.calories && !effectiveNutrition.protein && !effectiveNutrition.carbs && !effectiveNutrition.fat) {
+        const exact = nutritionOptions.find(
+          (item) => String(item?.name || '').toLowerCase() === String(logForm.name || '').trim().toLowerCase(),
+        );
+        if (exact) {
+          effectiveNutrition = {
+            calories: Number(exact.calories || 0),
+            protein: Number(exact.protein || 0),
+            carbs: Number(exact.carbs || 0),
+            fat: Number(exact.fat || 0),
+            notes: exact.notes || '',
+          };
+        }
+      }
+      const payload = {
+        userId,
+        logDate: todayIso,
+        mealType: logForm.mealType,
+        name: logForm.name.trim(),
+        calories: Number(effectiveNutrition.calories || 0),
+        protein: Number(effectiveNutrition.protein || 0),
+        carbs: Number(effectiveNutrition.carbs || 0),
+        fat: Number(effectiveNutrition.fat || 0),
+        notes: String(effectiveNutrition.notes || '').trim(),
+      };
+
+      if (editingLogId) {
+        await updateUserFoodLog(editingLogId, userId, payload);
+      } else {
+        await createUserFoodLog(payload);
+      }
+
+      await Promise.all([refreshFoodLogs(), refreshAllFoodLogs()]);
+      closeLogDialog();
+      setPlanError('');
+    } catch (error) {
+      setPlanError(error?.response?.data?.message || 'Failed to save food log');
+    }
+  };
+
+  const handleDeleteLog = async (logId) => {
+    if (planMode !== 'custom') return;
+    if (!logId || !userId) return;
+    try {
+      await deleteUserFoodLog(logId, userId);
+      await Promise.all([refreshFoodLogs(), refreshAllFoodLogs()]);
+      setPlanError('');
+    } catch (error) {
+      setPlanError(error?.response?.data?.message || 'Failed to delete food log');
+    }
+  };
 
   return (
     <MotionBox
@@ -192,6 +756,112 @@ function UserMealPlan() {
           </Stack>
         </MotionBox>
 
+        {planMode === 'custom' && (
+          <MotionCard
+            initial={{ opacity: 0, y: 12 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              boxShadow: riskMonitor.today.level === 'red'
+                ? ['0 0 0 rgba(239,68,68,0.00)', '0 0 0 8px rgba(239,68,68,0.16)', '0 0 0 rgba(239,68,68,0.00)']
+                : 'none',
+            }}
+            transition={{
+              duration: riskMonitor.today.level === 'red' ? 1.2 : 0.35,
+              repeat: riskMonitor.today.level === 'red' ? Infinity : 0,
+            }}
+            sx={{
+              mb: 2,
+              borderRadius: 2.4,
+              border: `1px solid ${
+                riskMonitor.today.level === 'green'
+                  ? '#16a34a55'
+                  : riskMonitor.today.level === 'yellow'
+                    ? '#f59e0b66'
+                    : riskMonitor.today.level === 'red'
+                      ? '#ef444466'
+                      : (isDark ? '#27384f' : '#e7edf6')
+              }`,
+              bgcolor: riskMonitor.today.level === 'green'
+                ? (isDark ? '#0d2a1d' : '#ecfdf5')
+                : riskMonitor.today.level === 'yellow'
+                  ? (isDark ? '#2f230b' : '#fffbeb')
+                  : riskMonitor.today.level === 'red'
+                    ? (isDark ? '#311315' : '#fef2f2')
+                    : theme.palette.background.paper,
+            }}
+          >
+            <CardContent>
+              <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.2}>
+                <Box>
+                  <Typography sx={{ fontWeight: 900, fontSize: '1.08rem' }}>
+                    My Plan Safety Monitor
+                  </Typography>
+                  <Typography sx={{ mt: 0.4, color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                    {riskMonitor.today.message}
+                  </Typography>
+                </Box>
+                <Chip
+                  label={riskMonitor.today.level === 'neutral' ? 'No data yet' : `${riskMonitor.today.label} • Score ${riskMonitor.today.score}`}
+                  sx={{
+                    alignSelf: { xs: 'flex-start', md: 'center' },
+                    fontWeight: 800,
+                    borderRadius: 2,
+                    bgcolor: riskMonitor.today.level === 'green'
+                      ? '#16a34a'
+                      : riskMonitor.today.level === 'yellow'
+                        ? '#f59e0b'
+                        : riskMonitor.today.level === 'red'
+                          ? '#ef4444'
+                          : (isDark ? '#334155' : '#e2e8f0'),
+                    color: '#fff',
+                  }}
+                />
+              </Stack>
+
+              {riskMonitor.today.reasons?.length > 0 && (
+                <Box sx={{ mt: 1 }}>
+                  {riskMonitor.today.reasons.slice(0, 3).map((reason, idx) => (
+                    <Typography key={`risk-reason-${idx}`} sx={{ fontSize: '0.88rem', color: theme.palette.text.secondary, mt: 0.35 }}>
+                      • {reason}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+
+              {riskMonitor.goodStreak >= 3 && (
+                <Typography sx={{ mt: 1.1, fontSize: '0.9rem', fontWeight: 700, color: '#16a34a' }}>
+                  Great job. You have maintained a balanced meal pattern for {riskMonitor.goodStreak} day(s) continuously.
+                </Typography>
+              )}
+
+              {riskMonitor.riskStreak >= 3 && (
+                <Box sx={{ mt: 1.2 }}>
+                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, color: '#ef4444' }}>
+                    Warning: risk has continued for {riskMonitor.riskStreak} day(s). It is safer to switch to a dietitian-guided plan.
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
+                    <Button
+                      variant="contained"
+                      onClick={() => setPlanMode('dietitian')}
+                      sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.8, bgcolor: '#0D9488', '&:hover': { bgcolor: '#0f766e' } }}
+                    >
+                      Switch to Dietitian Plan
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => navigate(ROUTES.USER_DIETITIANS)}
+                      sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.8 }}
+                    >
+                      Book Appointment
+                    </Button>
+                  </Stack>
+                </Box>
+              )}
+            </CardContent>
+          </MotionCard>
+        )}
+
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 2fr' }, gap: 1.8, mb: 2.4 }}>
           <MotionCard variants={itemVariants} sx={{ borderRadius: 2.4, border: `1px solid ${isDark ? '#27384f' : '#e7edf6'}` }}>
             <CardContent>
@@ -211,7 +881,7 @@ function UserMealPlan() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={macroData}
+                        data={displayMacroData}
                         dataKey="value"
                         nameKey="name"
                         innerRadius={62}
@@ -221,7 +891,7 @@ function UserMealPlan() {
                         isAnimationActive
                         animationDuration={900}
                       >
-                        {macroData.map((item) => (
+                        {displayMacroData.map((item) => (
                           <Cell key={item.name} fill={item.color} />
                         ))}
                       </Pie>
@@ -265,7 +935,7 @@ function UserMealPlan() {
                     gap: 1,
                   }}
                 >
-                  {macroData.map((item) => (
+                  {displayMacroData.map((item) => (
                     <Stack key={item.name} alignItems="center" spacing={0.3} sx={{ minWidth: 0 }}>
                       <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: item.color }} />
                       <Typography sx={{ fontWeight: 800, fontSize: '0.9rem' }}>{item.name}</Typography>
@@ -281,13 +951,37 @@ function UserMealPlan() {
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.6}>
                 <Typography sx={{ fontWeight: 900, fontSize: '1.2rem' }}>Calorie Trend</Typography>
-                <Chip label="Last 7 Days" sx={{ borderRadius: 1.8, fontWeight: 700 }} />
+                {planMode === 'custom' ? (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <TextField
+                      type="date"
+                      size="small"
+                      value={customTrendDate}
+                      onChange={(event) => setCustomTrendDate(event.target.value)}
+                      InputLabelProps={{ shrink: true }}
+                      sx={{ width: 156 }}
+                    />
+                    <TextField
+                      select
+                      size="small"
+                      value={customTrendRange}
+                      onChange={(event) => setCustomTrendRange(Number(event.target.value))}
+                      sx={{ width: 96 }}
+                    >
+                      <MenuItem value={1}>1 Day</MenuItem>
+                      <MenuItem value={7}>7 Days</MenuItem>
+                      <MenuItem value={30}>30 Days</MenuItem>
+                    </TextField>
+                  </Stack>
+                ) : (
+                  <Chip label={trendLabel} sx={{ borderRadius: 1.8, fontWeight: 700 }} />
+                )}
               </Stack>
 
               <Box sx={{ width: '100%', overflowX: 'auto' }}>
                 <Box sx={{ width: '100%', height: 240 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={weeklyCals} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <BarChart data={displayWeeklyCals} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                       <CartesianGrid vertical={false} strokeDasharray="3 4" stroke="#cbd5e1" />
                       <XAxis
                         dataKey="day"
@@ -312,7 +1006,7 @@ function UserMealPlan() {
                         dataKey="cals"
                         fill="#84cc16"
                         radius={[8, 8, 0, 0]}
-                        barSize={52}
+                        barSize={planMode === 'custom' ? (customTrendRange === 30 ? 12 : (customTrendRange === 1 ? 52 : 34)) : 52}
                         isAnimationActive
                         animationDuration={650}
                       />
@@ -324,28 +1018,125 @@ function UserMealPlan() {
           </MotionCard>
         </Box>
 
+        {planMode === 'dietitian' && (
+          <MotionCard
+            variants={itemVariants}
+            sx={{
+              mb: 2.2,
+              borderRadius: 2.2,
+              border: `1px solid ${isDark ? '#27384f' : '#e7edf6'}`,
+              background: isDark
+                ? 'linear-gradient(135deg, #13213a 0%, #0f1b31 100%)'
+                : 'linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%)',
+            }}
+          >
+            <CardContent>
+              <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.4}>
+                <Stack direction="row" spacing={1.1} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      bgcolor: '#84cc16',
+                      color: '#0f172a',
+                      display: 'grid',
+                      placeItems: 'center',
+                    }}
+                  >
+                    <VerifiedRoundedIcon sx={{ fontSize: 22 }} />
+                  </Box>
+                  <Box>
+                    <Typography sx={{ fontWeight: 900, fontSize: '1.05rem' }}>Dietitian Plan</Typography>
+                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.9rem' }}>
+                      {dietitianPlan
+                        ? `Assigned by ${dietitianPlan?.dietitian?.name || 'Dietitian'}`
+                        : 'No submitted plan yet'}
+                    </Typography>
+                  </Box>
+                </Stack>
+                {dietitianPlan && (
+                  <Chip
+                    label={`${Number(dietitianPlan?.summary?.totalCalories || 0)} kcal/day`}
+                    sx={{ borderRadius: 2, fontWeight: 800, bgcolor: '#84cc16', color: '#0f172a' }}
+                  />
+                )}
+              </Stack>
+
+              {!dietitianPlan && (
+                <Typography sx={{ mt: 1.1, color: planError ? '#ef4444' : theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                  {isPlanLoading
+                    ? 'Loading dietitian plan...'
+                    : (planError || 'Your dietitian has not submitted a meal plan yet.')}
+                </Typography>
+              )}
+
+              {dietitianPlan && (
+                <>
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2.4} sx={{ mt: 1.2 }}>
+                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                      Focus: <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>{dietitianPlan?.dietitian?.specialization || 'Nutrition'}</Box>
+                    </Typography>
+                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.92rem' }}>
+                      Updated: <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>
+                        {dietitianPlan?.submittedAt ? new Date(dietitianPlan.submittedAt).toLocaleDateString() : '-'}
+                      </Box>
+                    </Typography>
+                  </Stack>
+                  <Typography
+                    sx={{
+                      mt: 0.9,
+                      color: theme.palette.text.secondary,
+                      fontSize: '0.92rem',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    Dietitian Notes:{' '}
+                    <Box component="span" sx={{ color: theme.palette.text.primary, fontWeight: 700 }}>
+                      {dietitianPlan?.additionalNotes?.trim() || '-'}
+                    </Box>
+                  </Typography>
+                </>
+              )}
+            </CardContent>
+          </MotionCard>
+        )}
+
         <MotionBox variants={itemVariants}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.3}>
             <Typography sx={{ fontSize: '1.45rem', fontWeight: 900, color: theme.palette.text.primary }}>
               {planMode === 'dietitian' ? "Today's Meals" : 'My Meal Builder'}
             </Typography>
-            <Button
-              variant="contained"
-              startIcon={<AddRoundedIcon />}
-              sx={{
-                borderRadius: 2,
-                textTransform: 'none',
-                fontWeight: 800,
-                bgcolor: '#0f172a',
-                '&:hover': { bgcolor: '#111827' },
-              }}
-            >
-              {planMode === 'dietitian' ? 'Log Food' : 'Create Meal'}
-            </Button>
+            {planMode === 'custom' && (
+              <Button
+                variant="contained"
+                startIcon={<AddRoundedIcon />}
+                onClick={() => openCreateLogDialog('breakfast')}
+                sx={{
+                  borderRadius: 2,
+                  textTransform: 'none',
+                  fontWeight: 800,
+                  bgcolor: '#0f172a',
+                  '&:hover': { bgcolor: '#111827' },
+                }}
+              >
+                Create Meal
+              </Button>
+            )}
           </Stack>
 
           <Stack spacing={1.3}>
-            {meals.map((meal, index) => {
+            {planMode === 'dietitian' && !isPlanLoading && displayMeals.length === 0 && (
+              <MotionCard variants={itemVariants} sx={{ borderRadius: 2.2, border: `1px solid ${isDark ? '#27384f' : '#e7edf6'}` }}>
+                <Box sx={{ p: 2 }}>
+                  <Typography sx={{ color: theme.palette.text.secondary }}>
+                    No dietitian meals available yet.
+                  </Typography>
+                </Box>
+              </MotionCard>
+            )}
+            {displayMeals.map((meal, index) => {
               const Icon = meal.icon;
               return (
                 <MotionCard
@@ -367,10 +1158,15 @@ function UserMealPlan() {
                   </Box>
 
                   <Box sx={{ p: 1.2 }}>
-                    {meal.items.map((item) => (
-                      <Stack key={item.name} direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1.2, borderRadius: 1.5, '&:hover': { bgcolor: isDark ? '#13233a' : '#f8fafc' } }}>
+                    {meal.items.map((item, idx) => (
+                      <Stack key={`${item.name}-${idx}`} direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1.2, borderRadius: 1.5, '&:hover': { bgcolor: isDark ? '#13233a' : '#f8fafc' } }}>
                         <Box>
-                          <Typography sx={{ fontWeight: 700 }}>{item.name}</Typography>
+                          <Stack direction="row" spacing={0.8} alignItems="center">
+                            <Typography sx={{ fontWeight: 700 }}>{item.name}</Typography>
+                            {item.isLogged && (
+                              <Chip label="Logged" size="small" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700 }} />
+                            )}
+                          </Stack>
                           <Stack direction="row" spacing={0.9} sx={{ mt: 0.3 }}>
                             <Typography sx={{ color: theme.palette.text.secondary }}>{item.cals} kcal</Typography>
                             <Typography sx={{ color: '#9ca3af' }}>•</Typography>
@@ -379,33 +1175,171 @@ function UserMealPlan() {
                             <Typography sx={{ color: '#8B5CF6' }}>{item.f}g F</Typography>
                           </Stack>
                         </Box>
-                        <ChevronRightRoundedIcon sx={{ color: '#9ca3af' }} />
+                        {planMode === 'custom' && item.isLogged ? (
+                          <Stack direction="row" spacing={0.6}>
+                            <Button
+                              size="small"
+                              onClick={() => openEditLogDialog(item, meal.key)}
+                              sx={{ minWidth: 0, px: 1, textTransform: 'none', fontWeight: 700 }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="small"
+                              color="error"
+                              onClick={() => handleDeleteLog(item.id)}
+                              sx={{ minWidth: 0, px: 1, textTransform: 'none', fontWeight: 700 }}
+                            >
+                              Delete
+                            </Button>
+                          </Stack>
+                        ) : (
+                          <ChevronRightRoundedIcon sx={{ color: '#9ca3af' }} />
+                        )}
                       </Stack>
                     ))}
 
-                    <Button
-                      fullWidth
-                      startIcon={<AddRoundedIcon />}
-                      sx={{
-                        mt: 0.6,
-                        color: '#64748b',
-                        textTransform: 'none',
-                        fontWeight: 700,
-                        borderRadius: 1.5,
-                        '&:hover': {
-                          bgcolor: isDark ? '#15253c' : '#ecfeff',
-                          color: '#0D9488',
-                        },
-                      }}
-                    >
-                      Add Food
-                    </Button>
+                    {planMode === 'custom' && (
+                      <Button
+                        fullWidth
+                        startIcon={<AddRoundedIcon />}
+                        onClick={() => openCreateLogDialog(meal.key)}
+                        sx={{
+                          mt: 0.6,
+                          color: '#64748b',
+                          textTransform: 'none',
+                          fontWeight: 700,
+                          borderRadius: 1.5,
+                          '&:hover': {
+                            bgcolor: isDark ? '#15253c' : '#ecfeff',
+                            color: '#0D9488',
+                          },
+                        }}
+                      >
+                        Add Food
+                      </Button>
+                    )}
                   </Box>
                 </MotionCard>
               );
             })}
           </Stack>
         </MotionBox>
+
+        <Dialog
+          open={isLogDialogOpen}
+          onClose={closeLogDialog}
+          fullWidth
+          maxWidth="sm"
+          PaperProps={{
+            sx: {
+              borderRadius: 2.2,
+              border: `1px solid ${isDark ? '#314764' : '#d5deea'}`,
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1, fontWeight: 900 }}>
+            {editingLogId ? 'Edit Food Log' : 'Add Food Log'}
+          </DialogTitle>
+          <DialogContent sx={{ pt: 1 }}>
+            <Stack spacing={1.25} sx={{ mt: 0.5 }}>
+              <TextField
+                select
+                label="Meal Type"
+                value={logForm.mealType}
+                onChange={handleLogFormChange('mealType')}
+                fullWidth
+                size="small"
+              >
+                {mealSectionOrder.map((mealType) => (
+                  <MenuItem key={mealType} value={mealType}>
+                    {mealSectionConfig[mealType].label}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <Autocomplete
+                freeSolo
+                options={nutritionOptions}
+                loading={isNutritionLoading}
+                noOptionsText="No suggestions found"
+                loadingText="Loading suggestions..."
+                getOptionLabel={(option) => (typeof option === 'string' ? option : option?.name || '')}
+                renderOption={(props, option) => {
+                  if (typeof option === 'string') {
+                    return (
+                      <Box component="li" {...props} sx={{ width: '100%' }}>
+                        <Typography sx={{ fontSize: '0.92rem' }}>{option}</Typography>
+                      </Box>
+                    );
+                  }
+                  return (
+                    <Box component="li" {...props} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <Typography sx={{ fontSize: '0.92rem' }}>{option?.name || ''}</Typography>
+                      <Chip
+                        size="small"
+                        label={formatSuggestionSource(option?.source)}
+                        sx={{
+                          ml: 1,
+                          height: 20,
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          bgcolor: '#dcfce7',
+                          color: '#166534',
+                        }}
+                      />
+                    </Box>
+                  );
+                }}
+                filterOptions={(x) => x}
+                inputValue={logForm.name}
+                onInputChange={(_event, value) => {
+                  setLogForm((prev) => ({ ...prev, name: value }));
+                  setLogNutrition((prev) => ({
+                    ...prev,
+                    calories: 0,
+                    protein: 0,
+                    carbs: 0,
+                    fat: 0,
+                    notes: '',
+                  }));
+                }}
+                onChange={handleNutritionSelect}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Food Name"
+                    fullWidth
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {isNutritionLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+              <Typography sx={{ fontSize: '0.86rem', color: theme.palette.text.secondary }}>
+                Nutrition is auto-filled from selected food suggestion and shown in the meal card.
+              </Typography>
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2.5 }}>
+            <Button onClick={closeLogDialog} sx={{ textTransform: 'none', fontWeight: 700 }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveLog}
+              variant="contained"
+              sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.8 }}
+            >
+              {editingLogId ? 'Update Food' : 'Add Food'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </MotionBox>
   );

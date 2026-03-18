@@ -24,11 +24,22 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
 import FlipRoundedIcon from '@mui/icons-material/FlipRounded';
 import { ROUTES } from '@/shared/utils/constants';
+import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  finishUserWorkoutSession,
+  getUserWorkoutPlans,
+  startUserWorkoutSession,
+  updateUserWorkoutSessionProgress,
+} from '@/features/user/api/user.api';
 
 const MotionBox = motion(Box);
-const SESSION_LIMIT_SECONDS = 60 * 60;
-const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
-const WORKOUT_COMPLETION_HISTORY_KEY = 'gympro_workout_completion_history';
+const getLocalIsoDate = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 const TODAY_MOCK_DATE = new Date().toLocaleDateString('en-US', {
   month: 'short',
   day: 'numeric',
@@ -145,7 +156,201 @@ const EXERCISE_LIBRARY = MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({
   },
 }));
 
-function ExerciseCard({ workout, index }) {
+const PLAN_GRADIENTS = [
+  'linear-gradient(135deg, #65a30d 0%, #0ea5a5 100%)',
+  'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
+  'linear-gradient(135deg, #0f766e 0%, #0284c7 100%)',
+  'linear-gradient(135deg, #b45309 0%, #ea580c 100%)',
+];
+
+const getWeekNumberFromDay = (dayNumber) => Math.max(1, Math.ceil(Number(dayNumber) / 7));
+const normalizePublishedWeeks = (weeks = [], durationDays = 30) => {
+  const totalWeeks = Math.max(1, Math.ceil((Number(durationDays) || 30) / 7));
+  return [...new Set((Array.isArray(weeks) ? weeks : [])
+    .map((w) => Number(w))
+    .filter((w) => Number.isInteger(w) && w >= 1 && w <= totalWeeks))]
+    .sort((a, b) => a - b);
+};
+
+const resolveExerciseInstruction = (exerciseItem, allExercises = []) => {
+  const direct = String(exerciseItem?.description || '').trim();
+  if (direct) return direct;
+  const name = String(exerciseItem?.name || '').trim().toLowerCase();
+  const amount = String(exerciseItem?.amount || '').trim().toLowerCase();
+  if (!name) return 'Follow the coach instructions.';
+  const exactMatch = (allExercises || []).find((item) => (
+    String(item?.name || '').trim().toLowerCase() === name
+    && (!amount || String(item?.amount || '').trim().toLowerCase() === amount)
+    && String(item?.description || '').trim()
+  ));
+  if (exactMatch) return String(exactMatch.description || '').trim();
+  const nameOnlyMatch = (allExercises || []).find((item) => (
+    String(item?.name || '').trim().toLowerCase() === name
+    && String(item?.description || '').trim()
+  ));
+  return String(nameOnlyMatch?.description || '').trim() || 'Follow the coach instructions.';
+};
+
+const areExercisesCompleted = (items = []) => (
+  Array.isArray(items) && items.length > 0 && items.every((item) => Boolean(item?.done))
+);
+
+const hydrateInstructionsFromPlan = (items = [], plan = null) => {
+  const planExercises = Array.isArray(plan?.exercises) ? plan.exercises : [];
+  return items.map((exercise) => {
+    const current = String(exercise?.instruction || '').trim();
+    if (current && current !== 'Follow the coach instructions.') return exercise;
+    const idx = Number(exercise?.exerciseIndex);
+    const byIndex = Number.isInteger(idx) && idx >= 0 ? planExercises[idx] : null;
+    const name = String(exercise?.name || '').trim().toLowerCase();
+    const byName = name
+      ? planExercises.find((item) => String(item?.name || '').trim().toLowerCase() === name)
+      : null;
+    const recovered = String(byIndex?.description || byName?.description || '').trim();
+    return {
+      ...exercise,
+      instruction: recovered || 'Follow the coach instructions.',
+    };
+  });
+};
+
+const mapPlansToWorkouts = (plans = []) => {
+  const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const result = [];
+
+  plans.forEach((plan, planIdx) => {
+    const planExercises = Array.isArray(plan.exercises) ? plan.exercises : [];
+    const programDays = Array.isArray(plan.programDays) ? plan.programDays : [];
+    const session = plan.session || {};
+    const progressMap = new Map(
+      (Array.isArray(session.exerciseProgress) ? session.exerciseProgress : [])
+        .map((item) => [Number(item.index), Boolean(item.done)]),
+    );
+    const isCompleted = session.status === 'completed' || plan.status === 'completed';
+    const publishedWeeks = normalizePublishedWeeks(plan.publishedWeeks, plan.durationDays);
+    const canShowAllDays = Boolean(plan.isSubmitted);
+    const baseDate = new Date(plan.createdAt || Date.now());
+    const completedDate = session.completedAt ? new Date(session.completedAt) : null;
+    const completedDateLabel = completedDate && !Number.isNaN(completedDate.getTime())
+      ? completedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : null;
+    const scheduledDate = Number.isNaN(baseDate.getTime())
+      ? todayLabel
+      : baseDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    if (programDays.length) {
+      programDays
+        .filter((day) => {
+          if (day.isRest) return false;
+          if (canShowAllDays) return true;
+          return publishedWeeks.includes(getWeekNumberFromDay(day.dayNumber));
+        })
+        .forEach((day, dayIdx) => {
+          const indexes = Array.isArray(day.assignedExerciseIndexes) && day.assignedExerciseIndexes.length
+            ? day.assignedExerciseIndexes
+            : (Array.isArray(day.exerciseIndexes) && day.exerciseIndexes.length
+              ? day.exerciseIndexes
+              : planExercises.map((_, idx) => idx));
+          const dayExercises = indexes
+            .map((idx) => ({ item: planExercises[idx], idx }))
+            .filter((entry) => Boolean(entry.item));
+          const summedAssignedMinutes = dayExercises.reduce((total, { item }) => {
+            const minutes = Number(item?.assignedMinutes || 0);
+            return total + (minutes > 0 ? minutes : 0);
+          }, 0);
+          const dayAssignedMinutes = summedAssignedMinutes > 0
+            ? summedAssignedMinutes
+            : Number(day.durationMinutes || plan.planDurationMinutes || 45);
+          const primary = dayExercises[0]?.item || planExercises[0] || {};
+          const dateLabel = day.date
+            ? new Date(`${day.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : scheduledDate;
+          result.push({
+            id: `${plan._id || `plan-${planIdx}`}-day-${day.dayNumber || dayIdx + 1}`,
+            sourcePlanId: String(plan._id || `plan-${planIdx}`),
+            title: day.title || primary.name || plan.planTitle || 'Workout Exercise',
+            muscles: day.muscles || plan.planTitle || 'Coach Assigned Plan',
+            workoutDate: dateLabel,
+            workoutIsoDate: day.date || '',
+            duration: `${dayAssignedMinutes} min`,
+            assignedDurationMinutes: dayAssignedMinutes,
+            level: day.level || 'Coach Plan',
+            rating: Number(day.rating || 4.7),
+            gradient: PLAN_GRADIENTS[(planIdx + dayIdx) % PLAN_GRADIENTS.length],
+            done: Boolean(day.done) || isCompleted,
+            planExercises: dayExercises.length
+              ? dayExercises.map(({ item, idx }) => ({
+                id: `${plan._id || `plan-${planIdx}`}-session-${day.dayNumber || dayIdx + 1}-${idx}`,
+                name: item.name || 'Exercise',
+                setsReps: item.amount || '',
+                focusArea: day.muscles || plan.planTitle || 'Workout',
+                instruction: resolveExerciseInstruction(item, planExercises),
+                done: isCompleted ? true : Boolean(progressMap.get(idx)),
+                flipped: false,
+                exerciseIndex: idx,
+                assignedMinutes: Number(item.assignedMinutes) > 0 ? Number(item.assignedMinutes) : 45,
+              }))
+              : planExercises.map((item, itemIdx) => ({
+                id: `${plan._id || `plan-${planIdx}`}-session-${day.dayNumber || dayIdx + 1}-${itemIdx}`,
+                name: item.name || 'Exercise',
+                setsReps: item.amount || '',
+                focusArea: day.muscles || plan.planTitle || 'Workout',
+                instruction: resolveExerciseInstruction(item, planExercises),
+                done: isCompleted ? true : Boolean(progressMap.get(itemIdx)),
+                flipped: false,
+                exerciseIndex: itemIdx,
+                assignedMinutes: Number(item.assignedMinutes) > 0 ? Number(item.assignedMinutes) : 45,
+              })),
+            sessionExerciseMeta: {
+              setsReps: primary.amount || '',
+              instruction: primary.description || '',
+            },
+          });
+        });
+      return;
+    }
+
+    if (!canShowAllDays) return;
+
+    planExercises.forEach((exercise, exIdx) => {
+      const singleExerciseMinutes = Number(exercise.assignedMinutes) > 0
+        ? Number(exercise.assignedMinutes)
+        : (Number(plan.planDurationMinutes) > 0 ? Number(plan.planDurationMinutes) : 45);
+      result.push({
+        id: `${plan._id || `plan-${planIdx}`}-${exIdx}`,
+        sourcePlanId: String(plan._id || `plan-${planIdx}`),
+        title: exercise.name || plan.planTitle || 'Workout Exercise',
+        muscles: plan.planTitle || 'Coach Assigned Plan',
+        workoutDate: isCompleted ? (completedDateLabel || scheduledDate) : scheduledDate,
+        duration: `${singleExerciseMinutes} min`,
+        assignedDurationMinutes: singleExerciseMinutes,
+        level: 'Coach Plan',
+        rating: 4.7,
+        gradient: PLAN_GRADIENTS[(planIdx + exIdx) % PLAN_GRADIENTS.length],
+        done: isCompleted,
+        planExercises: planExercises.map((item, itemIdx) => ({
+          id: `${plan._id || `plan-${planIdx}`}-session-${itemIdx}`,
+          name: item.name || 'Exercise',
+          setsReps: item.amount || '',
+          focusArea: plan.planTitle || 'Workout',
+          instruction: resolveExerciseInstruction(item, planExercises),
+          done: isCompleted ? true : Boolean(progressMap.get(itemIdx)),
+          flipped: false,
+          exerciseIndex: itemIdx,
+          assignedMinutes: Number(item.assignedMinutes) > 0 ? Number(item.assignedMinutes) : 45,
+        })),
+        sessionExerciseMeta: {
+          setsReps: exercise.amount || '',
+          instruction: exercise.description || '',
+        },
+      });
+    });
+  });
+
+  return result;
+};
+
+function ExerciseCard({ workout, index, onOpen }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -242,7 +447,9 @@ function ExerciseCard({ workout, index }) {
             </Stack>
           </Stack>
 
-          <ChevronRightRoundedIcon sx={{ color: theme.palette.text.secondary }} />
+          <IconButton size="small" onClick={() => onOpen?.(workout)} disabled={!onOpen}>
+            <ChevronRightRoundedIcon sx={{ color: theme.palette.text.secondary }} />
+          </IconButton>
         </Box>
       </Box>
     </MotionBox>
@@ -251,6 +458,7 @@ function ExerciseCard({ workout, index }) {
 
 function UserWorkouts() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const today = new Date();
@@ -259,33 +467,63 @@ function UserWorkouts() {
   const [elapsedSessionSeconds, setElapsedSessionSeconds] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [sessionStatus, setSessionStatus] = useState('idle');
+  const [sessionDialogMode, setSessionDialogMode] = useState('active');
   const [sessionToast, setSessionToast] = useState({ open: false, message: '' });
-  const [workouts, setWorkouts] = useState(EXERCISE_LIBRARY);
+  const [isEarlyFinishConfirmOpen, setIsEarlyFinishConfirmOpen] = useState(false);
+  const [workouts, setWorkouts] = useState([]);
   const [sessionExercises, setSessionExercises] = useState(
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
   );
+  const userId = String(user?.id || '');
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  const loadAssignedPlans = async () => {
+    if (!userId) return;
+    try {
+      const { data } = await getUserWorkoutPlans(userId);
+      const plans = Array.isArray(data?.data) ? data.data : [];
+      const filtered = plans.filter((plan) => {
+        if (plan?.isSubmitted) return true;
+        const publishedWeeks = normalizePublishedWeeks(plan?.publishedWeeks, plan?.durationDays);
+        return publishedWeeks.length > 0;
+      });
+      setWorkouts(mapPlansToWorkouts(filtered));
+    } catch {
+      setWorkouts([]);
+    }
+  };
+
+  useEffect(() => {
+    loadAssignedPlans();
+  }, [userId]);
 
   const upcomingExercises = workouts
-    .filter((item) => !item.done)
     .map((item) => {
-      const parsed = parseWorkoutDate(item.workoutDate);
+      const parsed = parseWorkoutDate(item.workoutIsoDate || item.workoutDate);
       return {
         ...item,
         workoutDateObject: parsed,
         workoutDateValue: parsed ? parsed.getTime() : Number.POSITIVE_INFINITY,
       };
     })
+    .filter((item) => {
+      if (item.done) return false;
+      if (!item.workoutDateObject) return true;
+      return item.workoutDateObject >= startOfToday;
+    })
     .sort((a, b) => a.workoutDateValue - b.workoutDateValue);
 
   const previousExercises = workouts
-    .filter((item) => item.done)
     .map((item) => {
-      const parsed = parseWorkoutDate(item.workoutDate);
+      const parsed = parseWorkoutDate(item.workoutIsoDate || item.workoutDate);
+      const isExpired = parsed ? parsed < startOfToday : false;
       return {
         ...item,
         completedDateValue: parsed ? parsed.getTime() : 0,
+        isExpired,
       };
     })
+    .filter((item) => item.done || item.isExpired)
     .sort((a, b) => b.completedDateValue - a.completedDateValue);
 
   const todayWorkout = upcomingExercises.find((item) => (
@@ -300,28 +538,116 @@ function UserWorkouts() {
     ? upcomingExercises.filter((item) => item.id !== todayWorkout.id)
     : upcomingExercises;
 
-  const activeSessionDurationMinutes = getDurationInMinutes(
-    activeSessionWorkout?.duration,
-    MOCK_WORKOUT_SESSION.estimatedDurationMinutes,
-  );
+  const activeSessionDurationMinutes = Number(activeSessionWorkout?.assignedDurationMinutes) > 0
+    ? Number(activeSessionWorkout.assignedDurationMinutes)
+    : getDurationInMinutes(
+      activeSessionWorkout?.duration,
+      MOCK_WORKOUT_SESSION.estimatedDurationMinutes,
+    );
   const activeSessionLimitSeconds = activeSessionDurationMinutes * 60;
+  const isCurrentExerciseSetCompleted = areExercisesCompleted(sessionExercises);
+  const isSessionViewOnly = sessionDialogMode === 'view'
+    || Boolean(activeSessionWorkout?.done)
+    || sessionStatus === 'finished'
+    || isCurrentExerciseSetCompleted;
+  const canFlipInSession = sessionDialogMode === 'view' || !isSessionViewOnly;
 
-  const handleOpenWorkoutSession = () => {
+  const handleOpenWorkoutSession = async () => {
     if (!todayWorkout) return;
+    setSessionDialogMode('active');
     setActiveSessionWorkout(todayWorkout);
     setElapsedSessionSeconds(0);
     setSessionStarted(false);
-    setSessionStatus('idle');
-    setSessionExercises(MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })));
+    const workoutSessionExercises = Array.isArray(todayWorkout.planExercises) && todayWorkout.planExercises.length
+      ? todayWorkout.planExercises
+      : MOCK_WORKOUT_SESSION.exercises;
+    const seededExercises = workoutSessionExercises.map((exercise) => ({ ...exercise, done: Boolean(exercise.done), flipped: false }));
+    setSessionExercises(seededExercises);
+    setSessionStatus((todayWorkout.done || areExercisesCompleted(seededExercises)) ? 'finished' : 'idle');
+    setIsWorkoutSessionOpen(true);
+
+    const sourcePlanId = todayWorkout?.sourcePlanId || '';
+    if (!sourcePlanId || !userId) return;
+    try {
+      const { data } = await getUserWorkoutPlans(userId);
+      const plans = Array.isArray(data?.data) ? data.data : [];
+      const sourcePlan = plans.find((plan) => String(plan?._id || '') === String(sourcePlanId));
+      if (!sourcePlan) return;
+      setSessionExercises((prev) => {
+        const hydrated = hydrateInstructionsFromPlan(prev, sourcePlan);
+        const isCompletedByServer = sourcePlan?.session?.status === 'completed' || sourcePlan?.status === 'completed';
+        if (isCompletedByServer) {
+          setSessionStatus('finished');
+          return hydrated.map((item) => ({ ...item, done: true }));
+        }
+        if (areExercisesCompleted(hydrated)) {
+          setSessionStatus('finished');
+        }
+        return hydrated;
+      });
+    } catch {
+      // keep seeded values; avoid blocking the workout dialog on refresh failure
+    }
+  };
+
+  const handleOpenWorkoutPreview = (workout) => {
+    if (!workout) return;
+    setSessionDialogMode('view');
+    setActiveSessionWorkout(workout);
+    setElapsedSessionSeconds(0);
+    setSessionStarted(false);
+    setSessionStatus('finished');
+    const workoutSessionExercises = Array.isArray(workout.planExercises) && workout.planExercises.length
+      ? workout.planExercises
+      : MOCK_WORKOUT_SESSION.exercises;
+    setSessionExercises(workoutSessionExercises.map((exercise) => ({
+      ...exercise,
+      done: Boolean(exercise.done),
+      flipped: false,
+    })));
     setIsWorkoutSessionOpen(true);
   };
 
   const handleCloseWorkoutSession = () => {
     setIsWorkoutSessionOpen(false);
+    setIsEarlyFinishConfirmOpen(false);
+    setSessionDialogMode('active');
     setActiveSessionWorkout(null);
     setElapsedSessionSeconds(0);
     setSessionStarted(false);
     setSessionStatus('idle');
+  };
+
+  const completeWorkoutSession = () => {
+    const sourcePlanId = activeSessionWorkout?.sourcePlanId || todayWorkout?.sourcePlanId || '';
+    if (!sourcePlanId || !userId) return;
+
+    finishUserWorkoutSession(sourcePlanId, {
+      userId,
+      elapsedSeconds: elapsedSessionSeconds,
+    })
+      .then((response) => {
+        const payload = response?.data?.data || {};
+        const completedWorkoutDate = payload.completedDate || getLocalIsoDate();
+        return loadAssignedPlans().then(() => completedWorkoutDate);
+      })
+      .then((completedWorkoutDate) => {
+        setSessionStarted(false);
+        setSessionStatus('finished');
+        setSessionToast({ open: true, message: 'Workout session marked as finished. Redirecting to progress tracking...' });
+        setTimeout(() => {
+          handleCloseWorkoutSession();
+          navigate(ROUTES.USER_PROGRESS, {
+            state: {
+              completedWorkoutDate,
+              openedFromWorkoutFinish: true,
+            },
+          });
+        }, 700);
+      })
+      .catch((error) => {
+        setSessionToast({ open: true, message: error?.response?.data?.message || 'Failed to finish workout session.' });
+      });
   };
 
   const handleMarkSessionFinish = () => {
@@ -336,43 +662,12 @@ function UserWorkouts() {
       return;
     }
 
-    setSessionStarted(false);
-    setSessionStatus('finished');
-    const completionDate = new Date().toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const completionIsoDate = new Date().toISOString().split('T')[0];
-    const existingHistoryRaw = localStorage.getItem(WORKOUT_COMPLETION_HISTORY_KEY);
-    const existingHistory = existingHistoryRaw ? JSON.parse(existingHistoryRaw) : [];
-    const normalizedHistory = Array.isArray(existingHistory) ? existingHistory : [];
-    const nextHistory = Array.from(new Set([...normalizedHistory, completionIsoDate])).sort();
-
-    const finishedWorkoutId = activeSessionWorkout?.id || todayWorkout?.id;
-    if (finishedWorkoutId) {
-      setWorkouts((prev) => prev.map((item) => (
-        item.id === finishedWorkoutId
-          ? {
-            ...item,
-            done: true,
-            workoutDate: completionDate,
-            sessionRuntime: {
-              ...item.sessionRuntime,
-              completed: true,
-            },
-          }
-          : item
-      )));
+    if (elapsedSessionSeconds < activeSessionLimitSeconds) {
+      setIsEarlyFinishConfirmOpen(true);
+      return;
     }
 
-    localStorage.setItem(PROGRESS_COMPLETION_DATE_KEY, completionDate);
-    localStorage.setItem(WORKOUT_COMPLETION_HISTORY_KEY, JSON.stringify(nextHistory));
-    setSessionToast({ open: true, message: 'Workout session marked as finished. Redirecting to progress tracking...' });
-    setTimeout(() => {
-      handleCloseWorkoutSession();
-      navigate(ROUTES.USER_PROGRESS);
-    }, 700);
+    completeWorkoutSession();
   };
 
   const handleCloseSessionToast = (_, reason) => {
@@ -381,14 +676,37 @@ function UserWorkouts() {
   };
 
   const handleToggleExerciseDone = (exerciseId) => {
+    if (isSessionViewOnly) return;
+    if (!sessionStarted) {
+      setSessionToast({ open: true, message: 'Start the workout timer before marking exercises.' });
+      return;
+    }
+    const target = sessionExercises.find((exercise) => exercise.id === exerciseId);
+    if (!target) return;
+    const sourcePlanId = activeSessionWorkout?.sourcePlanId || todayWorkout?.sourcePlanId || '';
+    const nextDone = !target.done;
+
     setSessionExercises((prev) => prev.map((exercise) => (
-      exercise.id === exerciseId
-        ? { ...exercise, done: !exercise.done }
-        : exercise
+      exercise.id === exerciseId ? { ...exercise, done: nextDone } : exercise
     )));
+
+    if (!sourcePlanId || !userId || !Number.isInteger(target.exerciseIndex)) return;
+
+    updateUserWorkoutSessionProgress(sourcePlanId, {
+      userId,
+      exerciseIndex: target.exerciseIndex,
+      done: nextDone,
+      elapsedSeconds: elapsedSessionSeconds,
+    }).catch((error) => {
+      setSessionExercises((prev) => prev.map((exercise) => (
+        exercise.id === exerciseId ? { ...exercise, done: !nextDone } : exercise
+      )));
+      setSessionToast({ open: true, message: error?.response?.data?.message || 'Failed to update exercise progress.' });
+    });
   };
 
   const handleToggleExerciseFlip = (exerciseId) => {
+    if (!canFlipInSession) return;
     setSessionExercises((prev) => prev.map((exercise) => (
       exercise.id === exerciseId
         ? { ...exercise, flipped: !exercise.flipped }
@@ -410,6 +728,15 @@ function UserWorkouts() {
 
     return () => clearInterval(timerId);
   }, [isWorkoutSessionOpen, elapsedSessionSeconds, sessionStarted, activeSessionLimitSeconds]);
+
+  useEffect(() => {
+    if (!isWorkoutSessionOpen || !sessionStarted) return;
+    const sourcePlanId = activeSessionWorkout?.sourcePlanId || '';
+    if (!sourcePlanId || !userId) return;
+    startUserWorkoutSession(sourcePlanId, { userId }).catch((error) => {
+      setSessionToast({ open: true, message: error?.response?.data?.message || 'Failed to start workout session.' });
+    });
+  }, [isWorkoutSessionOpen, sessionStarted, activeSessionWorkout?.sourcePlanId, userId]);
 
   return (
     <Box
@@ -536,7 +863,12 @@ function UserWorkouts() {
           }}
         >
           {previousExercises.map((workout, index) => (
-            <ExerciseCard key={workout.id} workout={workout} index={index + upcomingExercises.length} />
+            <ExerciseCard
+              key={workout.id}
+              workout={workout}
+              index={index + upcomingExercises.length}
+              onOpen={handleOpenWorkoutPreview}
+            />
           ))}
         </Box>
       </Box>
@@ -561,53 +893,57 @@ function UserWorkouts() {
                 {activeSessionWorkout?.title || MOCK_WORKOUT_SESSION.title}
               </Typography>
               <Typography sx={{ color: theme.palette.text.secondary, mt: 0.4, fontSize: '0.98rem' }}>
-                {MOCK_WORKOUT_SESSION.exercises.length} exercises • ~{MOCK_WORKOUT_SESSION.estimatedDurationMinutes} min
+                {sessionExercises.length} exercises • ~{activeSessionDurationMinutes} min
               </Typography>
             </Box>
 
             <Stack direction="row" alignItems="center" spacing={1}>
-              <Button
-                onClick={() => {
-                  setSessionStarted(true);
-                  setSessionStatus('ongoing');
-                }}
-                disabled={sessionStarted || sessionStatus === 'finished'}
-                variant="contained"
-                sx={{
-                  borderRadius: 2,
-                  px: 1.4,
-                  py: 0.45,
-                  minWidth: 72,
-                  fontWeight: 800,
-                  textTransform: 'none',
-                  background: 'linear-gradient(180deg, #0f1f3b 0%, #0b1730 100%)',
-                  '&:hover': {
-                    background: 'linear-gradient(180deg, #0f2954 0%, #0b1f40 100%)',
-                  },
-                }}
-              >
-                {sessionStatus === 'finished' ? 'Finished' : (sessionStarted ? 'Started' : 'Start')}
-              </Button>
-              <Box
-                sx={{
-                  px: 1.4,
-                  py: 0.55,
-                  borderRadius: 2,
-                  border: `1px solid ${isDark ? '#385277' : '#d9e4f2'}`,
-                  bgcolor: isDark ? '#111c31' : '#f8fbff',
-                  minWidth: 126,
-                  textAlign: 'center',
-                }}
-              >
-                <Typography sx={{ fontWeight: 800, letterSpacing: 0.4, color: theme.palette.text.primary }}>
-                  {formatCounter(elapsedSessionSeconds)} / {formatCounter(activeSessionLimitSeconds)}
-                </Typography>
-              </Box>
+              {sessionDialogMode !== 'view' && (
+                <Button
+                  onClick={() => {
+                    setSessionStarted(true);
+                    setSessionStatus('ongoing');
+                  }}
+                  disabled={sessionStarted || isSessionViewOnly}
+                  variant="contained"
+                  sx={{
+                    borderRadius: 2,
+                    px: 1.4,
+                    py: 0.45,
+                    minWidth: 72,
+                    fontWeight: 800,
+                    textTransform: 'none',
+                    background: 'linear-gradient(180deg, #0f1f3b 0%, #0b1730 100%)',
+                    '&:hover': {
+                      background: 'linear-gradient(180deg, #0f2954 0%, #0b1f40 100%)',
+                    },
+                  }}
+                >
+                  {sessionStatus === 'finished' ? 'Finished' : (sessionStarted ? 'Started' : 'Start')}
+                </Button>
+              )}
+              {!isSessionViewOnly && (
+                <Box
+                  sx={{
+                    px: 1.4,
+                    py: 0.55,
+                    borderRadius: 2,
+                    border: `1px solid ${isDark ? '#385277' : '#d9e4f2'}`,
+                    bgcolor: isDark ? '#111c31' : '#f8fbff',
+                    minWidth: 126,
+                    textAlign: 'center',
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 800, letterSpacing: 0.4, color: theme.palette.text.primary }}>
+                    {formatCounter(elapsedSessionSeconds)} / {formatCounter(activeSessionLimitSeconds)}
+                  </Typography>
+                </Box>
+              )}
               {sessionStatus !== 'idle' && (
                 <Chip
-                  label={sessionStatus === 'ongoing' ? 'Ongoing' : 'Finished'}
+                  label={sessionDialogMode === 'view' ? 'View Only' : (sessionStatus === 'ongoing' ? 'Ongoing' : 'Finished')}
                   sx={{
-                    bgcolor: sessionStatus === 'ongoing' ? '#16a34a' : '#2563eb',
+                    bgcolor: sessionDialogMode === 'view' ? '#334155' : (sessionStatus === 'ongoing' ? '#16a34a' : '#2563eb'),
                     color: '#fff',
                     fontWeight: 800,
                   }}
@@ -643,6 +979,7 @@ function UserWorkouts() {
                 <IconButton
                   onClick={() => handleToggleExerciseDone(exercise.id)}
                   size="small"
+                  disabled={!sessionStarted || isSessionViewOnly}
                   sx={{ p: 0.2 }}
                 >
                   {exercise.done ? (
@@ -669,6 +1006,11 @@ function UserWorkouts() {
                           color: theme.palette.text.secondary,
                           fontSize: '0.95rem',
                           fontWeight: 500,
+                          whiteSpace: 'pre-wrap',
+                          overflowWrap: 'anywhere',
+                          maxHeight: 140,
+                          overflowY: 'auto',
+                          pr: 0.5,
                         }}
                       >
                         {exercise.instruction}
@@ -694,7 +1036,7 @@ function UserWorkouts() {
                           fontWeight: 600,
                         }}
                       >
-                        {exercise.setsReps} - {exercise.focusArea}
+                        {exercise.setsReps} - {exercise.focusArea} - {Number(exercise.assignedMinutes || 45)} min
                       </Typography>
                     </>
                   )}
@@ -704,6 +1046,7 @@ function UserWorkouts() {
                   variant="text"
                   startIcon={<FlipRoundedIcon sx={{ fontSize: 16 }} />}
                   onClick={() => handleToggleExerciseFlip(exercise.id)}
+                  disabled={!canFlipInSession}
                   sx={{
                     color: theme.palette.text.secondary,
                     textTransform: 'none',
@@ -718,26 +1061,70 @@ function UserWorkouts() {
             ))}
           </Stack>
 
-          <Button
-            variant="contained"
-            onClick={handleMarkSessionFinish}
-            disabled={sessionStatus === 'finished'}
-            sx={{
-              mt: 2.2,
-              width: '100%',
-              borderRadius: 2.2,
-              py: 1.05,
-              fontWeight: 800,
-              fontSize: '1rem',
-              textTransform: 'none',
-              background: 'linear-gradient(90deg, #65a30d 0%, #0d9488 100%)',
-              '&:hover': {
-                background: 'linear-gradient(90deg, #5b940d 0%, #0b8578 100%)',
-              },
-            }}
-          >
-            Mark as Finish
-          </Button>
+          {sessionDialogMode !== 'view' && (
+            <Button
+              variant="contained"
+              onClick={handleMarkSessionFinish}
+              disabled={isSessionViewOnly}
+              sx={{
+                mt: 2.2,
+                width: '100%',
+                borderRadius: 2.2,
+                py: 1.05,
+                fontWeight: 800,
+                fontSize: '1rem',
+                textTransform: 'none',
+                background: 'linear-gradient(90deg, #65a30d 0%, #0d9488 100%)',
+                '&:hover': {
+                  background: 'linear-gradient(90deg, #5b940d 0%, #0b8578 100%)',
+                },
+              }}
+            >
+              Mark as Finish
+            </Button>
+          )}
+        </Box>
+      </Dialog>
+
+      <Dialog
+        open={isEarlyFinishConfirmOpen}
+        onClose={() => setIsEarlyFinishConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2.2,
+            border: `1px solid ${isDark ? '#263752' : '#e1e8f2'}`,
+          },
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <Typography sx={{ fontWeight: 800, fontSize: '1.05rem', mb: 0.6 }}>
+            Finish Before Assigned Time?
+          </Typography>
+          <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem', mb: 1.5 }}>
+            You have completed all exercises in {formatCounter(elapsedSessionSeconds)}.
+            Assigned workout time is {formatCounter(activeSessionLimitSeconds)}.
+            Do you want to mark this session as finished now?
+          </Typography>
+          <Stack direction="row" spacing={1} justifyContent="flex-end">
+            <Button
+              onClick={() => setIsEarlyFinishConfirmOpen(false)}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            >
+              Continue Workout
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setIsEarlyFinishConfirmOpen(false);
+                completeWorkoutSession();
+              }}
+              sx={{ textTransform: 'none', fontWeight: 800 }}
+            >
+              Confirm Finish
+            </Button>
+          </Stack>
         </Box>
       </Dialog>
 

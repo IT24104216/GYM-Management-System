@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Autocomplete,
   Alert,
@@ -21,22 +21,15 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
-import { loadDietitianMeals } from '@/features/dietitian/utils/mealPlanStorage';
-
-const allClientsMock = [
-  { id: 1, name: 'John Doe', joinedDate: '2025-01-15', age: 28, weight: 75, height: 175, goal: 'Build muscle and increase strength' },
-  { id: 2, name: 'Jane Silva', joinedDate: '2026-03-16', age: 27, weight: 70, height: 170, goal: 'Muscle Gain Nutrition' },
-  { id: 3, name: 'Kavindu Perera', joinedDate: '2026-03-17', age: 31, weight: 82, height: 178, goal: 'Fat Loss Meal Plan' },
-  { id: 4, name: 'Mila Fernando', joinedDate: '2026-03-11', age: 25, weight: 61, height: 165, goal: 'Lean maintenance diet' },
-  { id: 5, name: 'Sahan Wickram', joinedDate: '2026-03-10', age: 34, weight: 89, height: 182, goal: 'Reduce body fat percentage' },
-  { id: 6, name: 'Rashmi De Alwis', joinedDate: '2026-03-08', age: 29, weight: 66, height: 168, goal: 'High-protein muscle support' },
-  { id: 7, name: 'Nadeesha Wijeratne', joinedDate: '2026-03-07', age: 30, weight: 71, height: 171, goal: 'Balanced fat-loss meal plan' },
-  { id: 8, name: 'Anjalika Senanayake', joinedDate: '2026-03-06', age: 26, weight: 58, height: 162, goal: 'Healthy weight gain and energy' },
-  { id: 9, name: 'Dilan Fernando', joinedDate: '2026-03-05', age: 33, weight: 84, height: 180, goal: 'Reduce sugar intake and cut fat' },
-  { id: 10, name: 'Hasini Perera', joinedDate: '2026-03-04', age: 24, weight: 55, height: 160, goal: 'Sports nutrition meal structure' },
-  { id: 11, name: 'Tharindu Mendis', joinedDate: '2026-03-03', age: 36, weight: 92, height: 183, goal: 'Macro based meal planning' },
-  { id: 12, name: 'Ishara Rodrigo', joinedDate: '2026-03-02', age: 28, weight: 63, height: 167, goal: 'Lean muscle nutrition strategy' },
-];
+import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  deleteMealPlan,
+  getDietitianAppointments,
+  getDietitianClientPlans,
+  getMealLibraryItems,
+  submitMealPlan,
+  upsertDietitianClientPlan,
+} from '@/features/dietitian/api/dietitian.api';
 
 const CLIENTS_PER_PAGE = 6;
 
@@ -67,15 +60,119 @@ const createDietPlanForm = () => ({
 
 function DietitianClients() {
   const theme = useTheme();
+  const { user } = useAuth();
+  const dietitianId = String(user?.id || user?._id || '');
+  const dietitianName = String(user?.name || '').trim().toLowerCase();
   const isDark = theme.palette.mode === 'dark';
+  const [allClients, setAllClients] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [dietPlanModal, setDietPlanModal] = useState({ open: false, client: null });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
   const [savedPlans, setSavedPlans] = useState({});
-  const [feedback, setFeedback] = useState({ open: false, message: '' });
+  const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   const [confirmDelete, setConfirmDelete] = useState({ open: false, client: null });
-  const [mealSuggestions, setMealSuggestions] = useState(() => loadDietitianMeals());
+  const [mealSuggestions, setMealSuggestions] = useState([]);
   const [page, setPage] = useState(1);
+
+  const getNoteValue = (notes, key) => {
+    if (!notes) return '';
+    const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+    const match = notes.match(pattern);
+    return match?.[1]?.trim() || '';
+  };
+
+  const loadApprovedClients = async () => {
+    if (!dietitianId) return;
+    const getNoteValue = (notes, key) => {
+      if (!notes) return '';
+      const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+      const match = notes.match(pattern);
+      return match?.[1]?.trim() || '';
+    };
+    try {
+      const { data } = await getDietitianAppointments({
+        sessionType: 'nutrition',
+        page: 1,
+        limit: 300,
+      });
+
+      const items = Array.isArray(data?.data) ? data.data : [];
+      const ownItems = items.filter((item) => {
+        const byId = String(item.dietitianId || '') === dietitianId;
+        const byNoteId = String(getNoteValue(item.notes, 'DietitianId') || '') === dietitianId;
+        const byName = getNoteValue(item.notes, 'Dietitian').trim().toLowerCase() === dietitianName;
+        return byId || byNoteId || byName;
+      });
+      const mapByUser = new Map();
+      ownItems
+        .filter((item) => item.status === 'approved' || item.status === 'completed')
+        .forEach((item) => {
+          if (!mapByUser.has(item.userId)) {
+            const startsAt = new Date(item.startsAt);
+            mapByUser.set(item.userId, {
+              id: String(item.userId),
+              name: getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`,
+              joinedDate: Number.isNaN(startsAt.getTime())
+                ? new Date().toISOString().split('T')[0]
+                : startsAt.toISOString().split('T')[0],
+              age: 27,
+              weight: 70,
+              height: 170,
+              goal: getNoteValue(item.notes, 'Goal') || 'Meal Planning',
+            });
+          }
+        });
+
+      const approvedClients = Array.from(mapByUser.values());
+      // Dashboard shows first 3; clients page shows the remaining records.
+      setAllClients(approvedClients.slice(3));
+    } catch {
+      setAllClients([]);
+    }
+  };
+
+  useEffect(() => {
+    loadApprovedClients();
+    const interval = setInterval(loadApprovedClients, 15000);
+    return () => clearInterval(interval);
+  }, [dietitianId, dietitianName]);
+
+  const loadDietitianMealsAndPlans = async () => {
+    if (!dietitianId) return;
+    try {
+      const [{ data: mealsData }, { data: plansData }] = await Promise.all([
+        getMealLibraryItems({ dietitianId }),
+        getDietitianClientPlans({ dietitianId }),
+      ]);
+      const meals = Array.isArray(mealsData?.data) ? mealsData.data : [];
+      setMealSuggestions(meals);
+
+      const plans = Array.isArray(plansData?.data) ? plansData.data : [];
+      const planMap = {};
+      plans.forEach((plan) => {
+        if (!plan?.userId) return;
+        planMap[String(plan.userId)] = {
+          id: String(plan._id),
+          isSubmitted: Boolean(plan.isSubmitted),
+          data: {
+            breakfast: Array.isArray(plan.breakfast) ? plan.breakfast : [createMealOption(), createMealOption(), createMealOption()],
+            lunch: Array.isArray(plan.lunch) ? plan.lunch : [createMealOption(), createMealOption(), createMealOption()],
+            dinner: Array.isArray(plan.dinner) ? plan.dinner : [createMealOption(), createMealOption(), createMealOption()],
+            snacks: Array.isArray(plan.snacks) ? plan.snacks : [createMealOption(), createMealOption(), createMealOption()],
+            additionalNotes: plan.additionalNotes || '',
+          },
+        };
+      });
+      setSavedPlans(planMap);
+    } catch {
+      setMealSuggestions([]);
+      setSavedPlans({});
+    }
+  };
+
+  useEffect(() => {
+    loadDietitianMealsAndPlans();
+  }, [dietitianId]);
 
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
@@ -86,10 +183,10 @@ function DietitianClients() {
 
   const visibleClients = useMemo(
     () =>
-      allClientsMock.filter((client) =>
+      allClients.filter((client) =>
         client.name.toLowerCase().includes(searchText.trim().toLowerCase()),
       ),
-    [searchText],
+    [allClients, searchText],
   );
 
   const totalPages = Math.max(1, Math.ceil(visibleClients.length / CLIENTS_PER_PAGE));
@@ -101,8 +198,8 @@ function DietitianClients() {
   }, [visibleClients, currentPage]);
 
   const openDietPlanModal = (client) => {
-    setMealSuggestions(loadDietitianMeals());
-    setDietPlanForm(savedPlans[client.id] || createDietPlanForm());
+    const existing = savedPlans[client.id]?.data;
+    setDietPlanForm(existing || createDietPlanForm());
     setDietPlanModal({ open: true, client });
   };
 
@@ -148,24 +245,54 @@ function DietitianClients() {
     return Math.round(calories.reduce((sum, value) => sum + value, 0) / calories.length);
   };
 
-  const saveDietPlan = () => {
+  const saveDietPlan = async () => {
     const clientId = dietPlanModal.client?.id;
     if (!clientId) return;
-    setSavedPlans((prev) => ({ ...prev, [clientId]: dietPlanForm }));
-    setDietPlanModal({ open: false, client: null });
-    setFeedback({ open: true, message: 'Diet plan saved successfully.' });
+    try {
+      const payload = {
+        dietitianId,
+        userId: clientId,
+        memberName: dietPlanModal.client?.name || '',
+        breakfast: dietPlanForm.breakfast,
+        lunch: dietPlanForm.lunch,
+        dinner: dietPlanForm.dinner,
+        snacks: dietPlanForm.snacks,
+        additionalNotes: dietPlanForm.additionalNotes,
+      };
+      const { data } = await upsertDietitianClientPlan(payload);
+      const plan = data?.data;
+      if (plan?._id) {
+        await submitMealPlan(String(plan._id), dietitianId, true);
+      }
+      await loadDietitianMealsAndPlans();
+      setDietPlanModal({ open: false, client: null });
+      setFeedback({ open: true, message: 'Diet plan saved successfully.', severity: 'success' });
+    } catch (error) {
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to save diet plan.',
+        severity: 'error',
+      });
+    }
   };
 
-  const deleteDietPlan = () => {
+  const deleteDietPlan = async () => {
     const clientId = confirmDelete.client?.id;
     if (!clientId) return;
-    setSavedPlans((prev) => {
-      const copy = { ...prev };
-      delete copy[clientId];
-      return copy;
-    });
-    setConfirmDelete({ open: false, client: null });
-    setFeedback({ open: true, message: 'Diet plan deleted successfully.' });
+    try {
+      const planId = savedPlans[clientId]?.id;
+      if (!planId) return;
+      await deleteMealPlan(planId, dietitianId);
+      await loadDietitianMealsAndPlans();
+      setConfirmDelete({ open: false, client: null });
+      setFeedback({ open: true, message: 'Diet plan deleted successfully.', severity: 'success' });
+    } catch (error) {
+      setFeedback({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to delete diet plan.',
+        severity: 'error',
+      });
+    }
   };
 
   return (
@@ -593,7 +720,7 @@ function DietitianClients() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert
-          severity="success"
+          severity={feedback.severity || 'success'}
           variant="filled"
           onClose={() => setFeedback((prev) => ({ ...prev, open: false }))}
           sx={{ width: '100%' }}

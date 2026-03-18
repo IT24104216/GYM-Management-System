@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -27,10 +28,10 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { getUserProgress, saveUserMeasurement } from '@/features/user/api/user.api';
 
 const MotionCard = motion(Card);
-const PROGRESS_COMPLETION_DATE_KEY = 'gympro_progress_completion_date';
-const WORKOUT_COMPLETION_HISTORY_KEY = 'gympro_workout_completion_history';
 
 const getTodayIso = () => new Date().toISOString().split('T')[0];
 const formatIsoToFull = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-US', {
@@ -149,19 +150,6 @@ const findNearestChartHover = (cursor, points, threshold) => {
   return best && best.distance <= threshold ? best : null;
 };
 
-const createMockWeightHistory = () => {
-  const today = new Date();
-  const offsets = [-8, -7, -6, -5, -4, -3, -2, -1, 0];
-  const weights = [191, 190.8, 189.9, 188.6, 187.2, 185.8, 184.6, 182.8, 179];
-
-  return offsets.reduce((accumulator, offset, index) => {
-    const dateObj = new Date(today);
-    dateObj.setDate(today.getDate() + offset);
-    accumulator[toIsoDate(dateObj)] = weights[index];
-    return accumulator;
-  }, {});
-};
-
 const createPhotoSlots = () => Array.from({ length: 4 }, (_, index) => ({
   id: `slot-${index + 1}`,
   imageUrl: '',
@@ -224,35 +212,19 @@ const getConsecutiveWorkoutStreak = (completionDates, todayIso) => {
 };
 
 function UserProgress() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const userId = String(user?.id || user?._id || '');
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const todayIso = getTodayIso();
-  const previousIso = new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-  const twoDaysAgoIso = new Date(Date.now() - (2 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+  const completedWorkoutDateFromState = location.state?.completedWorkoutDate || '';
 
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [calendarAnchorEl, setCalendarAnchorEl] = useState(null);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(todayIso));
   const [photosByDate, setPhotosByDate] = useState(() => ({
     [todayIso]: createPhotoSlots(),
-    [previousIso]: [
-      {
-        id: `mock-${previousIso}-1`,
-        imageUrl: 'https://images.unsplash.com/photo-1579758629938-03607ccdbaba?auto=format&fit=crop&w=900&q=80',
-      },
-      ...createPhotoSlots().slice(1),
-    ],
-    [twoDaysAgoIso]: [
-      {
-        id: `mock-${twoDaysAgoIso}-1`,
-        imageUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=900&q=80',
-      },
-      {
-        id: `mock-${twoDaysAgoIso}-2`,
-        imageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=900&q=80',
-      },
-      ...createPhotoSlots().slice(2),
-    ],
   }));
   const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
   const [editingPhotoIndex, setEditingPhotoIndex] = useState(null);
@@ -268,54 +240,61 @@ function UserProgress() {
   const uploadInputRef = useRef(null);
   const chartSvgRef = useRef(null);
   const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
-  const [weightHistoryByDate, setWeightHistoryByDate] = useState(() => createMockWeightHistory());
-  const [measurementsByDate, setMeasurementsByDate] = useState(() => ({
-    [twoDaysAgoIso]: {
-      chest: 41.8,
-      waist: 33.5,
-      arms: 15.2,
-      thighs: 24.1,
-      bodyFat: 22.0,
-    },
-    [previousIso]: {
-      chest: 42.0,
-      waist: 33.2,
-      arms: 15.3,
-      thighs: 24.0,
-      bodyFat: 21.1,
-    },
-    [todayIso]: {
-      chest: 42.5,
-      waist: 32.0,
-      arms: 15.5,
-      thighs: 24.0,
-      bodyFat: 19.5,
-    },
-  }));
-  const completionDate = localStorage.getItem(PROGRESS_COMPLETION_DATE_KEY) || '';
-  const workoutCompletionDates = useMemo(() => {
-    const rawHistory = localStorage.getItem(WORKOUT_COMPLETION_HISTORY_KEY);
-    if (!rawHistory) return [];
-
-    try {
-      const parsedHistory = JSON.parse(rawHistory);
-      if (!Array.isArray(parsedHistory)) return [];
-
-      return [...new Set(parsedHistory.filter((value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)))].sort();
-    } catch {
-      return [];
-    }
-  }, [completionDate]);
+  const [weightHistoryByDate, setWeightHistoryByDate] = useState({});
+  const [measurementsByDate, setMeasurementsByDate] = useState({});
+  const [completionDate, setCompletionDate] = useState('');
+  const [workoutCompletionDates, setWorkoutCompletionDates] = useState([]);
+  const mergedCompletionDates = useMemo(() => {
+    const merged = new Set(Array.isArray(workoutCompletionDates) ? workoutCompletionDates : []);
+    if (completedWorkoutDateFromState) merged.add(completedWorkoutDateFromState);
+    return [...merged].sort((left, right) => new Date(`${left}T00:00:00`) - new Date(`${right}T00:00:00`));
+  }, [workoutCompletionDates, completedWorkoutDateFromState]);
+  const latestCompletionDate = mergedCompletionDates.length
+    ? mergedCompletionDates[mergedCompletionDates.length - 1]
+    : '';
+  const effectiveCompletionDate = completionDate || latestCompletionDate;
+  const completionDateFull = effectiveCompletionDate ? formatIsoToFull(effectiveCompletionDate) : '';
   const selectedDateFull = formatIsoToFull(selectedDate);
   const selectedDateShort = formatIsoToShort(selectedDate);
   const visibleMonthLabel = visibleMonth.toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   });
-  const canUploadSelectedDate = Boolean(completionDate) && completionDate === selectedDateFull;
+  const canUploadSelectedDate = mergedCompletionDates.includes(selectedDate);
   const selectedDatePhotos = photosByDate[selectedDate] || createPhotoSlots();
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const isCalendarOpen = Boolean(calendarAnchorEl);
+
+  const loadProgressData = async () => {
+    if (!userId) return;
+    try {
+      const { data } = await getUserProgress(userId);
+      const payload = data?.data || {};
+      const nextWeightHistory = payload.weightHistoryByDate || {};
+      const nextMeasurements = payload.measurementsByDate || {};
+
+      setWeightHistoryByDate(nextWeightHistory);
+      setMeasurementsByDate(nextMeasurements);
+      setWorkoutCompletionDates(Array.isArray(payload.workoutCompletionDates) ? payload.workoutCompletionDates : []);
+      setCompletionDate(payload.completionDate || '');
+    } catch (error) {
+      setPhotoToast({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to load progress data.',
+      });
+    }
+  };
+
+  useEffect(() => {
+    loadProgressData();
+  }, [userId]);
+
+  useEffect(() => {
+    if (!completedWorkoutDateFromState) return;
+    setSelectedDate(completedWorkoutDateFromState);
+    setVisibleMonth(new Date(`${completedWorkoutDateFromState}T00:00:00`));
+    setCompletionDate((prev) => prev || completedWorkoutDateFromState);
+  }, [completedWorkoutDateFromState]);
 
   const chartData = useMemo(() => {
     const weightHistory = Object.entries(weightHistoryByDate)
@@ -328,6 +307,18 @@ function UserProgress() {
 
     const labels = weightHistory.map((item) => item.date);
     const values = weightHistory.map((item) => item.weight);
+    if (!values.length) {
+      return {
+        weightHistory: [],
+        points: [],
+        labels: [],
+        yTop: 0,
+        yMiddle: 0,
+        yBottom: 0,
+        linePath: '',
+        areaPath: '',
+      };
+    }
     const maxValue = Math.max(...values);
     const minValue = Math.min(...values);
     const yTop = Math.ceil(maxValue + 2);
@@ -498,7 +489,7 @@ function UserProgress() {
     setMeasurementForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
-  const handleSubmitMeasurements = (event) => {
+  const handleSubmitMeasurements = async (event) => {
     event.preventDefault();
 
     const chestValue = Number(measurementForm.chest);
@@ -529,17 +520,45 @@ function UserProgress() {
       [selectedDate]: weightValue,
     }));
 
+    if (userId) {
+      try {
+        const { data } = await saveUserMeasurement(userId, {
+          date: selectedDate,
+          chest: chestValue,
+          waist: waistValue,
+          arms: armsValue,
+          thighs: thighsValue,
+          bodyFat: bodyFatValue,
+          weight: weightValue,
+        });
+        const payload = data?.data || {};
+        if (payload.weightHistoryByDate) setWeightHistoryByDate(payload.weightHistoryByDate);
+        if (payload.measurementsByDate) setMeasurementsByDate(payload.measurementsByDate);
+        if (Array.isArray(payload.workoutCompletionDates)) setWorkoutCompletionDates(payload.workoutCompletionDates);
+        if (typeof payload.completionDate === 'string') setCompletionDate(payload.completionDate);
+      } catch (error) {
+        setPhotoToast({
+          open: true,
+          message: error?.response?.data?.message || 'Failed to save progress data.',
+        });
+        return;
+      }
+    }
+
     setIsMeasurementDialogOpen(false);
     setPhotoToast({ open: true, message: `Measurements, body fat, and weight saved for ${selectedDateFull}.` });
   };
 
   const handleUploadClick = () => {
-    if (!completionDate) {
+    if (!mergedCompletionDates.length) {
       setPhotoToast({ open: true, message: 'Complete a workout session first to upload progress photos.' });
       return;
     }
     if (!canUploadSelectedDate) {
-      setPhotoToast({ open: true, message: `Photo upload is available on completion day (${completionDate}).` });
+      setPhotoToast({
+        open: true,
+        message: `Photo upload is available for completed workout dates only (latest: ${completionDateFull || 'N/A'}).`,
+      });
       return;
     }
     uploadInputRef.current?.click();
@@ -988,7 +1007,7 @@ function UserProgress() {
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1.2}>
               <Chip
-                label={completionDate ? `Workout Completion Date: ${completionDate}` : 'Workout Completion Date: Not available yet'}
+                label={effectiveCompletionDate ? `Workout Completion Date: ${completionDateFull}` : 'Workout Completion Date: Not available yet'}
                 sx={{ fontWeight: 700 }}
               />
               <Chip
@@ -996,7 +1015,7 @@ function UserProgress() {
                 sx={{ fontWeight: 700 }}
               />
               <Chip
-                label={canUploadSelectedDate ? 'Upload Window: Open today' : 'Upload Window: Closed'}
+                label={canUploadSelectedDate ? 'Upload Window: Open for selected date' : 'Upload Window: Closed'}
                 color={canUploadSelectedDate ? 'success' : 'default'}
                 sx={{ fontWeight: 700 }}
               />

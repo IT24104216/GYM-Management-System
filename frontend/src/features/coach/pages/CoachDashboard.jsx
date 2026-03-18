@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
 import {
+  Alert,
   Avatar,
   Box,
   Button,
   Chip,
+  Snackbar,
   Stack,
   Typography,
   useTheme,
@@ -19,6 +21,8 @@ import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
+import { useAuth } from '@/shared/hooks/useAuth';
+import { getCoachAppointments, getCoachMemberProgressScores } from '../api/coach.api';
 import {
   BarChart,
   Bar,
@@ -48,99 +52,54 @@ const itemVariants = {
   },
 };
 
-const stats = [
-  {
-    label: 'Active Clients',
-    value: '24',
-    Icon: GroupsRoundedIcon,
-    gradient: 'linear-gradient(135deg, #84CC16, #0D9488)',
-    change: '+3 this month',
-  },
-  {
-    label: 'Sessions Today',
-    value: '6',
-    Icon: CalendarMonthRoundedIcon,
-    gradient: 'linear-gradient(135deg, #0D9488, #0284C7)',
-    change: '2 remaining',
-  },
-  {
-    label: 'Avg Client Score',
-    value: '87%',
-    Icon: StarBorderRoundedIcon,
-    gradient: 'linear-gradient(135deg, #F59E0B, #EF4444)',
-    change: '+4% vs last month',
-  },
-  {
-    label: 'Revenue MTD',
-    value: '$4,280',
-    Icon: AttachMoneyRoundedIcon,
-    gradient: 'linear-gradient(135deg, #8B5CF6, #06B6D4)',
-    change: '+12% vs last month',
-  },
-];
+const getInitials = (name = '') => name
+  .split(' ')
+  .filter(Boolean)
+  .slice(0, 2)
+  .map((part) => part[0]?.toUpperCase() || '')
+  .join('') || 'NA';
 
-const schedule = [
-  { time: '8:00 AM', client: 'Mike Torres', type: 'Assessment', typeColor: '#84CC16', status: 'done' },
-  { time: '9:30 AM', client: 'Emma Wilson', type: 'Training', typeColor: '#0D9488', status: 'done' },
-  { time: '11:00 AM', client: 'James Park', type: 'Check-in', typeColor: '#8B5CF6', status: 'current' },
-  { time: '1:00 PM', client: 'Sofia Reyes', type: 'Nutrition', typeColor: '#F59E0B', status: 'upcoming' },
-  { time: '3:00 PM', client: 'Chris Lee', type: 'Training', typeColor: '#0D9488', status: 'upcoming' },
-  { time: '5:00 PM', client: 'Aisha Brown', type: 'Assessment', typeColor: '#84CC16', status: 'upcoming' },
-];
+const getNoteValue = (notes, key) => {
+  if (!notes) return '';
+  const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
+  const match = notes.match(pattern);
+  return match?.[1]?.trim() || '';
+};
 
-const consultations = [
-  {
-    name: 'Ryan Martinez',
-    issue: 'Plateau in weight loss for 3 weeks',
-    priority: 'URGENT',
-    wait: '2 days',
-    avatar: 'RM',
-    priorityGrad: 'linear-gradient(135deg, #EF4444, #DC2626)',
-  },
-  {
-    name: 'Lisa Chen',
-    issue: 'Knee pain during squats',
-    priority: 'HIGH',
-    wait: '1 day',
-    avatar: 'LC',
-    priorityGrad: 'linear-gradient(135deg, #F97316, #EF4444)',
-  },
-  {
-    name: 'Tom Bradley',
-    issue: 'New program request',
-    priority: 'NORMAL',
-    wait: '3 hours',
-    avatar: 'TB',
-    priorityGrad: 'linear-gradient(135deg, #3B82F6, #0D9488)',
-  },
-  {
-    name: 'Priya Sharma',
-    issue: 'Nutrition plan adjustment',
-    priority: 'NORMAL',
-    wait: '5 hours',
-    avatar: 'PS',
-    priorityGrad: 'linear-gradient(135deg, #3B82F6, #0D9488)',
-  },
-];
+const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-const members = [
-  { id: 1, name: 'Mike Torres', age: 28, goal: 'Muscle Gain', score: 92, program: 78, lastActive: 'Today', avatar: 'MT', grad: 'linear-gradient(135deg, #84CC16, #0D9488)', email: 'mike.torres@gympro.com', phone: '+1 (555) 802-9910', preferredSlot: 'Mon, Wed, Fri - 8:00 AM', trainingDays: 'Mon, Wed, Fri', priority: 'High', notes: 'Focus on hypertrophy and progressive overload.' },
-  { id: 2, name: 'Emma Wilson', age: 34, goal: 'Weight Loss', score: 85, program: 65, lastActive: 'Today', avatar: 'EW', grad: 'linear-gradient(135deg, #0D9488, #0284C7)', email: 'emma.wilson@gympro.com', phone: '+1 (555) 774-1020', preferredSlot: 'Tue, Thu - 9:30 AM', trainingDays: 'Tue, Thu', priority: 'Normal', notes: 'Weight management and nutrition adherence support.' },
-  { id: 3, name: 'James Park', age: 22, goal: 'Endurance', score: 78, program: 45, lastActive: '2h ago', avatar: 'JP', grad: 'linear-gradient(135deg, #F59E0B, #EF4444)', email: 'james.park@gympro.com', phone: '+1 (555) 456-2081', preferredSlot: 'Mon, Thu - 11:00 AM', trainingDays: 'Mon, Thu', priority: 'Medium', notes: 'Building aerobic capacity with progressive intervals.' },
-  { id: 4, name: 'Sofia Reyes', age: 31, goal: 'Strength', score: 95, program: 90, lastActive: 'Yesterday', avatar: 'SR', grad: 'linear-gradient(135deg, #8B5CF6, #EC4899)', email: 'sofia.reyes@gympro.com', phone: '+1 (555) 803-1166', preferredSlot: 'Tue, Fri - 1:00 PM', trainingDays: 'Tue, Fri', priority: 'High', notes: 'Advanced strength cycle with accessory mobility work.' },
-  { id: 5, name: 'Chris Lee', age: 26, goal: 'Body Recomp', score: 71, program: 30, lastActive: '3h ago', avatar: 'CL', grad: 'linear-gradient(135deg, #06B6D4, #3B82F6)', email: 'chris.lee@gympro.com', phone: '+1 (555) 552-4791', preferredSlot: 'Wed, Sat - 3:00 PM', trainingDays: 'Wed, Sat', priority: 'Normal', notes: 'Combining caloric cycling with compound lifts.' },
-  { id: 6, name: 'Aisha Brown', age: 29, goal: 'Flexibility', score: 88, program: 55, lastActive: 'Today', avatar: 'AB', grad: 'linear-gradient(135deg, #10B981, #0D9488)', email: 'aisha.brown@gympro.com', phone: '+1 (555) 917-2043', preferredSlot: 'Sun - 5:00 PM', trainingDays: 'Sun', priority: 'Low', notes: 'Mobility-first sessions with recovery blocks.' },
-];
+const formatTime12 = (dateInput) => {
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
 
-const weeklyData = [
-  { day: 'Mon', sessions: 5 },
-  { day: 'Tue', sessions: 7 },
-  { day: 'Wed', sessions: 4 },
-  { day: 'Thu', sessions: 8 },
-  { day: 'Fri', sessions: 6 },
-  { day: 'Sat', sessions: 3 },
-  { day: 'Sun', sessions: 2 },
-];
+const formatWait = (createdAt) => {
+  const created = new Date(createdAt);
+  if (Number.isNaN(created.getTime())) return 'just now';
+  const diffMs = Math.max(Date.now() - created.getTime(), 0);
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  if (diffHours < 1) return 'just now';
+  if (diffHours < 24) return `${diffHours} hours`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} days`;
+};
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const typeToColor = {
+  consultation: '#8B5CF6',
+  training: '#0D9488',
+  assessment: '#84CC16',
+  nutrition: '#F59E0B',
+  other: '#3B82F6',
+};
+
+const priorityGrad = {
+  urgent: 'linear-gradient(135deg, #EF4444, #DC2626)',
+  high: 'linear-gradient(135deg, #F97316, #EF4444)',
+  normal: 'linear-gradient(135deg, #3B82F6, #0D9488)',
+};
 
 function CircularScore({ score, id, isDark }) {
   const r = 28;
@@ -178,9 +137,14 @@ function CircularScore({ score, id, isDark }) {
 }
 
 function CoachDashboard() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
+  const coachId = String(user?.id || user?._id || '');
   const [flippedMemberIds, setFlippedMemberIds] = useState({});
+  const [appointments, setAppointments] = useState([]);
+  const [memberProgressScores, setMemberProgressScores] = useState({});
+  const [toast, setToast] = useState({ open: false, message: '', severity: 'error' });
   const isDark = theme.palette.mode === 'dark';
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
   const panelBorder = isDark ? '#24344f' : '#f3f4f6';
@@ -194,6 +158,220 @@ function CoachDashboard() {
   const currentRowBorder = isDark ? '#2dd4bf' : '#99f6e4';
   const barBg = isDark ? '#1f2937' : '#f3f4f6';
   const chartGrid = isDark ? '#23324b' : '#F1F5F9';
+
+  const loadDashboardData = async () => {
+    if (!coachId) return;
+    try {
+      const [{ data }, { data: scorePayload }] = await Promise.all([
+        getCoachAppointments({ page: 1, limit: 300 }),
+        getCoachMemberProgressScores(coachId, { days: 7 }),
+      ]);
+
+      const all = Array.isArray(data?.data) ? data.data : [];
+      const coachName = String(user?.name || '').trim().toLowerCase();
+      const mine = all.filter((item) => {
+        const byId = String(item.coachId || '') === coachId;
+        const byNoteId = String(getNoteValue(item.notes, 'CoachId') || '') === coachId;
+        const noteCoach = getNoteValue(item.notes, 'Coach').toLowerCase();
+        const byName = coachName && noteCoach && noteCoach === coachName;
+        return item.sessionType !== 'nutrition' && (byId || byNoteId || byName);
+      });
+      setAppointments(mine);
+      setMemberProgressScores(scorePayload?.data?.byUserId || {});
+    } catch (error) {
+      setAppointments([]);
+      setMemberProgressScores({});
+      setToast({
+        open: true,
+        message: error?.response?.data?.message || 'Failed to load coach dashboard data',
+        severity: 'error',
+      });
+    }
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+    const id = setInterval(loadDashboardData, 15000);
+    return () => clearInterval(id);
+  }, [coachId]);
+
+  const { stats, schedule, consultations, members, weeklyData, scheduleDateLabel } = useMemo(() => {
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const weekStart = new Date(todayStart);
+    const day = weekStart.getDay();
+    const diffToMonday = (day + 6) % 7;
+    weekStart.setDate(weekStart.getDate() - diffToMonday);
+
+    const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    const validAppointments = appointments.filter((item) => item.status !== 'cancelled' && item.status !== 'rejected');
+    const activeAppointments = appointments.filter((item) => item.status === 'approved' || item.status === 'completed');
+    const pendingAppointments = appointments.filter((item) => item.status === 'pending');
+
+    const uniqueActiveClients = new Set(activeAppointments.map((item) => String(item.userId))).size;
+
+    const todayAppointments = validAppointments.filter((item) => {
+      const starts = new Date(item.startsAt);
+      return starts >= todayStart && starts < tomorrowStart;
+    });
+
+    const thisMonthAppointments = validAppointments.filter((item) => {
+      const starts = new Date(item.startsAt);
+      return starts >= monthStart;
+    });
+    const prevMonthAppointments = validAppointments.filter((item) => {
+      const starts = new Date(item.startsAt);
+      return starts >= prevMonthStart && starts < monthStart;
+    });
+
+    const progressScoreRows = Object.values(memberProgressScores || {});
+    const avgScore = progressScoreRows.length
+      ? Math.round(progressScoreRows.reduce((sum, row) => sum + Number(row?.score || 0), 0) / progressScoreRows.length)
+      : 0;
+
+    const revenueMtd = thisMonthAppointments.filter((item) => item.status === 'completed').length * 75;
+    const prevRevenue = prevMonthAppointments.filter((item) => item.status === 'completed').length * 75;
+
+    const sessionsDiff = thisMonthAppointments.length - prevMonthAppointments.length;
+    const scoreDiff = avgScore - (prevMonthAppointments.length ? Math.round((prevMonthAppointments.filter((x) => x.status === 'completed').length / prevMonthAppointments.length) * 100) : 0);
+    const revenueDiff = revenueMtd - prevRevenue;
+
+    const statsComputed = [
+      {
+        label: 'Active Clients',
+        value: String(uniqueActiveClients),
+        Icon: GroupsRoundedIcon,
+        gradient: 'linear-gradient(135deg, #84CC16, #0D9488)',
+        change: `${sessionsDiff >= 0 ? '+' : ''}${sessionsDiff} this month`,
+      },
+      {
+        label: 'Sessions Today',
+        value: String(todayAppointments.length),
+        Icon: CalendarMonthRoundedIcon,
+        gradient: 'linear-gradient(135deg, #0D9488, #0284C7)',
+        change: `${todayAppointments.filter((x) => x.status === 'pending').length} remaining`,
+      },
+      {
+        label: 'Avg Client Score',
+        value: `${avgScore}%`,
+        Icon: StarBorderRoundedIcon,
+        gradient: 'linear-gradient(135deg, #F59E0B, #EF4444)',
+        change: `${scoreDiff >= 0 ? '+' : ''}${scoreDiff}% vs last month`,
+      },
+      {
+        label: 'Revenue MTD',
+        value: `$${revenueMtd.toLocaleString()}`,
+        Icon: AttachMoneyRoundedIcon,
+        gradient: 'linear-gradient(135deg, #8B5CF6, #06B6D4)',
+        change: `${revenueDiff >= 0 ? '+' : ''}${revenueDiff} vs last month`,
+      },
+    ];
+
+    const scheduleRows = todayAppointments
+      .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
+      .slice(0, 6)
+      .map((item, index) => ({
+        time: formatTime12(item.startsAt),
+        client: getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`,
+        type: item.sessionType === 'other' ? 'Session' : `${item.sessionType[0].toUpperCase()}${item.sessionType.slice(1)}`,
+        typeColor: typeToColor[item.sessionType] || '#3B82F6',
+        status: index === 0 && item.status === 'pending' ? 'current' : item.status === 'completed' ? 'done' : 'upcoming',
+      }));
+
+    const queueRows = pendingAppointments
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      .slice(0, 6)
+      .map((item) => {
+        const priorityRaw = (getNoteValue(item.notes, 'Priority') || 'Normal').toLowerCase();
+        const priorityLabel = priorityRaw === 'urgent' ? 'URGENT' : priorityRaw === 'high' ? 'HIGH' : 'NORMAL';
+        const userName = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
+        return {
+          name: userName,
+          issue: getNoteValue(item.notes, 'Description') || item.notes || 'Consultation request',
+          priority: priorityLabel,
+          wait: formatWait(item.createdAt),
+          avatar: getInitials(userName),
+          priorityGrad: priorityRaw === 'urgent' ? priorityGrad.urgent : priorityRaw === 'high' ? priorityGrad.high : priorityGrad.normal,
+        };
+      });
+
+    const membersByUser = new Map();
+    activeAppointments
+      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+      .forEach((item) => {
+        const userId = String(item.userId);
+        if (!membersByUser.has(userId)) membersByUser.set(userId, []);
+        membersByUser.get(userId).push(item);
+      });
+
+    const gradientPool = [
+      'linear-gradient(135deg, #84CC16, #0D9488)',
+      'linear-gradient(135deg, #0D9488, #0284C7)',
+      'linear-gradient(135deg, #F59E0B, #EF4444)',
+      'linear-gradient(135deg, #8B5CF6, #EC4899)',
+      'linear-gradient(135deg, #06B6D4, #3B82F6)',
+      'linear-gradient(135deg, #10B981, #0D9488)',
+    ];
+
+    const memberRows = Array.from(membersByUser.entries())
+      .slice(0, 6)
+      .map(([userId, items], idx) => {
+        const latest = items[0];
+        const userName = getNoteValue(latest.notes, 'User Name') || `User ${userId.slice(0, 6)}`;
+        const totalSessions = items.length;
+        const completedSessions = items.filter((x) => x.status === 'completed').length;
+        const program = Math.min(Math.round((completedSessions / totalSessions) * 100), 100);
+        const scoreData = memberProgressScores[userId];
+        const score = clamp(Number(scoreData?.score || 0), 0, 100);
+        return {
+          id: userId,
+          name: userName,
+          age: Number(getNoteValue(latest.notes, 'Age') || 0) || '-',
+          goal: getNoteValue(latest.notes, 'Goal') || 'General',
+          score,
+          program,
+          lastActive: latest.status === 'completed' ? 'Completed session' : 'Today',
+          avatar: getInitials(userName),
+          grad: gradientPool[idx % gradientPool.length],
+          email: getNoteValue(latest.notes, 'User Email') || '-',
+          phone: getNoteValue(latest.notes, 'Mobile') || '-',
+          preferredSlot: formatTime12(latest.startsAt) || '-',
+          trainingDays: 'As scheduled',
+          priority: getNoteValue(latest.notes, 'Priority') || 'Normal',
+          notes: getNoteValue(latest.notes, 'Description') || latest.notes || '-',
+        };
+      });
+
+    const weeklyMap = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+    validAppointments.forEach((item) => {
+      const starts = new Date(item.startsAt);
+      if (Number.isNaN(starts.getTime())) return;
+      if (starts < weekStart) return;
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      if (starts >= weekEnd) return;
+      const dayIndex = (starts.getDay() + 6) % 7;
+      const dayKey = weekDays[dayIndex];
+      weeklyMap[dayKey] += 1;
+    });
+
+    const weeklyRows = weekDays.map((dayKey) => ({ day: dayKey, sessions: weeklyMap[dayKey] }));
+
+    return {
+      stats: statsComputed,
+      schedule: scheduleRows,
+      consultations: queueRows,
+      members: memberRows,
+      weeklyData: weeklyRows,
+      scheduleDateLabel: now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+    };
+  }, [appointments, memberProgressScores]);
+
   const toggleMemberCard = (id) => {
     setFlippedMemberIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
@@ -246,9 +424,12 @@ function CoachDashboard() {
           <Box sx={{ background: panelBg, borderRadius: 2, p: 2.5, border: '1px solid', borderColor: panelBorder, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
             <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
               <Typography sx={{ fontWeight: 700, color: primaryText, fontSize: '1.25rem' }}>Today's Schedule</Typography>
-              <Typography sx={{ fontSize: '0.8rem', color: mutedText }}>Mon, Feb 21</Typography>
+              <Typography sx={{ fontSize: '0.8rem', color: mutedText }}>{scheduleDateLabel}</Typography>
             </Stack>
             <Stack spacing={1}>
+              {!schedule.length && (
+                <Typography sx={{ fontSize: '0.9rem', color: mutedText }}>No sessions scheduled for today.</Typography>
+              )}
               {schedule.map((s, i) => (
                 <Motion.div key={`${s.time}-${s.client}`} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 + (i * 0.07) }}>
                   <Box
@@ -314,6 +495,9 @@ function CoachDashboard() {
                   </Box>
                 </Motion.div>
               ))}
+              {!consultations.length && (
+                <Typography sx={{ fontSize: '0.9rem', color: mutedText }}>No pending consultation requests.</Typography>
+              )}
             </Stack>
           </Box>
         </Motion.div>
@@ -333,6 +517,11 @@ function CoachDashboard() {
         </Stack>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' }, gap: 2 }}>
+          {!members.length && (
+            <Box sx={{ p: 2, borderRadius: 2, border: '1px dashed', borderColor: panelBorder }}>
+              <Typography sx={{ color: mutedText }}>No active members yet.</Typography>
+            </Box>
+          )}
           {members.map((m, i) => (
             <Motion.div key={m.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.08 }} whileHover={{ y: -3 }}>
               <Box sx={{ perspective: '1200px' }}>
@@ -456,6 +645,17 @@ function CoachDashboard() {
           </ResponsiveContainer>
         </Box>
       </Motion.div>
+
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={3000}
+        onClose={() => setToast((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity={toast.severity} variant="filled" onClose={() => setToast((prev) => ({ ...prev, open: false }))}>
+          {toast.message}
+        </Alert>
+      </Snackbar>
     </Motion.div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -12,6 +12,7 @@ import {
   Checkbox,
   FormControlLabel,
   Link,
+  useTheme,
 } from '@mui/material';
 import { motion } from 'framer-motion';
 import MailOutlineRoundedIcon from '@mui/icons-material/MailOutlineRounded';
@@ -49,20 +50,65 @@ const COMMUNITY_AVATARS = [
   { label: 'R', tone: '#0ea5e9' },
 ];
 
+function resolveDashboardByRole(role) {
+  if (!role) return ROUTES.USER_DASHBOARD;
+  if (role === 'dietician') return ROUTES.DIETITIAN_DASHBOARD;
+  return ROLE_HOME[role] || ROUTES.USER_DASHBOARD;
+}
+
+function resolvePostLoginPath(role, fromState) {
+  const fallback = resolveDashboardByRole(role);
+  const fromPath = fromState?.pathname || fromState;
+  if (typeof fromPath !== 'string') return fallback;
+
+  const normalizedRole = role === 'dietician' ? 'dietitian' : role;
+  const rolePrefixMap = {
+    user: '/user/',
+    admin: '/admin/',
+    coach: '/coach/',
+    dietitian: '/dietitian/',
+  };
+  const allowedPrefix = rolePrefixMap[normalizedRole];
+  if (!allowedPrefix) return fallback;
+
+  return fromPath.startsWith(allowedPrefix) ? fromPath : fallback;
+}
+
 function LoginPage() {
   const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const heroTitleColor = isDark ? '#eaf2ff' : '#0e1a2e';
+  const heroBodyColor = isDark ? '#b7c8df' : '#6b768a';
+  const featureCardBg = isDark ? '#13284a' : '#ffffff';
+  const featureCardBorder = isDark ? '#2d4770' : '#e8edf5';
+  const featureTitleColor = isDark ? '#ecf3ff' : '#1c2738';
+  const featureSubtitleColor = isDark ? '#a8bdd8' : '#6c7688';
+  const communityTextColor = isDark ? '#9eb5d3' : '#5f6e83';
 
-  const [form, setForm] = useState({ email: '', password: '' });
+  const [form, setForm] = useState({ identifier: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState(location.state?.successMessage || '');
   const [loading, setLoading] = useState(false);
+  const identifierRef = useRef(null);
+
+  useEffect(() => {
+    setForm({ identifier: '', password: '' });
+    // Focus first field and select content for quick typing.
+    const timer = setTimeout(() => {
+      identifierRef.current?.focus();
+      identifierRef.current?.select?.();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Already logged in — redirect to role home
   if (isAuthenticated && user) {
-    const from = location.state?.from || ROLE_HOME[user.role];
+    const from = resolvePostLoginPath(user.role, location.state?.from);
     navigate(from, { replace: true });
     return null;
   }
@@ -76,10 +122,10 @@ function LoginPage() {
     setLoading(true);
     try {
       const loggedInUser = await login(form);
-      const from = location.state?.from || ROLE_HOME[loggedInUser.role];
+      const from = resolvePostLoginPath(loggedInUser?.role, location.state?.from);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || err?.message || 'Invalid email or password.');
+      setError(err?.response?.data?.message || err?.message || 'Invalid username or password.');
     } finally {
       setLoading(false);
     }
@@ -89,7 +135,9 @@ function LoginPage() {
     <Box
       sx={{
         minHeight: '100vh',
-        background: 'linear-gradient(180deg, #eef5ff 0%, #f9fbff 72%, #ffffff 100%)',
+        background: isDark
+          ? 'linear-gradient(180deg, #06122a 0%, #081a39 72%, #091b3f 100%)'
+          : 'linear-gradient(180deg, #eef5ff 0%, #f9fbff 72%, #ffffff 100%)',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -140,7 +188,7 @@ function LoginPage() {
                 fontSize: { xs: '2rem', sm: '2.5rem', md: '3.35rem' },
                 lineHeight: 1.05,
                 fontWeight: 800,
-                color: '#0e1a2e',
+                color: heroTitleColor,
                 maxWidth: 520,
                 mb: 2,
               }}
@@ -153,7 +201,7 @@ function LoginPage() {
             </Typography>
             <Typography
               sx={{
-                color: '#6b768a',
+                color: heroBodyColor,
                 fontSize: { xs: '1rem', md: '1.1rem' },
                 maxWidth: 510,
                 lineHeight: 1.6,
@@ -183,8 +231,8 @@ function LoginPage() {
                     sx={{
                       p: 2,
                       borderRadius: 2.5,
-                      border: '1px solid #e8edf5',
-                      backgroundColor: '#ffffff',
+                      border: `1px solid ${featureCardBorder}`,
+                      backgroundColor: featureCardBg,
                       display: 'flex',
                       alignItems: 'flex-start',
                       gap: 1.3,
@@ -206,10 +254,10 @@ function LoginPage() {
                       <Icon sx={{ fontSize: 17 }} />
                     </Box>
                     <Box>
-                      <Typography sx={{ fontWeight: 700, color: '#1c2738', fontSize: '1rem' }}>
+                      <Typography sx={{ fontWeight: 700, color: featureTitleColor, fontSize: '1rem' }}>
                         {card.title}
                       </Typography>
-                      <Typography sx={{ fontSize: '0.85rem', color: '#6c7688' }}>
+                      <Typography sx={{ fontSize: '0.85rem', color: featureSubtitleColor }}>
                         {card.subtitle}
                       </Typography>
                     </Box>
@@ -247,7 +295,7 @@ function LoginPage() {
                   </Box>
                 ))}
               </Box>
-              <Typography sx={{ color: '#5f6e83', fontSize: '0.96rem' }}>
+              <Typography sx={{ color: communityTextColor, fontSize: '0.96rem' }}>
                 +2k Join our active community
               </Typography>
             </MotionBox>
@@ -262,8 +310,11 @@ function LoginPage() {
               width: '100%',
               justifySelf: 'center',
               borderRadius: 4,
-              border: '1px solid #dbe7f5',
-              boxShadow: '0 30px 70px rgba(52, 85, 140, 0.16)',
+              border: `1px solid ${isDark ? '#27446f' : '#dbe7f5'}`,
+              bgcolor: isDark ? '#0f1f3f' : '#ffffff',
+              boxShadow: isDark
+                ? '0 30px 70px rgba(3, 9, 20, 0.58)'
+                : '0 30px 70px rgba(52, 85, 140, 0.16)',
               overflow: 'hidden',
             }}
           >
@@ -278,7 +329,7 @@ function LoginPage() {
                 component="h2"
                 sx={{
                   textAlign: 'center',
-                  color: '#0e1a2e',
+                  color: isDark ? '#eef4ff' : '#0e1a2e',
                   fontWeight: 800,
                   fontSize: { xs: '2rem', sm: '2.4rem' },
                   lineHeight: 1,
@@ -291,7 +342,7 @@ function LoginPage() {
                   mt: 1.25,
                   mb: 3,
                   textAlign: 'center',
-                  color: '#8793a7',
+                  color: isDark ? '#9eb3cf' : '#8793a7',
                   fontSize: '0.94rem',
                 }}
               >
@@ -303,19 +354,26 @@ function LoginPage() {
                   {error}
                 </Alert>
               )}
+              {successMessage && (
+                <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMessage('')}>
+                  {successMessage}
+                </Alert>
+              )}
 
-              <Box component="form" onSubmit={handleSubmit} noValidate>
-                <Typography sx={{ mb: 1, color: '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
-                  Email Address
+              <Box component="form" onSubmit={handleSubmit} noValidate autoComplete="off">
+                <Typography sx={{ mb: 1, color: isDark ? '#c8d6eb' : '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
+                  Username or Email
                 </Typography>
                 <TextField
-                  placeholder="name@example.com"
-                  name="email"
-                  type="email"
-                  value={form.email}
+                  placeholder="Enter username or email"
+                  name="identifier"
+                  type="text"
+                  inputRef={identifierRef}
+                  value={form.identifier}
                   onChange={handleChange}
+                  onFocus={(event) => event.target.select()}
                   required
-                  autoComplete="email"
+                  autoComplete="off"
                   autoFocus
                   sx={{ mb: 2.2 }}
                   InputProps={{
@@ -328,7 +386,7 @@ function LoginPage() {
                 />
 
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                  <Typography sx={{ color: '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
+                  <Typography sx={{ color: isDark ? '#c8d6eb' : '#384559', fontWeight: 700, fontSize: '0.95rem' }}>
                     Password
                   </Typography>
                   <Link
@@ -346,8 +404,9 @@ function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={handleChange}
+                  onFocus={(event) => event.target.select()}
                   required
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   sx={{ mb: 1.2 }}
                   InputProps={{
                     startAdornment: (
@@ -460,8 +519,8 @@ function LoginPage() {
 
       <Box
         sx={{
-          borderTop: '1px solid #e9eef6',
-          backgroundColor: '#ffffff',
+          borderTop: `1px solid ${isDark ? '#1d355a' : '#e9eef6'}`,
+          backgroundColor: isDark ? '#0b1b38' : '#ffffff',
           py: 1.6,
           px: { xs: 2, md: 4 },
         }}
@@ -477,26 +536,26 @@ function LoginPage() {
             gridTemplateColumns: { xs: '1fr', md: '1fr auto 1fr' },
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#7c8799' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: isDark ? '#a9bbd3' : '#7c8799' }}>
             <FitnessCenterIcon sx={{ fontSize: 18 }} />
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>Muscle Lab</Typography>
           </Box>
           <Typography
             sx={{
               justifySelf: 'center',
-              color: '#97a2b4',
+              color: isDark ? '#98adc9' : '#97a2b4',
               fontSize: '0.9rem',
               textAlign: 'center',
             }}
           >
             {new Date().getFullYear()} FitPulse Gym. All rights reserved.
           </Typography>
-          <Box
+            <Box
             sx={{
               justifySelf: { xs: 'center', md: 'end' },
               display: 'flex',
               gap: 1.1,
-              color: '#9aa5b6',
+              color: isDark ? '#9db0cc' : '#9aa5b6',
             }}
           >
             <InstagramIcon sx={{ fontSize: 20 }} />
@@ -510,4 +569,6 @@ function LoginPage() {
 }
 
 export default LoginPage;
+
+
 

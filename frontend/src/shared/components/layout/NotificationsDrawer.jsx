@@ -31,6 +31,7 @@ function NotificationsDrawer({
   notifications,
   onMarkAllRead,
   onMarkRead,
+  onNotificationClick,
 }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -84,8 +85,15 @@ function NotificationsDrawer({
           <Stack spacing={1.2}>
             {notifications.map((notif) => (
               <Motion.div key={notif.id} variants={itemVariants}>
+                {(() => {
+                  const isHomepagePromotionLink = (
+                    notif.type === 'promotion'
+                    && notif.entityType === 'promotion-homepage'
+                    && notif.actionUrl
+                  );
+                  return (
                 <Box
-                  onClick={() => onMarkRead(notif.id)}
+                  onClick={() => (onNotificationClick ? onNotificationClick(notif) : onMarkRead(notif.id))}
                   sx={{
                     p: 1.3,
                     borderRadius: 2,
@@ -94,7 +102,7 @@ function NotificationsDrawer({
                     background: notif.read
                       ? (isDark ? '#1a2a47' : '#ffffff')
                       : (isDark ? '#153350' : '#e6fffa'),
-                    cursor: 'pointer',
+                    cursor: isHomepagePromotionLink ? 'pointer' : 'default',
                     transition: 'all 0.2s ease',
                     '&:hover': {
                       transform: 'translateY(-1px)',
@@ -145,9 +153,23 @@ function NotificationsDrawer({
                       >
                         {notif.message}
                       </Typography>
+                      {isHomepagePromotionLink && (
+                        <Typography
+                          sx={{
+                            mt: 0.5,
+                            color: '#14b8a6',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          Tap to view offer
+                        </Typography>
+                      )}
                     </Box>
                   </Stack>
                 </Box>
+                  );
+                })()}
               </Motion.div>
             ))}
           </Stack>

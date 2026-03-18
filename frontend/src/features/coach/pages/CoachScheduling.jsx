@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Alert,
@@ -26,6 +26,12 @@ import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
+import {
+  createCoachSchedulingSlot,
+  deleteCoachSchedulingSlot,
+  getCoachSchedulingSlots,
+  updateCoachSchedulingSlot,
+} from '../api/coach.api';
 
 const MotionBox = motion(Box);
 const SLOT_TYPES = ['In-Person', 'Online', 'Hybrid'];
@@ -73,18 +79,10 @@ function CoachScheduling() {
   const formBorderHover = isDark ? 'rgba(148, 163, 184, 0.62)' : theme.palette.text.secondary;
   const formBorderFocus = isDark ? '#93c5fd' : theme.palette.primary.main;
   const { user } = useAuth();
-  const storageKey = `coach_scheduling_slots_v1_${user?.id || 'guest'}`;
+  const coachId = user?.id;
 
-  const [slots, setSlots] = useState(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
+  const [slots, setSlots] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState(null);
@@ -92,10 +90,32 @@ function CoachScheduling() {
   const [viewMode, setViewMode] = useState('weekly');
   const [selectedDate, setSelectedDate] = useState(() => stripToDay(new Date()));
 
-  const saveSlots = (next) => {
-    setSlots(next);
-    localStorage.setItem(storageKey, JSON.stringify(next));
+  const loadSlots = async () => {
+    if (!coachId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await getCoachSchedulingSlots(coachId);
+      const apiSlots = Array.isArray(response?.data?.data) ? response.data.data : [];
+      const normalized = apiSlots.map((slot) => ({
+        id: slot._id,
+        date: slot.date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        type: slot.sessionType,
+        notes: slot.notes || '',
+      }));
+      setSlots(normalized);
+    } catch (loadErr) {
+      setError(loadErr?.response?.data?.message || 'Failed to load scheduling slots');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    loadSlots();
+  }, [coachId]);
 
   const orderedSlots = useMemo(() => {
     return [...slots].sort((a, b) => toDateTime(a.date, a.startTime) - toDateTime(b.date, b.startTime));
@@ -209,7 +229,12 @@ function CoachScheduling() {
     return '';
   };
 
-  const onSubmit = () => {
+  const onSubmit = async () => {
+    if (!coachId) {
+      setError('Coach account is required');
+      return;
+    }
+
     const message = validate();
     if (message) {
       setError(message);
@@ -217,22 +242,26 @@ function CoachScheduling() {
     }
 
     const payload = {
-      id: editingId || Date.now(),
       date: form.date,
       startTime: form.startTime,
       endTime: form.endTime,
-      type: form.type,
+      sessionType: form.type,
       notes: form.notes.trim(),
     };
 
-    if (editingId) {
-      saveSlots(slots.map((item) => (item.id === editingId ? payload : item)));
-    } else {
-      saveSlots([...slots, payload]);
+    try {
+      setError('');
+      if (editingId) {
+        await updateCoachSchedulingSlot(coachId, editingId, payload);
+      } else {
+        await createCoachSchedulingSlot(coachId, payload);
+      }
+      await loadSlots();
+      setSelectedDate(parseIsoDate(payload.date));
+      resetForm();
+    } catch (submitErr) {
+      setError(submitErr?.response?.data?.message || 'Failed to save slot');
     }
-
-    setSelectedDate(parseIsoDate(payload.date));
-    resetForm();
   };
 
   const onEdit = (slot) => {
@@ -247,11 +276,21 @@ function CoachScheduling() {
     });
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (!deleteId) return;
-    saveSlots(slots.filter((s) => s.id !== deleteId));
-    setDeleteId(null);
-    if (editingId === deleteId) resetForm();
+    if (!coachId) {
+      setError('Coach account is required');
+      return;
+    }
+    try {
+      setError('');
+      await deleteCoachSchedulingSlot(coachId, deleteId);
+      await loadSlots();
+      setDeleteId(null);
+      if (editingId === deleteId) resetForm();
+    } catch (deleteErr) {
+      setError(deleteErr?.response?.data?.message || 'Failed to delete slot');
+    }
   };
 
   const moveRange = (direction) => {
@@ -531,13 +570,18 @@ function CoachScheduling() {
                 </Stack>
               </Stack>
 
-              {!filteredSlots.length && (
+              {!loading && !filteredSlots.length && (
                 <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 2, py: 4, textAlign: 'center' }}>
                   <Typography sx={{ color: 'text.secondary' }}>
                     {viewMode === 'daily' && `No slots for ${selectedDayLabel}.`}
                     {viewMode === 'weekly' && `No slots for ${formatWeekRange(selectedWeekStart, selectedWeekEnd)}.`}
                     {viewMode === 'monthly' && `No slots for ${selectedDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}.`}
                   </Typography>
+                </Box>
+              )}
+              {loading && (
+                <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 2, py: 4, textAlign: 'center' }}>
+                  <Typography sx={{ color: 'text.secondary' }}>Loading slots...</Typography>
                 </Box>
               )}
 
@@ -626,4 +670,5 @@ function CoachScheduling() {
 }
 
 export default CoachScheduling;
+
 

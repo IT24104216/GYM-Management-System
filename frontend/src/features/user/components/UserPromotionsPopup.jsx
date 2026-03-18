@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -12,24 +12,52 @@ import {
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import KeyboardArrowLeftRoundedIcon from '@mui/icons-material/KeyboardArrowLeftRounded';
 import KeyboardArrowRightRoundedIcon from '@mui/icons-material/KeyboardArrowRightRounded';
-import { MOCK_PROMOTIONS } from '@/features/user/data/promotions.mock';
+import { getPublicPromotions } from '@/features/user/api/user.api';
+import { ROUTES } from '@/shared/utils/constants';
 
 const MotionBox = motion(Box);
 
-function UserPromotionsPopup({ open, onClose }) {
+function UserPromotionsPopup({ open, onClose, placement = 'Dashboard Hero' }) {
   const navigate = useNavigate();
   const [index, setIndex] = useState(0);
-  const slides = useMemo(() => MOCK_PROMOTIONS.slice(0, 3), []);
+  const [slides, setSlides] = useState([]);
 
   useEffect(() => {
     if (!open) return undefined;
+    const loadPromotions = async () => {
+      try {
+        const { data } = await getPublicPromotions({ limit: 3, placement });
+        const rows = Array.isArray(data?.data) ? data.data : [];
+        setSlides(rows.map((item) => ({
+          id: item.id,
+          title: item.title,
+          subtitle: item.status === 'ACTIVE' ? 'LIMITED OFFER' : 'SPECIAL DEAL',
+          description: item.description || '',
+          cta: 'View Offer',
+          badge: item.target || 'Live',
+          image: item.image || 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1600',
+          link: item.link || ROUTES.USER_ADS_PROMOTIONS,
+        })));
+      } catch {
+        setSlides([]);
+      }
+    };
+    loadPromotions();
+    return undefined;
+  }, [open, placement]);
+
+  useEffect(() => {
+    if (!open || slides.length <= 1) return undefined;
     const interval = setInterval(() => {
       setIndex((prev) => (prev + 1) % slides.length);
     }, 2000);
     return () => clearInterval(interval);
   }, [open, slides.length]);
 
-  const activeSlide = slides[index];
+  if (!slides.length) return null;
+
+  const activeIndex = index >= slides.length ? 0 : index;
+  const activeSlide = slides[activeIndex];
 
   const handleNavigate = () => {
     navigate(activeSlide.link);
@@ -194,14 +222,14 @@ function UserPromotionsPopup({ open, onClose }) {
               type="button"
               onClick={() => setIndex(dotIndex)}
               sx={{
-                width: dotIndex === index ? 24 : 9,
+                width: dotIndex === activeIndex ? 24 : 9,
                 height: 9,
                 borderRadius: 99,
                 border: 0,
                 p: 0,
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                bgcolor: dotIndex === index ? '#ffffff' : 'rgba(255,255,255,0.48)',
+                bgcolor: dotIndex === activeIndex ? '#ffffff' : 'rgba(255,255,255,0.48)',
               }}
             />
           ))}

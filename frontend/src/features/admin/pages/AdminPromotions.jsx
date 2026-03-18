@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -21,8 +21,12 @@ import AddPhotoAlternateRoundedIcon from '@mui/icons-material/AddPhotoAlternateR
 import CampaignRoundedIcon from '@mui/icons-material/CampaignRounded';
 import LocalOfferRoundedIcon from '@mui/icons-material/LocalOfferRounded';
 import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded';
-
-const STORAGE_KEY = 'admin_campaigns_modern_v1';
+import {
+  createPromotion,
+  deletePromotion,
+  getPromotions,
+  updatePromotion,
+} from '@/features/admin/api/admin.api';
 
 const INITIAL_FORM = {
   title: '',
@@ -39,10 +43,7 @@ const INITIAL_FORM = {
 
 const PLACEMENTS = [
   'Dashboard Hero',
-  'Member App Banner',
-  'PT Booking Page',
-  'Class Schedule Page',
-  'Email Footer',
+  'Promotions Page',
 ];
 const TARGETS = [
   'All Members',
@@ -72,16 +73,7 @@ export default function AdminPromotions() {
   const primaryText = theme.palette.text.primary;
   const secondaryText = theme.palette.text.secondary;
 
-  const [campaigns, setCampaigns] = useState(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
+  const [campaigns, setCampaigns] = useState([]);
 
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -91,14 +83,21 @@ export default function AdminPromotions() {
   const activeCount = useMemo(() => campaigns.filter((item) => item.status === 'ACTIVE').length, [campaigns]);
   const totalBudget = useMemo(() => campaigns.reduce((sum, item) => sum + Number(item.budget || 0), 0), [campaigns]);
 
-  const persistCampaigns = (next) => {
-    setCampaigns(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore storage errors
-    }
+  const loadCampaigns = async () => {
+    const { data } = await getPromotions();
+    setCampaigns(Array.isArray(data?.data) ? data.data : []);
   };
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        await loadCampaigns();
+      } catch {
+        setCampaigns([]);
+      }
+    };
+    run();
+  }, []);
 
   const resetForm = () => {
     setEditingId(null);
@@ -121,7 +120,7 @@ export default function AdminPromotions() {
     reader.readAsDataURL(file);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.title.trim() || !form.budget || !form.startDate || !form.endDate) {
       setError('Please fill title, budget, start date, and end date.');
       return;
@@ -138,11 +137,21 @@ export default function AdminPromotions() {
     }
 
     const cleanLink = form.link.trim();
+    const cleanImage = form.image.trim();
     if (cleanLink) {
       try {
         new URL(cleanLink);
       } catch {
         setError('Campaign link must be a valid URL.');
+        return;
+      }
+    }
+
+    if (cleanImage && !cleanImage.startsWith('data:image/')) {
+      try {
+        new URL(cleanImage);
+      } catch {
+        setError('Image link must be a valid URL.');
         return;
       }
     }
@@ -153,20 +162,22 @@ export default function AdminPromotions() {
       budget: Number(form.budget),
       description: form.description.trim(),
       link: cleanLink,
-      updatedAt: new Date().toISOString(),
+      image: cleanImage,
     };
 
-    if (editingId) {
-      const next = campaigns.map((item) => (item.id === editingId ? { ...item, ...payload } : item));
-      persistCampaigns(next);
-      setToast({ open: true, message: 'Ad/Promotion updated successfully.', severity: 'success' });
-    } else {
-      const next = [{ id: Date.now(), createdAt: new Date().toISOString(), ...payload }, ...campaigns];
-      persistCampaigns(next);
-      setToast({ open: true, message: 'Ad/Promotion submitted successfully.', severity: 'success' });
+    try {
+      if (editingId) {
+        await updatePromotion(editingId, payload);
+        setToast({ open: true, message: 'Ad/Promotion updated successfully.', severity: 'success' });
+      } else {
+        await createPromotion(payload);
+        setToast({ open: true, message: 'Ad/Promotion submitted successfully.', severity: 'success' });
+      }
+      await loadCampaigns();
+      resetForm();
+    } catch (apiError) {
+      setError(apiError?.response?.data?.message || 'Failed to save promotion.');
     }
-
-    resetForm();
   };
 
   const handleEdit = (campaign) => {
@@ -186,9 +197,14 @@ export default function AdminPromotions() {
     });
   };
 
-  const handleDelete = (id) => {
-    persistCampaigns(campaigns.filter((item) => item.id !== id));
-    setToast({ open: true, message: 'Campaign removed.', severity: 'success' });
+  const handleDelete = async (id) => {
+    try {
+      await deletePromotion(id);
+      await loadCampaigns();
+      setToast({ open: true, message: 'Campaign removed.', severity: 'success' });
+    } catch (apiError) {
+      setError(apiError?.response?.data?.message || 'Failed to delete promotion.');
+    }
   };
 
   const closeToast = (_, reason) => {
@@ -312,6 +328,15 @@ export default function AdminPromotions() {
                 fullWidth
                 size="small"
                 placeholder="https://gympro.com/offers/pt-starter"
+              />
+
+              <TextField
+                label="Image Link URL"
+                value={form.image}
+                onChange={updateField('image')}
+                fullWidth
+                size="small"
+                placeholder="https://images.example.com/promo-banner.jpg"
               />
 
               <TextField
