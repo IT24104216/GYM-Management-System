@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -212,10 +213,12 @@ const getConsecutiveWorkoutStreak = (completionDates, todayIso) => {
 
 function UserProgress() {
   const { user } = useAuth();
+  const location = useLocation();
   const userId = String(user?.id || user?._id || '');
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const todayIso = getTodayIso();
+  const completedWorkoutDateFromState = location.state?.completedWorkoutDate || '';
 
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [calendarAnchorEl, setCalendarAnchorEl] = useState(null);
@@ -241,14 +244,23 @@ function UserProgress() {
   const [measurementsByDate, setMeasurementsByDate] = useState({});
   const [completionDate, setCompletionDate] = useState('');
   const [workoutCompletionDates, setWorkoutCompletionDates] = useState([]);
-  const completionDateFull = completionDate ? formatIsoToFull(completionDate) : '';
+  const mergedCompletionDates = useMemo(() => {
+    const merged = new Set(Array.isArray(workoutCompletionDates) ? workoutCompletionDates : []);
+    if (completedWorkoutDateFromState) merged.add(completedWorkoutDateFromState);
+    return [...merged].sort((left, right) => new Date(`${left}T00:00:00`) - new Date(`${right}T00:00:00`));
+  }, [workoutCompletionDates, completedWorkoutDateFromState]);
+  const latestCompletionDate = mergedCompletionDates.length
+    ? mergedCompletionDates[mergedCompletionDates.length - 1]
+    : '';
+  const effectiveCompletionDate = completionDate || latestCompletionDate;
+  const completionDateFull = effectiveCompletionDate ? formatIsoToFull(effectiveCompletionDate) : '';
   const selectedDateFull = formatIsoToFull(selectedDate);
   const selectedDateShort = formatIsoToShort(selectedDate);
   const visibleMonthLabel = visibleMonth.toLocaleDateString('en-US', {
     month: 'long',
     year: 'numeric',
   });
-  const canUploadSelectedDate = Boolean(completionDate) && completionDate === selectedDate;
+  const canUploadSelectedDate = mergedCompletionDates.includes(selectedDate);
   const selectedDatePhotos = photosByDate[selectedDate] || createPhotoSlots();
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const isCalendarOpen = Boolean(calendarAnchorEl);
@@ -276,6 +288,13 @@ function UserProgress() {
   useEffect(() => {
     loadProgressData();
   }, [userId]);
+
+  useEffect(() => {
+    if (!completedWorkoutDateFromState) return;
+    setSelectedDate(completedWorkoutDateFromState);
+    setVisibleMonth(new Date(`${completedWorkoutDateFromState}T00:00:00`));
+    setCompletionDate((prev) => prev || completedWorkoutDateFromState);
+  }, [completedWorkoutDateFromState]);
 
   const chartData = useMemo(() => {
     const weightHistory = Object.entries(weightHistoryByDate)
@@ -531,12 +550,15 @@ function UserProgress() {
   };
 
   const handleUploadClick = () => {
-    if (!completionDate) {
+    if (!mergedCompletionDates.length) {
       setPhotoToast({ open: true, message: 'Complete a workout session first to upload progress photos.' });
       return;
     }
     if (!canUploadSelectedDate) {
-      setPhotoToast({ open: true, message: `Photo upload is available on completion day (${completionDateFull || completionDate}).` });
+      setPhotoToast({
+        open: true,
+        message: `Photo upload is available for completed workout dates only (latest: ${completionDateFull || 'N/A'}).`,
+      });
       return;
     }
     uploadInputRef.current?.click();
@@ -985,7 +1007,7 @@ function UserProgress() {
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mb={1.2}>
               <Chip
-                label={completionDate ? `Workout Completion Date: ${completionDateFull}` : 'Workout Completion Date: Not available yet'}
+                label={effectiveCompletionDate ? `Workout Completion Date: ${completionDateFull}` : 'Workout Completion Date: Not available yet'}
                 sx={{ fontWeight: 700 }}
               />
               <Chip
@@ -993,7 +1015,7 @@ function UserProgress() {
                 sx={{ fontWeight: 700 }}
               />
               <Chip
-                label={canUploadSelectedDate ? 'Upload Window: Open today' : 'Upload Window: Closed'}
+                label={canUploadSelectedDate ? 'Upload Window: Open for selected date' : 'Upload Window: Closed'}
                 color={canUploadSelectedDate ? 'success' : 'default'}
                 sx={{ fontWeight: 700 }}
               />
