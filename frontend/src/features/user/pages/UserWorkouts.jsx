@@ -33,6 +33,13 @@ import {
 } from '@/features/user/api/user.api';
 
 const MotionBox = motion(Box);
+const getLocalIsoDate = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 const TODAY_MOCK_DATE = new Date().toLocaleDateString('en-US', {
   month: 'short',
   day: 'numeric',
@@ -619,14 +626,23 @@ function UserWorkouts() {
       userId,
       elapsedSeconds: elapsedSessionSeconds,
     })
-      .then(() => loadAssignedPlans())
-      .then(() => {
+      .then((response) => {
+        const payload = response?.data?.data || {};
+        const completedWorkoutDate = payload.completedDate || getLocalIsoDate();
+        return loadAssignedPlans().then(() => completedWorkoutDate);
+      })
+      .then((completedWorkoutDate) => {
         setSessionStarted(false);
         setSessionStatus('finished');
         setSessionToast({ open: true, message: 'Workout session marked as finished. Redirecting to progress tracking...' });
         setTimeout(() => {
           handleCloseWorkoutSession();
-          navigate(ROUTES.USER_PROGRESS);
+          navigate(ROUTES.USER_PROGRESS, {
+            state: {
+              completedWorkoutDate,
+              openedFromWorkoutFinish: true,
+            },
+          });
         }, 700);
       })
       .catch((error) => {
