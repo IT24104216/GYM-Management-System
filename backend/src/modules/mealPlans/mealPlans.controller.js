@@ -60,6 +60,22 @@ const hasAtLeastOneMealName = (payload) => {
     Array.isArray(section) && section.some((option) => String(option?.mealName || '').trim().length > 0));
 };
 
+const getScopedUserId = (req, fallbackUserId = '') => {
+  const role = String(req.user?.role || '');
+  const authUserId = String(req.user?.id || '');
+  if (role === 'admin') return String(fallbackUserId || '');
+  if (role === 'user') return authUserId;
+  return String(fallbackUserId || '');
+};
+
+const getScopedDietitianId = (req, fallbackDietitianId = '') => {
+  const role = String(req.user?.role || '');
+  const authUserId = String(req.user?.id || '');
+  if (role === 'admin') return String(fallbackDietitianId || '');
+  if (role === 'dietitian') return authUserId;
+  return String(fallbackDietitianId || '');
+};
+
 export const getmealPlansStatus = (_req, res) => {
   res.json({
     module: 'mealPlans',
@@ -69,9 +85,10 @@ export const getmealPlansStatus = (_req, res) => {
 
 export const getMealLibraryItems = asyncHandler(async (req, res) => {
   const query = parseOrThrow(mealLibraryQuerySchema, req.query || {});
-  await ensureDietitianExists(query.dietitianId);
+  const dietitianId = getScopedDietitianId(req, query.dietitianId);
+  await ensureDietitianExists(dietitianId);
 
-  const filter = { dietitianId: query.dietitianId };
+  const filter = { dietitianId };
   if (query.category) filter.category = query.category;
 
   const items = await MealLibraryItem.find(filter).sort({ createdAt: -1 });
@@ -81,9 +98,13 @@ export const getMealLibraryItems = asyncHandler(async (req, res) => {
 
 export const createMealLibraryItem = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(createMealLibrarySchema, req.body || {});
-  await ensureDietitianExists(payload.dietitianId);
+  const dietitianId = getScopedDietitianId(req, payload.dietitianId);
+  await ensureDietitianExists(dietitianId);
 
-  const created = await MealLibraryItem.create(payload);
+  const created = await MealLibraryItem.create({
+    ...payload,
+    dietitianId,
+  });
 
   res.status(HTTP_STATUS.CREATED).json({
     message: 'Meal added successfully',
@@ -93,7 +114,8 @@ export const createMealLibraryItem = asyncHandler(async (req, res) => {
 
 export const updateMealLibraryItem = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(idParamSchema, req.params);
-  const { dietitianId } = parseOrThrow(ownerQuerySchema, req.query || {});
+  const owner = parseOrThrow(ownerQuerySchema, req.query || {});
+  const dietitianId = getScopedDietitianId(req, owner.dietitianId);
   const payload = parseOrThrow(updateMealLibrarySchema, req.body || {});
   await ensureDietitianExists(dietitianId);
 
@@ -113,7 +135,8 @@ export const updateMealLibraryItem = asyncHandler(async (req, res) => {
 
 export const deleteMealLibraryItem = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(idParamSchema, req.params);
-  const { dietitianId } = parseOrThrow(ownerQuerySchema, req.query || {});
+  const owner = parseOrThrow(ownerQuerySchema, req.query || {});
+  const dietitianId = getScopedDietitianId(req, owner.dietitianId);
   await ensureDietitianExists(dietitianId);
 
   const deleted = await MealLibraryItem.findOneAndDelete({ _id: id, dietitianId });
@@ -128,9 +151,10 @@ export const deleteMealLibraryItem = asyncHandler(async (req, res) => {
 
 export const getDietPlans = asyncHandler(async (req, res) => {
   const query = parseOrThrow(planQuerySchema, req.query || {});
-  await ensureDietitianExists(query.dietitianId);
+  const dietitianId = getScopedDietitianId(req, query.dietitianId);
+  await ensureDietitianExists(dietitianId);
 
-  const filter = { dietitianId: query.dietitianId };
+  const filter = { dietitianId };
   if (query.userId) filter.userId = query.userId;
   if (typeof query.submitted === 'boolean') filter.isSubmitted = query.submitted;
 
@@ -143,7 +167,8 @@ export const getDietPlans = asyncHandler(async (req, res) => {
 
 export const upsertDietPlan = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(upsertDietPlanSchema, req.body || {});
-  await ensureDietitianExists(payload.dietitianId);
+  const dietitianId = getScopedDietitianId(req, payload.dietitianId);
+  await ensureDietitianExists(dietitianId);
   await ensureUserExists(payload.userId);
 
   if (!hasAtLeastOneMealName(payload)) {
@@ -154,7 +179,7 @@ export const upsertDietPlan = asyncHandler(async (req, res) => {
   }
 
   const existing = await DietPlan.findOne({
-    dietitianId: payload.dietitianId,
+    dietitianId,
     userId: payload.userId,
   });
 
@@ -164,12 +189,13 @@ export const upsertDietPlan = asyncHandler(async (req, res) => {
 
   const dataToSave = {
     ...payload,
+    dietitianId,
     isSubmitted: false,
     submittedAt: null,
   };
 
   const plan = await DietPlan.findOneAndUpdate(
-    { dietitianId: payload.dietitianId, userId: payload.userId },
+    { dietitianId, userId: payload.userId },
     { $set: dataToSave },
     { new: true, upsert: true, setDefaultsOnInsert: true },
   );
@@ -182,7 +208,8 @@ export const upsertDietPlan = asyncHandler(async (req, res) => {
 
 export const updateDietPlan = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(idParamSchema, req.params);
-  const { dietitianId } = parseOrThrow(ownerQuerySchema, req.query || {});
+  const owner = parseOrThrow(ownerQuerySchema, req.query || {});
+  const dietitianId = getScopedDietitianId(req, owner.dietitianId);
   const payload = parseOrThrow(updateDietPlanSchema, req.body || {});
   await ensureDietitianExists(dietitianId);
 
@@ -220,7 +247,8 @@ export const updateDietPlan = asyncHandler(async (req, res) => {
 
 export const submitDietPlan = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(idParamSchema, req.params);
-  const { dietitianId } = parseOrThrow(ownerQuerySchema, req.query || {});
+  const owner = parseOrThrow(ownerQuerySchema, req.query || {});
+  const dietitianId = getScopedDietitianId(req, owner.dietitianId);
   const payload = parseOrThrow(submitDietPlanSchema, req.body || {});
   await ensureDietitianExists(dietitianId);
 
@@ -268,7 +296,8 @@ export const submitDietPlan = asyncHandler(async (req, res) => {
 
 export const deleteDietPlan = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(idParamSchema, req.params);
-  const { dietitianId } = parseOrThrow(ownerQuerySchema, req.query || {});
+  const owner = parseOrThrow(ownerQuerySchema, req.query || {});
+  const dietitianId = getScopedDietitianId(req, owner.dietitianId);
   await ensureDietitianExists(dietitianId);
 
   const plan = await DietPlan.findOne({ _id: id, dietitianId });
@@ -299,7 +328,8 @@ const sectionMap = [
 ];
 
 export const getUserActiveDietPlan = asyncHandler(async (req, res) => {
-  const { userId } = parseOrThrow(userPlanQuerySchema, req.query || {});
+  const query = parseOrThrow(userPlanQuerySchema, req.query || {});
+  const userId = getScopedUserId(req, query.userId);
   await ensureUserExists(userId);
 
   const plan = await DietPlan.findOne({ userId, isSubmitted: true })
@@ -372,7 +402,9 @@ export const getUserActiveDietPlan = asyncHandler(async (req, res) => {
 });
 
 export const getUserFoodLogs = asyncHandler(async (req, res) => {
-  const { userId, logDate } = parseOrThrow(foodLogQuerySchema, req.query || {});
+  const query = parseOrThrow(foodLogQuerySchema, req.query || {});
+  const userId = getScopedUserId(req, query.userId);
+  const { logDate } = query;
   await ensureUserExists(userId);
 
   const filter = { userId };
@@ -387,9 +419,13 @@ export const getUserFoodLogs = asyncHandler(async (req, res) => {
 
 export const createUserFoodLog = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(createFoodLogSchema, req.body || {});
-  await ensureUserExists(payload.userId);
+  const userId = getScopedUserId(req, payload.userId);
+  await ensureUserExists(userId);
 
-  const created = await FoodLog.create(payload);
+  const created = await FoodLog.create({
+    ...payload,
+    userId,
+  });
 
   res.status(HTTP_STATUS.CREATED).json({
     message: 'Food log added successfully',
@@ -399,7 +435,8 @@ export const createUserFoodLog = asyncHandler(async (req, res) => {
 
 export const updateUserFoodLog = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(idParamSchema, req.params);
-  const { userId } = parseOrThrow(foodLogOwnerQuerySchema, req.query || {});
+  const owner = parseOrThrow(foodLogOwnerQuerySchema, req.query || {});
+  const userId = getScopedUserId(req, owner.userId);
   const payload = parseOrThrow(updateFoodLogSchema, req.body || {});
   await ensureUserExists(userId);
 
@@ -419,7 +456,8 @@ export const updateUserFoodLog = asyncHandler(async (req, res) => {
 
 export const deleteUserFoodLog = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(idParamSchema, req.params);
-  const { userId } = parseOrThrow(foodLogOwnerQuerySchema, req.query || {});
+  const owner = parseOrThrow(foodLogOwnerQuerySchema, req.query || {});
+  const userId = getScopedUserId(req, owner.userId);
   await ensureUserExists(userId);
 
   const deleted = await FoodLog.findOneAndDelete({ _id: id, userId });

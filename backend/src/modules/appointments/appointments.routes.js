@@ -22,13 +22,13 @@ const enforceAppointmentScope = (req, res, next) => {
   if (role === 'admin') return next();
 
   const query = req.query || {};
-  if (role === 'user' && String(query.userId || '') !== authUserId) {
+  if (role === 'user' && query.userId && String(query.userId || '') !== authUserId) {
     return res.status(403).json({ message: 'Forbidden: userId scope mismatch' });
   }
-  if (role === 'coach' && String(query.coachId || '') !== authUserId) {
+  if (role === 'coach' && query.coachId && String(query.coachId || '') !== authUserId) {
     return res.status(403).json({ message: 'Forbidden: coachId scope mismatch' });
   }
-  if (role === 'dietitian' && String(query.dietitianId || '') !== authUserId) {
+  if (role === 'dietitian' && query.dietitianId && String(query.dietitianId || '') !== authUserId) {
     return res.status(403).json({ message: 'Forbidden: dietitianId scope mismatch' });
   }
   return next();
