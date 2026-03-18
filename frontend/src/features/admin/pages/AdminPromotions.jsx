@@ -43,10 +43,7 @@ const INITIAL_FORM = {
 
 const PLACEMENTS = [
   'Dashboard Hero',
-  'Member App Banner',
-  'PT Booking Page',
-  'Class Schedule Page',
-  'Email Footer',
+  'Promotions Page',
 ];
 const TARGETS = [
   'All Members',
@@ -140,11 +137,21 @@ export default function AdminPromotions() {
     }
 
     const cleanLink = form.link.trim();
+    const cleanImage = form.image.trim();
     if (cleanLink) {
       try {
         new URL(cleanLink);
       } catch {
         setError('Campaign link must be a valid URL.');
+        return;
+      }
+    }
+
+    if (cleanImage && !cleanImage.startsWith('data:image/')) {
+      try {
+        new URL(cleanImage);
+      } catch {
+        setError('Image link must be a valid URL.');
         return;
       }
     }
@@ -155,6 +162,7 @@ export default function AdminPromotions() {
       budget: Number(form.budget),
       description: form.description.trim(),
       link: cleanLink,
+      image: cleanImage,
     };
 
     try {
@@ -320,6 +328,15 @@ export default function AdminPromotions() {
                 fullWidth
                 size="small"
                 placeholder="https://gympro.com/offers/pt-starter"
+              />
+
+              <TextField
+                label="Image Link URL"
+                value={form.image}
+                onChange={updateField('image')}
+                fullWidth
+                size="small"
+                placeholder="https://images.example.com/promo-banner.jpg"
               />
 
               <TextField

@@ -38,3 +38,21 @@ export const updateAdminSettings = (payload) =>
 
 export const changeAdminPassword = (payload) =>
   axiosClient.put('/admin/settings/password', payload);
+
+export const getLockers = (params = {}) =>
+  axiosClient.get('/lockers/list', { params });
+
+export const createLocker = (data) =>
+  axiosClient.post('/lockers/list', data);
+
+export const updateLocker = (id, data) =>
+  axiosClient.put(`/lockers/list/${id}`, data);
+
+export const deleteLocker = (id) =>
+  axiosClient.delete(`/lockers/list/${id}`);
+
+export const getLockerBookings = (params = {}) =>
+  axiosClient.get('/lockers/bookings', { params });
+
+export const updateLockerBookingStatus = (id, data) =>
+  axiosClient.patch(`/lockers/bookings/${id}/status`, data);
