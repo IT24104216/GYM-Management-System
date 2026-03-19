@@ -138,7 +138,8 @@ function AdminUsers() {
     const query = search.trim().toLowerCase();
     const searchMatch = !query
       || user.name.toLowerCase().includes(query)
-      || user.email.toLowerCase().includes(query);
+      || user.email.toLowerCase().includes(query)
+      || String(user.branchUserId || '').toLowerCase().includes(query);
     return roleMatch && searchMatch;
   }), [users, filter, search]);
 
@@ -340,6 +341,7 @@ function AdminUsers() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>USER</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>BRANCH ID</TableCell>
                 <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>EMAIL</TableCell>
                 <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>ROLE</TableCell>
                 <TableCell sx={{ fontWeight: 800, color: '#94a3b8' }}>STATUS</TableCell>
@@ -364,6 +366,9 @@ function AdminUsers() {
                         <Avatar sx={{ width: 36, height: 36, fontWeight: 800, fontSize: '0.9rem', bgcolor: '#22c55e' }}>{user.avatar}</Avatar>
                         <Typography sx={{ fontWeight: 700 }}>{user.name}</Typography>
                       </Stack>
+                    </TableCell>
+                    <TableCell sx={{ color: '#94a3b8', fontWeight: 700 }}>
+                      {user.branchUserId || '-'}
                     </TableCell>
                     <TableCell sx={{ color: '#64748b' }}>{user.email}</TableCell>
                     <TableCell>

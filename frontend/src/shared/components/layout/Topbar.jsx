@@ -16,6 +16,7 @@ import {
   MenuItem,
   Snackbar,
   Stack,
+  Switch,
   TextField,
   Toolbar,
   Tooltip,
@@ -32,8 +33,10 @@ import { useAppTheme } from '@/shared/hooks/useAppTheme';
 import { ROUTES, ROLES } from '@/shared/utils/constants';
 import {
   getUserNotifications,
+  getNotificationPreferences as getNotificationPreferencesApi,
   markAllNotificationsAsRead,
   markNotificationAsRead,
+  updateNotificationPreferences as updateNotificationPreferencesApi,
 } from '@/shared/api/notifications.api';
 import {
   deleteCoachProfile as deleteCoachProfileApi,
@@ -136,7 +139,7 @@ const hasCoachProfileData = (profile) =>
   );
 
 function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebarHidden = false }) {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const { mode, toggleTheme } = useAppTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -155,6 +158,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [coachDeleteFeedbackOpen, setCoachDeleteFeedbackOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [notificationPrefSaving, setNotificationPrefSaving] = useState(false);
   const [dietitianProfile, setDietitianProfile] = useState(defaultDietitianProfile);
   const [editDietitianProfile, setEditDietitianProfile] = useState(defaultDietitianProfile);
   const [userProfile, setUserProfile] = useState(defaultUserProfile);
@@ -167,13 +171,17 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const isCoach = user?.role === ROLES.COACH;
   const userProfileStorageKey = `${USER_PROFILE_STORAGE_KEY}.${user?.id || 'guest'}`;
   const notificationRole = roleToApiRole[user?.role] || 'user';
+  const notificationsEnabled = user?.notificationPreferences?.push !== false;
 
   useEffect(() => {
     let isMounted = true;
     const userId = String(user?.id || '');
 
     const loadNotifications = async () => {
-      if (!userId) return;
+      if (!userId || !notificationsEnabled) {
+        if (isMounted) setNotifications([]);
+        return;
+      }
       try {
         const { data } = await getUserNotifications({
           userId,
@@ -203,7 +211,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
       clearInterval(intervalId);
       isMounted = false;
     };
-  }, [user?.id, notificationRole]);
+  }, [user?.id, notificationRole, notificationsEnabled]);
 
   const handleAvatarClick = (e) => setAnchorEl(e.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
@@ -404,6 +412,62 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
       // keep existing UI behavior
     }
   };
+
+  const setNotificationsEnabled = async (enabled) => {
+    const userId = String(user?.id || '');
+    if (!userId || notificationPrefSaving) return;
+    setNotificationPrefSaving(true);
+    try {
+      const { data } = await updateNotificationPreferencesApi({
+        userId,
+        role: notificationRole,
+        push: enabled,
+      });
+
+      const nextPrefs = {
+        email: data?.data?.email ?? user?.notificationPreferences?.email ?? true,
+        push: data?.data?.push ?? enabled,
+      };
+      updateUser({
+        ...user,
+        notificationPreferences: nextPrefs,
+      });
+      if (!nextPrefs.push) {
+        setNotifications([]);
+      }
+    } catch {
+      // keep existing UI behavior
+    } finally {
+      setNotificationPrefSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    const userId = String(user?.id || '');
+    if (!userId) return;
+    if (user?.notificationPreferences?.push !== undefined && user?.notificationPreferences?.email !== undefined) return;
+
+    const syncPreferences = async () => {
+      try {
+        const { data } = await getNotificationPreferencesApi({
+          userId,
+          role: notificationRole,
+        });
+        const nextPrefs = {
+          email: data?.data?.email ?? true,
+          push: data?.data?.push ?? true,
+        };
+        updateUser({
+          ...user,
+          notificationPreferences: nextPrefs,
+        });
+      } catch {
+        // keep existing UI behavior
+      }
+    };
+
+    syncPreferences();
+  }, [notificationRole, updateUser, user]);
 
   const handleNotificationClick = async (notif) => {
     if (!notif?.id) return;
@@ -914,6 +978,9 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 <strong>Email:</strong> {user?.email || '-'}
               </Typography>
               <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
+                <strong>Branch:</strong> {user?.branch || '-'}
+              </Typography>
+              <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
                 <strong>Age:</strong> {userProfile.age || '-'}
               </Typography>
               <Typography sx={{ color: '#d7e6fb', fontSize: '0.95rem' }}>
@@ -941,27 +1008,68 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
           </DialogContent>
 
           <DialogActions sx={{ px: 3, pb: 2.2 }}>
-            {!hasUserProfileData(userProfile) ? (
-              <Button
-                variant="contained"
-                onClick={openUserProfileForm}
-                fullWidth
+            <Stack spacing={1} sx={{ width: '100%' }}>
+              <Box
                 sx={{
-                  textTransform: 'none',
-                  fontWeight: 800,
-                  borderRadius: 1.2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  px: 1.4,
                   py: 1,
-                  fontSize: '1rem',
-                  backgroundColor: '#2563eb',
-                  '&:hover': { backgroundColor: '#1d4ed8' },
+                  borderRadius: 1.4,
+                  border: '1px solid',
+                  borderColor: '#4f668f',
+                  backgroundColor: '#2a3d5e',
                 }}
               >
-                Add
-              </Button>
-            ) : (
-              <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+                <Box>
+                  <Typography sx={{ color: '#e6f0ff', fontSize: '0.92rem', fontWeight: 800 }}>
+                    Notifications
+                  </Typography>
+                  <Typography sx={{ color: '#9fb3cf', fontSize: '0.78rem' }}>
+                    {notificationsEnabled ? 'Enabled' : 'Disabled'}
+                  </Typography>
+                </Box>
+
+                <Switch
+                  checked={notificationsEnabled}
+                  onChange={(event) => setNotificationsEnabled(event.target.checked)}
+                  disabled={notificationPrefSaving}
+                  inputProps={{ 'aria-label': 'toggle notifications' }}
+                  sx={{
+                    width: 46,
+                    height: 26,
+                    p: 0,
+                    '& .MuiSwitch-switchBase': {
+                      p: 0.5,
+                      transitionDuration: '200ms',
+                      '&.Mui-checked': {
+                        transform: 'translateX(20px)',
+                        color: '#fff',
+                        '& + .MuiSwitch-track': {
+                          backgroundColor: '#22c55e',
+                          opacity: 1,
+                          border: 0,
+                        },
+                      },
+                    },
+                    '& .MuiSwitch-thumb': {
+                      width: 22,
+                      height: 22,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                    },
+                    '& .MuiSwitch-track': {
+                      borderRadius: 26 / 2,
+                      backgroundColor: '#64748b',
+                      opacity: 1,
+                    },
+                  }}
+                />
+              </Box>
+
+              {!hasUserProfileData(userProfile) ? (
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   onClick={openUserProfileForm}
                   fullWidth
                   sx={{
@@ -970,29 +1078,48 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                     borderRadius: 1.2,
                     py: 1,
                     fontSize: '1rem',
-                    color: '#dbeafe',
-                    borderColor: '#4f668f',
+                    backgroundColor: '#2563eb',
+                    '&:hover': { backgroundColor: '#1d4ed8' },
                   }}
                 >
-                  Edit
+                  Add
                 </Button>
-                <Button
-                  variant="contained"
-                  color="error"
-                  onClick={deleteUserProfile}
-                  fullWidth
-                  sx={{
-                    textTransform: 'none',
-                    fontWeight: 800,
-                    borderRadius: 1.2,
-                    py: 1,
-                    fontSize: '1rem',
-                  }}
-                >
-                  Delete
-                </Button>
-              </Stack>
-            )}
+              ) : (
+                <Stack direction="row" spacing={1} sx={{ width: '100%' }}>
+                  <Button
+                    variant="outlined"
+                    onClick={openUserProfileForm}
+                    fullWidth
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 800,
+                      borderRadius: 1.2,
+                      py: 1,
+                      fontSize: '1rem',
+                      color: '#dbeafe',
+                      borderColor: '#4f668f',
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    onClick={deleteUserProfile}
+                    fullWidth
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 800,
+                      borderRadius: 1.2,
+                      py: 1,
+                      fontSize: '1rem',
+                    }}
+                  >
+                    Delete
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
           </DialogActions>
         </Dialog>
 

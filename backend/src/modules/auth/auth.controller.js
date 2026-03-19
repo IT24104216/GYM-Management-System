@@ -20,13 +20,50 @@ function parseOrThrow(schema, payload) {
 function toPublicUser(userDoc) {
   return {
     id: String(userDoc._id),
+    branchUserId: userDoc.branchUserId || '',
     name: userDoc.name,
     email: userDoc.email,
     role: normalizeRole(userDoc.role),
     status: userDoc.status,
     branch: userDoc.branch || '',
+    notificationPreferences: {
+      email: userDoc.notificationPreferences?.email ?? true,
+      push: userDoc.notificationPreferences?.push ?? true,
+    },
   };
 }
+
+const getBranchCode = (branch) => {
+  const normalized = String(branch || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, '');
+  if (!normalized) return 'BR';
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2);
+  return parts.map((part) => part[0]).join('').slice(0, 3);
+};
+
+const generateBranchUserId = async (branch) => {
+  const code = getBranchCode(branch);
+  const escapedBranch = String(branch || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const existingCount = await User.countDocuments({
+    branch: { $regex: `^${escapedBranch}$`, $options: 'i' },
+    role: 'user',
+  });
+
+  let sequence = existingCount + 1;
+  while (sequence < 1000000) {
+    const candidate = `${code}${String(sequence).padStart(4, '0')}`;
+    const alreadyUsed = await User.exists({ branchUserId: candidate });
+    if (!alreadyUsed) {
+      return candidate;
+    }
+    sequence += 1;
+  }
+
+  throw new AppError('Failed to generate branch user id', HTTP_STATUS.INTERNAL_SERVER_ERROR);
+};
 
 function signAccessToken(user) {
   return jwt.sign(
@@ -61,11 +98,13 @@ export const register = asyncHandler(async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(payload.password, 10);
+  const branchUserId = await generateBranchUserId(payload.branch);
 
   const user = await User.create({
     name: payload.name,
     email: payload.email.toLowerCase(),
     branch: payload.branch,
+    branchUserId,
     passwordHash,
     role: 'user',
     status: 'active',

@@ -33,6 +33,34 @@ const ensureTimeRange = (startTime, endTime) => {
   }
 };
 
+const toLocalIsoDate = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const ensureNotPastSlot = (date, startTime) => {
+  const todayIso = toLocalIsoDate(new Date());
+  if (date < todayIso) {
+    throw new AppError(
+      'Please choose today or a future date.',
+      HTTP_STATUS.UNPROCESSABLE_ENTITY,
+    );
+  }
+
+  if (date === todayIso) {
+    const now = new Date();
+    const nowMinutes = (now.getHours() * 60) + now.getMinutes();
+    if (timeToMinutes(startTime) <= nowMinutes) {
+      throw new AppError(
+        'Selected start time has already passed. Please choose a future time.',
+        HTTP_STATUS.UNPROCESSABLE_ENTITY,
+      );
+    }
+  }
+};
+
 const ensureCoachExists = async (coachId) => {
   const coachUser = await User.findOne({ _id: coachId, role: 'coach' });
   if (!coachUser) {
@@ -81,6 +109,7 @@ export const createCoachSlot = asyncHandler(async (req, res) => {
   await ensureCoachExists(coachId);
 
   const payload = parseOrThrow(createCoachSlotSchema, req.body || {});
+  ensureNotPastSlot(payload.date, payload.startTime);
   ensureTimeRange(payload.startTime, payload.endTime);
 
   const overlap = await hasOverlap({
@@ -120,6 +149,7 @@ export const updateCoachSlot = asyncHandler(async (req, res) => {
   const nextStart = payload.startTime ?? slot.startTime;
   const nextEnd = payload.endTime ?? slot.endTime;
 
+  ensureNotPastSlot(nextDate, nextStart);
   ensureTimeRange(nextStart, nextEnd);
 
   const overlap = await hasOverlap({

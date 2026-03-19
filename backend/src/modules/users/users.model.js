@@ -39,6 +39,14 @@ const userSchema = new mongoose.Schema(
       default: DEFAULT_BRANCH,
       index: true,
     },
+    branchUserId: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
     roleChangedAt: {
       type: Date,
       default: null,
