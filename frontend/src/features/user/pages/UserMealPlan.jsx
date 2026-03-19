@@ -65,6 +65,7 @@ function UserMealPlan() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const userId = String(user?.id || user?._id || '');
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [planMode, setPlanMode] = useState('dietitian');
   const { dietitianPlan, planError, setPlanError, isPlanLoading } = useDietitianPlan(userId);
   const { foodLogs, allFoodLogs, refreshFoodLogs, refreshAllFoodLogs } = useUserFoodLogs(
@@ -89,8 +90,6 @@ function UserMealPlan() {
     isLogDialogOpen,
     logForm.name,
   );
-
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [customTrendDate, setCustomTrendDate] = useState(todayIso);
   const [customTrendRange, setCustomTrendRange] = useState(7);
 
