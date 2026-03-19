@@ -85,6 +85,8 @@ function toUserDto(userDoc) {
   const roleChangedAt = userDoc.roleChangedAt || null;
   return {
     id: String(userDoc._id),
+    branchUserId: userDoc.branchUserId || '',
+    branch: userDoc.branch || '',
     name: userDoc.name,
     email: userDoc.email,
     role: toUiRole[userDoc.role] || 'Member',
@@ -215,6 +217,8 @@ export const getUsers = asyncHandler(async (req, res) => {
     filter.$or = [
       { name: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } },
+      { branchUserId: { $regex: search, $options: 'i' } },
+      { branch: { $regex: search, $options: 'i' } },
     ];
   }
   if (role && ROLE_SET.has(role)) {
