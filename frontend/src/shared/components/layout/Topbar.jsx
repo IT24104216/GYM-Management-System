@@ -219,7 +219,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const handleLogout = async () => {
     handleMenuClose();
     await logout();
-    navigate(ROUTES.LOGIN, { replace: true });
+    navigate(ROUTES.LOGIN, { replace: true, state: { from: null, postLogout: true } });
   };
 
   const openDietitianProfile = async () => {
