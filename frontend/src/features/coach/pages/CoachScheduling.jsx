@@ -70,6 +70,17 @@ const formatWeekRange = (start, end) => {
   const endLabel = end.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   return `${startLabel} - ${endLabel}`;
 };
+const toLocalIsoDate = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+const toMinutes = (time) => {
+  const [hours, minutes] = String(time || '').split(':').map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return -1;
+  return (hours * 60) + minutes;
+};
 
 function CoachScheduling() {
   const theme = useTheme();
@@ -213,10 +224,25 @@ function CoachScheduling() {
       return 'Please complete date and time fields.';
     }
 
-    const start = toDateTime(form.date, form.startTime);
-    const end = toDateTime(form.date, form.endTime);
-    if (end <= start) {
+    const todayIso = toLocalIsoDate(new Date());
+    if (form.date < todayIso) {
+      return 'Please choose today or a future date.';
+    }
+
+    const startMinutes = toMinutes(form.startTime);
+    const endMinutes = toMinutes(form.endTime);
+    if (startMinutes < 0 || endMinutes < 0) {
+      return 'Please choose a valid start and end time.';
+    }
+    if (endMinutes <= startMinutes) {
       return 'End time must be after start time.';
+    }
+    if (form.date === todayIso) {
+      const now = new Date();
+      const nowMinutes = (now.getHours() * 60) + now.getMinutes();
+      if (startMinutes <= nowMinutes) {
+        return 'Selected start time has already passed. Please choose a future time.';
+      }
     }
 
     const duplicate = slots.some((s) => (
