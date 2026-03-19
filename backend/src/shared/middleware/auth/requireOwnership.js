@@ -1,3 +1,5 @@
+import { normalizeRole } from '../../utils/roles.js';
+
 const getValueByPath = (source, path) => {
   if (!source || !path) return '';
   return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), source);
@@ -11,13 +13,14 @@ export function requireOwnership(options = {}) {
 
   return (req, res, next) => {
     const authUserId = String(req.user?.id || '');
-    const role = String(req.user?.role || '');
+    const role = normalizeRole(req.user?.role);
+    const normalizedAllowRoles = allowRoles.map((item) => normalizeRole(item));
 
     if (!authUserId || !role) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    if (allowRoles.includes(role)) {
+    if (normalizedAllowRoles.includes(role)) {
       return next();
     }
 

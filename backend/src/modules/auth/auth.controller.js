@@ -7,6 +7,7 @@ import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { env } from '../../config/env.js';
 import { createNotificationForAdmins } from '../notifications/notifications.service.js';
 import { loginSchema, refreshSchema, registerSchema } from './auth.validation.js';
+import { normalizeRole } from '../../shared/utils/roles.js';
 
 function parseOrThrow(schema, payload) {
   const result = schema.safeParse(payload);
@@ -17,17 +18,11 @@ function parseOrThrow(schema, payload) {
 }
 
 function toPublicUser(userDoc) {
-  const normalizedRole = userDoc.role === 'dietician'
-    ? 'dietitian'
-    : userDoc.role === 'member'
-      ? 'user'
-      : userDoc.role;
-
   return {
     id: String(userDoc._id),
     name: userDoc.name,
     email: userDoc.email,
-    role: normalizedRole,
+    role: normalizeRole(userDoc.role),
     status: userDoc.status,
     branch: userDoc.branch || '',
   };
