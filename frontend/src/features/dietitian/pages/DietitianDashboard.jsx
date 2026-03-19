@@ -9,12 +9,6 @@ import {
   DialogTitle,
   Chip,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
   useTheme,
@@ -56,6 +50,7 @@ import {
 } from '../hooks/useDietitianDashboardData';
 import DietitianStatsGrid from '../components/DietitianStatsGrid';
 import DietitianDashboardHeaderControls from '../components/DietitianDashboardHeaderControls';
+import DietitianAppointmentsTable from '../components/DietitianAppointmentsTable';
 
 const mockMembers = [];
 const mockAppointments = [];
@@ -503,91 +498,15 @@ function DietitianDashboard() {
       )}
 
       {activeTab === 'Appointments' && (
-        <Box
-          sx={{
-            p: 1.2,
-            border: '1px solid',
-            borderColor: panelBorder,
-            borderRadius: 2,
-            background: panelBg,
-          }}
-        >
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Member</TableCell>
-                  <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Date</TableCell>
-                  <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Time</TableCell>
-                  <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Goal</TableCell>
-                  <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Status</TableCell>
-                  <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }} align="right">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {appointments.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell sx={{ color: '#e7f0ff', borderBottomColor: panelBorder, fontWeight: 600 }}>
-                      {row.member}
-                    </TableCell>
-                    <TableCell sx={{ color: mutedText, borderBottomColor: panelBorder }}>{row.date}</TableCell>
-                    <TableCell sx={{ color: mutedText, borderBottomColor: panelBorder }}>{row.time}</TableCell>
-                    <TableCell sx={{ color: mutedText, borderBottomColor: panelBorder }}>{row.goal}</TableCell>
-                    <TableCell sx={{ borderBottomColor: panelBorder }}>
-                      <Chip
-                        size="small"
-                        label={row.status}
-                        sx={{
-                          fontWeight: 700,
-                          color:
-                            row.status === 'Approved'
-                              ? '#22c55e'
-                              : row.status === 'Rejected'
-                                ? '#ef4444'
-                                : '#f59e0b',
-                          bgcolor:
-                            row.status === 'Approved'
-                              ? '#22c55e1a'
-                              : row.status === 'Rejected'
-                                ? '#ef44441a'
-                                : '#f59e0b1a',
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell align="right" sx={{ borderBottomColor: panelBorder }}>
-                      <Stack direction="row" spacing={0.8} justifyContent="flex-end">
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => approveAppointment(row)}
-                          sx={{
-                            textTransform: 'none',
-                            fontWeight: 700,
-                            minWidth: 84,
-                            bgcolor: '#16a34a',
-                            '&:hover': { bgcolor: '#15803d' },
-                            visibility: row.status === 'Approved' ? 'hidden' : 'visible',
-                          }}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => rejectAppointment(row)}
-                          sx={{ textTransform: 'none', fontWeight: 700, minWidth: 76 }}
-                        >
-                          Reject
-                        </Button>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Box>
+        <DietitianAppointmentsTable
+          appointments={appointments}
+          mutedText={mutedText}
+          onApprove={approveAppointment}
+          onReject={rejectAppointment}
+          panelBg={panelBg}
+          panelBorder={panelBorder}
+          subtitleColor={subtitleColor}
+        />
       )}
 
       {activeTab === 'Time Slots' && (
