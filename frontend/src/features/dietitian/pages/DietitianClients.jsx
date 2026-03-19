@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Autocomplete,
   Alert,
@@ -91,7 +91,7 @@ function DietitianClients() {
   const [mealSuggestions, setMealSuggestions] = useState([]);
   const [page, setPage] = useState(1);
 
-  const loadApprovedClients = async () => {
+  const loadApprovedClients = useCallback(async () => {
     if (!dietitianId) return;
     const getNoteValue = (notes, key) => {
       if (!notes) return '';
@@ -139,15 +139,22 @@ function DietitianClients() {
     } catch {
       setAllClients([]);
     }
-  };
-
-  useEffect(() => {
-    loadApprovedClients();
-    const interval = setInterval(loadApprovedClients, 15000);
-    return () => clearInterval(interval);
   }, [dietitianId, dietitianName]);
 
-  const loadDietitianMealsAndPlans = async () => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadApprovedClients();
+    }, 0);
+    const interval = setInterval(() => {
+      void loadApprovedClients();
+    }, 15000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [loadApprovedClients]);
+
+  const loadDietitianMealsAndPlans = useCallback(async () => {
     if (!dietitianId) return;
     try {
       const [{ data: mealsData }, { data: plansData }] = await Promise.all([
@@ -178,11 +185,14 @@ function DietitianClients() {
       setMealSuggestions([]);
       setSavedPlans({});
     }
-  };
+  }, [dietitianId]);
 
   useEffect(() => {
-    loadDietitianMealsAndPlans();
-  }, [dietitianId]);
+    const timer = setTimeout(() => {
+      void loadDietitianMealsAndPlans();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadDietitianMealsAndPlans]);
 
   const panelBg = isDark ? '#1a2a47' : '#ffffff';
   const panelBorder = isDark ? '#2b4268' : '#dbe7f6';
