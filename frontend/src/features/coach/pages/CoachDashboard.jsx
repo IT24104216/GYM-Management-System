@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion as Motion } from 'framer-motion';
 import {
   Alert,
@@ -159,7 +159,7 @@ function CoachDashboard() {
   const barBg = isDark ? '#1f2937' : '#f3f4f6';
   const chartGrid = isDark ? '#23324b' : '#F1F5F9';
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     if (!coachId) return;
     try {
       const [{ data }, { data: scorePayload }] = await Promise.all([
@@ -187,13 +187,20 @@ function CoachDashboard() {
         severity: 'error',
       });
     }
-  };
+  }, [coachId, user]);
 
   useEffect(() => {
-    loadDashboardData();
-    const id = setInterval(loadDashboardData, 15000);
-    return () => clearInterval(id);
-  }, [coachId]);
+    const timer = setTimeout(() => {
+      void loadDashboardData();
+    }, 0);
+    const id = setInterval(() => {
+      void loadDashboardData();
+    }, 15000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(id);
+    };
+  }, [loadDashboardData]);
 
   const { stats, schedule, consultations, members, weeklyData, scheduleDateLabel } = useMemo(() => {
     const now = new Date();
