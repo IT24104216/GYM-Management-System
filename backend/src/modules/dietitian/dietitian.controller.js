@@ -47,7 +47,7 @@ const toAvatar = (name = '') =>
 const toTags = (specialization = '') => {
   if (!specialization) return ['General Nutrition'];
   return specialization
-    .split(/[\/,]/g)
+    .split(/[/,]/g)
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 3);
