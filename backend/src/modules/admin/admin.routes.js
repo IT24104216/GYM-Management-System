@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authenticateJWT } from '../../shared/middleware/auth/authenticateJWT.js';
+import { authorizeRoles } from '../../shared/middleware/auth/authorizeRoles.js';
 import {
   changeAdminPassword,
   getAdminSettings,
@@ -15,6 +17,10 @@ import {
 const router = Router();
 
 router.get('/', getAdminStatus);
+
+router.use(authenticateJWT);
+router.use(authorizeRoles('admin'));
+
 router.get('/users', getUsers);
 router.get('/users/:id', getUserById);
 router.put('/users/:id', updateUser);
