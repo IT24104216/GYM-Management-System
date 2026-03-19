@@ -20,7 +20,14 @@ axiosInstance.interceptors.request.use((config) => {
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const requestUrl = String(error.config?.url || '');
+    const isAuthEndpoint = requestUrl.includes('/auth/login')
+      || requestUrl.includes('/auth/register')
+      || requestUrl.includes('/auth/refresh')
+      || requestUrl.includes('/auth/logout');
+
+    if (status === 401 && !isAuthEndpoint) {
       clearAuth();
       window.location.href = '/login';
     }
