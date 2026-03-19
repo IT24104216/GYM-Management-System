@@ -2,8 +2,10 @@ import { Router } from 'express';
 import {
   getnotificationsStatus,
   getNotifications,
+  getNotificationPreferences,
   markAllNotificationsRead,
   markNotificationRead,
+  updateNotificationPreferences,
 } from './notifications.controller.js';
 import { authenticateJWT } from '../../shared/middleware/auth/authenticateJWT.js';
 import { authorizeRoles } from '../../shared/middleware/auth/authorizeRoles.js';
@@ -47,6 +49,20 @@ router.patch(
   enforceNotificationRoleMatch('body'),
   requireOwnership({ checks: [{ from: 'body', key: 'userId' }], allowRoles: ['admin'] }),
   markNotificationRead,
+);
+router.get(
+  '/preferences',
+  authenticateJWT,
+  authorizeRoles('admin', 'user', 'coach', 'dietitian'),
+  enforceNotificationRoleMatch('query'),
+  getNotificationPreferences,
+);
+router.patch(
+  '/preferences',
+  authenticateJWT,
+  authorizeRoles('admin', 'user', 'coach', 'dietitian'),
+  enforceNotificationRoleMatch('body'),
+  updateNotificationPreferences,
 );
 
 export { router as notificationsRouter };

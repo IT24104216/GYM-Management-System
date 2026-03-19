@@ -26,6 +26,10 @@ function toPublicUser(userDoc) {
     role: normalizeRole(userDoc.role),
     status: userDoc.status,
     branch: userDoc.branch || '',
+    notificationPreferences: {
+      email: userDoc.notificationPreferences?.email ?? true,
+      push: userDoc.notificationPreferences?.push ?? true,
+    },
   };
 }
 
