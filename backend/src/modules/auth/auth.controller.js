@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { User } from '../users/users.model.js';
 import { AppError } from '../../shared/errors/AppError.js';
@@ -6,7 +7,13 @@ import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { env } from '../../config/env.js';
 import { createNotificationForAdmins } from '../notifications/notifications.service.js';
-import { loginSchema, refreshSchema, registerSchema } from './auth.validation.js';
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  refreshSchema,
+  registerSchema,
+  resetPasswordSchema,
+} from './auth.validation.js';
 import { normalizeRole } from '../../shared/utils/roles.js';
 
 function parseOrThrow(schema, payload) {
@@ -16,6 +23,9 @@ function parseOrThrow(schema, payload) {
   }
   return result.data;
 }
+
+const isLikelyEmail = (value = '') => String(value).includes('@');
+const isValidEmailFormat = (value = '') => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
 
 function toPublicUser(userDoc) {
   return {
@@ -64,6 +74,11 @@ const generateBranchUserId = async (branch) => {
 
   throw new AppError('Failed to generate branch user id', HTTP_STATUS.INTERNAL_SERVER_ERROR);
 };
+
+const hashResetToken = (rawToken) =>
+  crypto.createHash('sha256').update(String(rawToken || '')).digest('hex');
+
+const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 function signAccessToken(user) {
   return jwt.sign(
@@ -135,6 +150,10 @@ export const login = asyncHandler(async (req, res) => {
   const payload = parseOrThrow(loginSchema, req.body);
 
   const identifier = payload.identifier.trim();
+  if (isLikelyEmail(identifier) && !isValidEmailFormat(identifier)) {
+    throw new AppError('Invalid email format', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+  }
+
   const byEmail = identifier.toLowerCase();
   const user = await User.findOne({
     $or: [
@@ -143,12 +162,12 @@ export const login = asyncHandler(async (req, res) => {
     ],
   });
   if (!user) {
-    throw new AppError('Invalid username or password', HTTP_STATUS.UNAUTHORIZED);
+    throw new AppError('Invalid email or username', HTTP_STATUS.UNAUTHORIZED);
   }
 
   const isMatch = await bcrypt.compare(payload.password, user.passwordHash);
   if (!isMatch) {
-    throw new AppError('Invalid username or password', HTTP_STATUS.UNAUTHORIZED);
+    throw new AppError('Invalid password', HTTP_STATUS.UNAUTHORIZED);
   }
 
   if (user.status !== 'active') {
@@ -199,5 +218,54 @@ export const refresh = asyncHandler(async (req, res) => {
     message: 'Token refreshed',
     token,
     user: safeUser,
+  });
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const payload = parseOrThrow(forgotPasswordSchema, req.body);
+  const genericMessage = 'If an account exists for this email, a password reset link has been sent.';
+
+  const user = await User.findOne({ email: payload.email.toLowerCase() });
+  if (!user || user.status !== 'active') {
+    return res.status(HTTP_STATUS.OK).json({ message: genericMessage });
+  }
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  user.passwordResetTokenHash = hashResetToken(resetToken);
+  user.passwordResetExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+  await user.save();
+
+  const response = { message: genericMessage };
+  if (env.NODE_ENV !== 'production') {
+    response.dev = {
+      resetToken,
+      resetUrl: `${env.CLIENT_ORIGIN}/login?resetToken=${resetToken}`,
+      expiresAt: user.passwordResetExpiresAt,
+    };
+  }
+
+  return res.status(HTTP_STATUS.OK).json(response);
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  const payload = parseOrThrow(resetPasswordSchema, req.body);
+  const tokenHash = hashResetToken(payload.token);
+
+  const user = await User.findOne({
+    passwordResetTokenHash: tokenHash,
+    passwordResetExpiresAt: { $gt: new Date() },
+  });
+
+  if (!user) {
+    throw new AppError('Invalid or expired reset token', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  user.passwordHash = await bcrypt.hash(payload.password, 10);
+  user.passwordResetTokenHash = null;
+  user.passwordResetExpiresAt = null;
+  await user.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Password reset successful. Please log in with your new password.',
   });
 });
