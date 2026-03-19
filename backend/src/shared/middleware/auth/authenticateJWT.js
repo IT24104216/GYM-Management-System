@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../../../config/env.js';
+import { normalizeRole } from '../../utils/roles.js';
 
 export function authenticateJWT(req, res, next) {
   const authHeader = String(req.headers.authorization || '');
@@ -15,7 +16,7 @@ export function authenticateJWT(req, res, next) {
     const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET);
     req.user = {
       id: String(decoded?.sub || ''),
-      role: String(decoded?.role || ''),
+      role: normalizeRole(decoded?.role),
       email: String(decoded?.email || ''),
       name: String(decoded?.name || ''),
     };
