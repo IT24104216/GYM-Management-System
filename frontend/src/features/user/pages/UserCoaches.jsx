@@ -25,7 +25,7 @@ import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import FitnessCenterRoundedIcon from '@mui/icons-material/FitnessCenterRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
@@ -289,7 +289,7 @@ function UserCoaches() {
     return match?.[1]?.trim() || '';
   };
 
-  const mapAppointmentToBooking = (item) => {
+  const mapAppointmentToBooking = useCallback((item) => {
     const startsAt = new Date(item.startsAt);
     const endsAt = new Date(item.endsAt);
     const date = Number.isNaN(startsAt.getTime())
@@ -330,9 +330,9 @@ function UserCoaches() {
       progressStatus,
       rawStatus: item.status,
     };
-  };
+  }, [coaches]);
 
-  const loadCoachFeedbackStats = async (coachList) => {
+  const loadCoachFeedbackStats = useCallback(async (coachList) => {
     const baseStats = buildInitialCoachStats(coachList);
     const coachNameToId = new Map(
       (Array.isArray(coachList) ? coachList : [])
@@ -366,9 +366,9 @@ function UserCoaches() {
     } catch {
       setCoachStats(baseStats);
     }
-  };
+  }, []);
 
-  const loadSubmittedCoachFeedbackBookings = async () => {
+  const loadSubmittedCoachFeedbackBookings = useCallback(async () => {
     const ownerId = String(user?.id || '');
     if (!ownerId) {
       setSubmittedCoachFeedbackBookingIds(new Set());
@@ -392,9 +392,9 @@ function UserCoaches() {
     } catch {
       setSubmittedCoachFeedbackBookingIds(new Set());
     }
-  };
+  }, [user?.id]);
 
-  const loadBookings = async () => {
+  const loadBookings = useCallback(async () => {
     if (!user?.id) return;
     try {
       const { data } = await getUserAppointments({
@@ -411,9 +411,9 @@ function UserCoaches() {
     } catch {
       setBookings(BOOKINGS);
     }
-  };
+  }, [mapAppointmentToBooking, user]);
 
-  const loadCoaches = async () => {
+  const loadCoaches = useCallback(async () => {
     try {
       const { data } = await getPublicCoaches();
       const items = Array.isArray(data?.data) ? data.data : [];
@@ -423,23 +423,40 @@ function UserCoaches() {
       setCoaches([]);
       setCoachStats({});
     }
-  };
+  }, [loadCoachFeedbackStats]);
 
   useEffect(() => {
-    loadCoaches();
-    const interval = setInterval(loadCoaches, 60000);
-    return () => clearInterval(interval);
-  }, []);
+    const timer = setTimeout(() => {
+      void loadCoaches();
+    }, 0);
+    const interval = setInterval(() => {
+      void loadCoaches();
+    }, 60000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [loadCoaches]);
 
   useEffect(() => {
-    loadBookings();
-    const interval = setInterval(loadBookings, 15000);
-    return () => clearInterval(interval);
-  }, [user?.id, coaches]);
+    const timer = setTimeout(() => {
+      void loadBookings();
+    }, 0);
+    const interval = setInterval(() => {
+      void loadBookings();
+    }, 15000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [loadBookings]);
 
   useEffect(() => {
-    loadSubmittedCoachFeedbackBookings();
-  }, [user?.id]);
+    const timer = setTimeout(() => {
+      void loadSubmittedCoachFeedbackBookings();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadSubmittedCoachFeedbackBookings]);
 
   const handleOpenBooking = (coach) => {
     setSelectedCoach(coach);
