@@ -8,6 +8,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
+    "lint": "node ../node_modules/eslint/bin/eslint.js src",
+    "lint:fix": "node ../node_modules/eslint/bin/eslint.js src --fix",
     "import:nutrition": "node scripts/importSriLankaFoods.js"
   },
   "dependencies": {
