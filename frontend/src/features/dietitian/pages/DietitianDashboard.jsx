@@ -131,6 +131,47 @@ function DietitianDashboard() {
     { label: 'Appointments', value: appointments.length, icon: CalendarMonthRoundedIcon },
   ];
 
+  const toLocalIsoDate = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const toMinutes = (time) => {
+    const [hours, minutes] = String(time || '').split(':').map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return -1;
+    return (hours * 60) + minutes;
+  };
+
+  const getSlotValidationMessage = ({ date, startTime, endTime }) => {
+    if (!date || !startTime || !endTime) return '';
+
+    const todayIso = toLocalIsoDate(new Date());
+    if (date < todayIso) {
+      return 'Please choose today or a future date.';
+    }
+
+    const startMinutes = toMinutes(startTime);
+    const endMinutes = toMinutes(endTime);
+    if (startMinutes < 0 || endMinutes < 0) {
+      return 'Please choose a valid start and end time.';
+    }
+    if (endMinutes <= startMinutes) {
+      return 'End time must be after start time.';
+    }
+
+    if (date === todayIso) {
+      const now = new Date();
+      const nowMinutes = (now.getHours() * 60) + now.getMinutes();
+      if (startMinutes <= nowMinutes) {
+        return 'Selected start time has already passed. Please choose a future time.';
+      }
+    }
+
+    return '';
+  };
+
   const approveAppointment = async (appointment) => {
     try {
       await updateDietitianAppointmentStatus(appointment.id, { status: 'approved' });
@@ -161,6 +202,11 @@ function DietitianDashboard() {
 
     if (!slotForm.date || !slotForm.startTime || !slotForm.endTime) {
       setSlotError('Please fill date, start time, and end time.');
+      return;
+    }
+    const validationMessage = getSlotValidationMessage(slotForm);
+    if (validationMessage) {
+      setSlotError(validationMessage);
       return;
     }
     setSlotError('');
@@ -196,6 +242,11 @@ function DietitianDashboard() {
     const { id, date, startTime, endTime } = editSlotState;
     if (!date || !startTime || !endTime) {
       setSlotError('Please fill date, start time, and end time.');
+      return;
+    }
+    const validationMessage = getSlotValidationMessage({ date, startTime, endTime });
+    if (validationMessage) {
+      setSlotError(validationMessage);
       return;
     }
     setSlotError('');
