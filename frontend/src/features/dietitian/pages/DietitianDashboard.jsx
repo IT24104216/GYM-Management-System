@@ -7,7 +7,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  InputAdornment,
   Chip,
   Stack,
   Table,
@@ -21,7 +20,6 @@ import {
   useTheme,
 } from '@mui/material';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
@@ -57,6 +55,7 @@ import {
   useDietitianTimeSlots,
 } from '../hooks/useDietitianDashboardData';
 import DietitianStatsGrid from '../components/DietitianStatsGrid';
+import DietitianDashboardHeaderControls from '../components/DietitianDashboardHeaderControls';
 
 const mockMembers = [];
 const mockAppointments = [];
@@ -380,13 +379,6 @@ function DietitianDashboard() {
         background: pageBg,
       }}
     >
-      <Typography sx={{ color: '#f8fafc', fontWeight: 800, fontSize: { xs: '1.8rem', md: '2rem' } }}>
-        Dietician Dashboard
-      </Typography>
-      <Typography sx={{ color: subtitleColor, fontSize: '1.05rem', mb: 2.5 }}>
-        Manage diet plans and consultations
-      </Typography>
-
       <DietitianStatsGrid
         stats={stats}
         panelBg={panelBg}
@@ -395,51 +387,18 @@ function DietitianDashboard() {
         cardTitleColor={cardTitleColor}
       />
 
-      <Stack direction="row" spacing={0.4} sx={{ mb: 2.5, width: 'fit-content', background: panelBg, borderRadius: 99, p: 0.45 }}>
-        {tabItems.map((tab) => (
-          <Button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            sx={{
-              textTransform: 'none',
-              borderRadius: 99,
-              px: 1.7,
-              py: 0.45,
-              minWidth: 0,
-              fontWeight: 600,
-              color: activeTab === tab ? '#0f172a' : '#a4bad9',
-              backgroundColor: activeTab === tab ? '#ffffff' : 'transparent',
-            }}
-          >
-            {tab}
-          </Button>
-        ))}
-      </Stack>
-
-      <TextField
-        fullWidth
-        placeholder="Search member by name..."
-        value={searchText}
-        onChange={(e) => setSearchText(e.target.value)}
-        sx={{
-          mb: 2.1,
-          '& .MuiOutlinedInput-root': {
-            color: inputTextColor,
-            borderRadius: 1.5,
-            background: isDark ? '#1a2a47' : '#f7fbff',
-            '& fieldset': { borderColor: panelBorder },
-            '&:hover fieldset': { borderColor: panelBorder },
-            '&.Mui-focused fieldset': { borderColor: '#4f77b6' },
-          },
-          '& .MuiInputBase-input::placeholder': { color: mutedText, opacity: 1 },
-        }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchRoundedIcon sx={{ color: mutedText, fontSize: 20 }} />
-            </InputAdornment>
-          ),
-        }}
+      <DietitianDashboardHeaderControls
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        inputTextColor={inputTextColor}
+        isDark={isDark}
+        mutedText={mutedText}
+        panelBg={panelBg}
+        panelBorder={panelBorder}
+        searchText={searchText}
+        setSearchText={setSearchText}
+        subtitleColor={subtitleColor}
+        tabItems={tabItems}
       />
 
       {activeTab === 'Members' && (
