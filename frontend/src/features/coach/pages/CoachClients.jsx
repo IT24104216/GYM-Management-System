@@ -55,6 +55,12 @@ const getNoteValue = (notes, key) => {
   return match?.[1]?.trim() || '';
 };
 
+const parseNoteTags = (notes) =>
+  String(getNoteValue(notes, 'Priority Tags') || '')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+
 function CircularScore({ score, id, isDark }) {
   const r = 28;
   const circ = 2 * Math.PI * r;
@@ -113,15 +119,18 @@ function CoachClients() {
       name,
       age: '-',
       goal: getNoteValue(item.notes, 'Goal') || item.sessionType || 'General',
+      priorityTags: parseNoteTags(item.notes),
       requestedAt: toDateTimeLabel(item.startsAt),
       priority,
       avatar: getInitials(name),
       gradient: PRIORITY_GRADIENT[priority] || PRIORITY_GRADIENT.Normal,
       email: getNoteValue(item.notes, 'User Email') || '-',
+      branchUserId: getNoteValue(item.notes, 'Branch User ID') || '-',
       phone: getNoteValue(item.notes, 'Mobile') || '-',
       notes: getNoteValue(item.notes, 'Description') || item.notes || '-',
       status: item.status,
       startsAt: item.startsAt,
+      createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
   }, [priorityById]);
@@ -166,7 +175,11 @@ function CoachClients() {
   }, [loadAppointments]);
 
   const pendingRows = useMemo(
-    () => appointments.filter((item) => item.status === 'pending').map(mapAppointmentRow),
+    () =>
+      appointments
+        .filter((item) => item.status === 'pending')
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+        .map(mapAppointmentRow),
     [appointments, mapAppointmentRow],
   );
 
@@ -195,6 +208,8 @@ function CoachClients() {
         avatar: getInitials(name),
         gradient: 'linear-gradient(135deg, #3B82F6, #0D9488)',
         status: item.status === 'completed' ? 'Completed' : 'Active',
+        branchUserId: getNoteValue(item.notes, 'Branch User ID') || '-',
+        priorityTags: parseNoteTags(item.notes),
         email: getNoteValue(item.notes, 'User Email') || '-',
         phone: getNoteValue(item.notes, 'Mobile') || '-',
         preferredSlot: toDateTimeLabel(item.startsAt),
@@ -267,7 +282,9 @@ function CoachClients() {
             <TableHead>
               <TableRow>
                 <TableCell>Client</TableCell>
+                <TableCell>Branch ID</TableCell>
                 <TableCell>Goal</TableCell>
+                <TableCell>Tags</TableCell>
                 <TableCell>Requested Time</TableCell>
                 <TableCell>Priority</TableCell>
                 <TableCell align="right">Actions</TableCell>
@@ -276,7 +293,7 @@ function CoachClients() {
             <TableBody>
               {!pendingRows.length && (
                 <TableRow>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={7}>
                     <Typography sx={{ color: 'text.secondary', py: 1 }}>No pending requests.</Typography>
                   </TableCell>
                 </TableRow>
@@ -296,7 +313,17 @@ function CoachClients() {
                     </Stack>
                   </TableCell>
                   <TableCell>
+                    <Typography sx={{ fontSize: '0.84rem', color: muted, fontWeight: 700 }}>{row.branchUserId}</Typography>
+                  </TableCell>
+                  <TableCell>
                     <Typography sx={{ fontSize: '0.84rem', color: 'text.primary' }}>{row.goal}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+                      {row.priorityTags.length
+                        ? row.priorityTags.map((tag) => <Chip key={`${row.id}-${tag}`} label={tag} size="small" />)
+                        : <Typography sx={{ fontSize: '0.82rem', color: muted }}>-</Typography>}
+                    </Stack>
                   </TableCell>
                   <TableCell>
                     <Typography sx={{ fontSize: '0.84rem', color: muted }}>{row.requestedAt}</Typography>
@@ -446,10 +473,17 @@ function CoachClients() {
               >
                 <Box>
                   <Typography sx={{ fontWeight: 800, color: 'text.primary', mb: 1 }}>Client Details</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Branch ID:</strong> {client.branchUserId}</Typography>
                   <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Email:</strong> {client.email}</Typography>
                   <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Phone:</strong> {client.phone}</Typography>
                   <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Preferred Slot:</strong> {client.preferredSlot}</Typography>
                   <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Training Days:</strong> {client.trainingDays}</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Tags:</strong></Typography>
+                  <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ mb: 0.7 }}>
+                    {client.priorityTags.length
+                      ? client.priorityTags.map((tag) => <Chip key={`${client.id}-${tag}`} label={tag} size="small" />)
+                      : <Typography sx={{ color: muted, fontSize: '0.84rem' }}>-</Typography>}
+                  </Stack>
                   <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Priority:</strong> {client.priority}</Typography>
                   <Typography sx={{ color: muted, fontSize: '0.84rem' }}><strong>Notes:</strong> {client.notes}</Typography>
                 </Box>

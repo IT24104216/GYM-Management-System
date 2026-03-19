@@ -101,6 +101,16 @@ const buildInitialCoachStats = (coachList = []) => {
 };
 
 const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
+const PRIORITY_TAG_OPTIONS = [
+  'Soon as possible',
+  'Pain',
+  'Injury',
+  'Post-surgery recovery',
+  'Limited mobility',
+  'Breathing discomfort',
+  'Dizziness',
+  'Chest discomfort',
+];
 const BOOKING_PROGRESS_META = {
   pending: { label: 'Pending', step: 0, color: '#16a34a' },
   confirmed: { label: 'Confirmed', step: 1, color: '#16a34a' },
@@ -280,6 +290,7 @@ function UserCoaches() {
     goal: '',
     description: '',
     medicalConditions: '',
+    priorityTags: [],
   });
 
   const getNoteValue = (notes, key) => {
@@ -326,6 +337,10 @@ function UserCoaches() {
       goal: getNoteValue(item.notes, 'Goal') || 'Weight Gaining',
       description: getNoteValue(item.notes, 'Description'),
       medicalConditions: getNoteValue(item.notes, 'Medical'),
+      priorityTags: String(getNoteValue(item.notes, 'Priority Tags') || '')
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean),
       status,
       progressStatus,
       rawStatus: item.status,
@@ -471,6 +486,7 @@ function UserCoaches() {
       goal: '',
       description: '',
       medicalConditions: '',
+      priorityTags: [],
     });
     setEditingBookingId(null);
     setSlotError('');
@@ -491,6 +507,7 @@ function UserCoaches() {
       goal: booking.goal?.toLowerCase().includes('reducing') ? 'weight-reducing' : 'weight-gaining',
       description: booking.description || '',
       medicalConditions: booking.medicalConditions || '',
+      priorityTags: Array.isArray(booking.priorityTags) ? booking.priorityTags : [],
     });
     setEditingBookingId(booking.id);
     setSlotError('');
@@ -506,6 +523,16 @@ function UserCoaches() {
 
   const handleFieldChange = (field) => (event) => {
     setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const handlePriorityTagsChange = (event) => {
+    const value = event.target.value;
+    setBookingForm((prev) => ({
+      ...prev,
+      priorityTags: Array.isArray(value)
+        ? value
+        : String(value || '').split(',').map((tag) => tag.trim()).filter(Boolean),
+    }));
   };
 
   const handleSubmitBooking = async (event) => {
@@ -553,8 +580,10 @@ function UserCoaches() {
         `Coach: ${selectedCoach?.name || ''}`,
         `User Name: ${bookingForm.userName || user?.name || ''}`,
         `User Email: ${bookingForm.userEmail || user?.email || ''}`,
+        `Branch User ID: ${user?.branchUserId || '-'}`,
         `Appointment Type: ${bookingForm.appointmentType === 'inperson' ? 'In-person' : 'Online'}`,
         `Goal: ${bookingForm.goal === 'weight-gaining' ? 'Weight Gaining' : 'Weight Reducing'}`,
+        bookingForm.priorityTags.length ? `Priority Tags: ${bookingForm.priorityTags.join(', ')}` : '',
         bookingForm.description ? `Description: ${bookingForm.description}` : '',
         bookingForm.medicalConditions ? `Medical: ${bookingForm.medicalConditions}` : '',
         bookingForm.mobileNumber ? `Mobile: ${bookingForm.mobileNumber}` : '',
@@ -1184,6 +1213,28 @@ function UserCoaches() {
               required
               placeholder="Share your expectations for this appointment"
             />
+
+            <FormControl fullWidth>
+              <InputLabel id="priority-tags-label">Priority Tags</InputLabel>
+              <Select
+                labelId="priority-tags-label"
+                multiple
+                value={bookingForm.priorityTags}
+                onChange={handlePriorityTagsChange}
+                label="Priority Tags"
+                renderValue={(selected) => (
+                  <Stack direction="row" spacing={0.6} useFlexGap flexWrap="wrap">
+                    {selected.map((value) => (
+                      <Chip key={value} label={value} size="small" />
+                    ))}
+                  </Stack>
+                )}
+              >
+                {PRIORITY_TAG_OPTIONS.map((option) => (
+                  <MenuItem key={option} value={option}>{option}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
             <TextField
               label="Medical Conditions"
