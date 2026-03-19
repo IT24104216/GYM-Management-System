@@ -43,7 +43,7 @@ function DietitianTimeSlotsPanel({
           Create Consultation Time Slot
         </Typography>
         <Typography sx={{ color: subtitleColor, fontSize: { xs: '0.98rem', md: '1.1rem' }, mb: 2.1 }}>
-          Available only on Saturday and Sunday
+          Available all week
         </Typography>
 
         <Box

@@ -163,12 +163,6 @@ function DietitianDashboard() {
       setSlotError('Please fill date, start time, and end time.');
       return;
     }
-    const selectedDate = new Date(slotForm.date);
-    const day = selectedDate.getDay();
-    if (day !== 0 && day !== 6) {
-      setSlotError('Time slots can be created only for Saturday and Sunday.');
-      return;
-    }
     setSlotError('');
     try {
       await createDietitianSchedulingSlot(String(dietitianId), {
@@ -202,12 +196,6 @@ function DietitianDashboard() {
     const { id, date, startTime, endTime } = editSlotState;
     if (!date || !startTime || !endTime) {
       setSlotError('Please fill date, start time, and end time.');
-      return;
-    }
-    const selectedDate = new Date(date);
-    const day = selectedDate.getDay();
-    if (day !== 0 && day !== 6) {
-      setSlotError('Time slots can be created only for Saturday and Sunday.');
       return;
     }
     setSlotError('');

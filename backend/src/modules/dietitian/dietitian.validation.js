@@ -1,7 +1,18 @@
 import { z } from 'zod';
 
 const idSchema = z.string().trim().min(1, 'is required');
-const dateSchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
+const isValidIsoDate = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.toISOString().slice(0, 10) === value;
+};
+
+const dateSchema = z.string().trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD')
+  .refine((value) => isValidIsoDate(value), {
+    message: 'Invalid calendar date',
+  });
 const timeSchema = z.string().trim().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'must be HH:mm');
 const phoneRegex = /^\+?[0-9]{7,15}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
