@@ -3,6 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   TextField,
   Typography,
   Alert,
@@ -12,6 +16,7 @@ import {
   Checkbox,
   FormControlLabel,
   Link,
+  Stack,
   useTheme,
 } from '@mui/material';
 import { motion } from 'framer-motion';
@@ -26,6 +31,7 @@ import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { forgotPassword as requestForgotPassword, resetPassword as requestResetPassword } from '@/features/auth/api/auth.api';
 import { ROLE_HOME, ROUTES } from '@/shared/utils/constants';
 
 const MotionBox = motion(Box);
@@ -94,7 +100,17 @@ function LoginPage() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState(location.state?.successMessage || '');
   const [loading, setLoading] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotInfo, setForgotInfo] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const identifierRef = useRef(null);
+  const isPostLogout = Boolean(location.state?.postLogout);
 
   useEffect(() => {
     setForm({ identifier: '', password: '' });
@@ -106,9 +122,21 @@ function LoginPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    const query = new URLSearchParams(location.search || '');
+    const queryToken = query.get('resetToken');
+    if (queryToken) {
+      setForgotOpen(true);
+      setResetToken(queryToken);
+      setForgotInfo('Reset token detected. Enter a new password to complete reset.');
+    }
+  }, [location.search]);
+
   // Already logged in — redirect to role home
   if (isAuthenticated && user) {
-    const from = resolvePostLoginPath(user.role, location.state?.from);
+    const from = isPostLogout
+      ? resolveDashboardByRole(user.role)
+      : resolvePostLoginPath(user.role, location.state?.from);
     navigate(from, { replace: true });
     return null;
   }
@@ -122,12 +150,79 @@ function LoginPage() {
     setLoading(true);
     try {
       const loggedInUser = await login(form);
-      const from = resolvePostLoginPath(loggedInUser?.role, location.state?.from);
+      const from = isPostLogout
+        ? resolveDashboardByRole(loggedInUser?.role)
+        : resolvePostLoginPath(loggedInUser?.role, location.state?.from);
       navigate(from, { replace: true });
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || 'Invalid username or password.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openForgotPassword = () => {
+    setForgotOpen(true);
+    setForgotError('');
+    setForgotInfo('');
+    setForgotEmail((prev) => prev || form.identifier || '');
+  };
+
+  const closeForgotPassword = () => {
+    setForgotOpen(false);
+    setForgotError('');
+    setForgotInfo('');
+    setForgotEmail('');
+    setResetToken('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleRequestReset = async () => {
+    setForgotError('');
+    setForgotInfo('');
+    setForgotLoading(true);
+    try {
+      const { data } = await requestForgotPassword({ email: forgotEmail });
+      const message = data?.message || 'If an account exists for this email, a reset link has been sent.';
+      const devToken = data?.dev?.resetToken || '';
+      setForgotInfo(message);
+      if (devToken) {
+        setResetToken(devToken);
+      }
+    } catch (err) {
+      setForgotError(err?.response?.data?.message || err?.message || 'Failed to request password reset.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setForgotError('');
+    setForgotInfo('');
+    if (!resetToken.trim()) {
+      setForgotError('Reset token is required.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setForgotError('Passwords do not match.');
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const { data } = await requestResetPassword({
+        token: resetToken.trim(),
+        password: newPassword,
+        confirmPassword,
+      });
+      setForgotInfo(data?.message || 'Password reset successful. Please log in.');
+      setNewPassword('');
+      setConfirmPassword('');
+      setResetToken('');
+    } catch (err) {
+      setForgotError(err?.response?.data?.message || err?.message || 'Failed to reset password.');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -393,6 +488,7 @@ function LoginPage() {
                     component="button"
                     type="button"
                     underline="none"
+                    onClick={openForgotPassword}
                     sx={{ color: '#2b8eff', fontWeight: 700, fontSize: '0.84rem' }}
                   >
                     Forgot password?
@@ -564,6 +660,69 @@ function LoginPage() {
           </Box>
         </Box>
       </Box>
+
+      <Dialog open={forgotOpen} onClose={closeForgotPassword} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 800 }}>Reset Password</DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Stack spacing={1.4} sx={{ mt: 0.3 }}>
+            {forgotError && <Alert severity="error">{forgotError}</Alert>}
+            {forgotInfo && <Alert severity="success">{forgotInfo}</Alert>}
+
+            <TextField
+              label="Email"
+              type="email"
+              value={forgotEmail}
+              onChange={(e) => setForgotEmail(e.target.value)}
+              placeholder="Enter your account email"
+              fullWidth
+            />
+            <Button
+              variant="outlined"
+              onClick={handleRequestReset}
+              disabled={forgotLoading || !forgotEmail.trim()}
+              sx={{ textTransform: 'none', fontWeight: 700 }}
+            >
+              {forgotLoading ? 'Sending...' : 'Send Reset Link'}
+            </Button>
+
+            <TextField
+              label="Reset Token"
+              value={resetToken}
+              onChange={(e) => setResetToken(e.target.value)}
+              placeholder="Paste reset token"
+              fullWidth
+            />
+            <TextField
+              label="New Password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 8 chars, uppercase, lowercase, number"
+              fullWidth
+            />
+            <TextField
+              label="Confirm Password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeForgotPassword} sx={{ textTransform: 'none' }}>
+            Close
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleResetPassword}
+            disabled={resetLoading || !resetToken.trim() || !newPassword || !confirmPassword}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
+            {resetLoading ? 'Resetting...' : 'Reset Password'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

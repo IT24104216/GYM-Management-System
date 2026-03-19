@@ -11,3 +11,9 @@ export const logout = () =>
 
 export const refreshToken = () =>
   axiosClient.post('/auth/refresh');
+
+export const forgotPassword = (data) =>
+  axiosClient.post('/auth/forgot-password', data);
+
+export const resetPassword = (data) =>
+  axiosClient.post('/auth/reset-password', data);

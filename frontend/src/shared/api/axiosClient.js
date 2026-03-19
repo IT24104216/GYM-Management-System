@@ -22,10 +22,7 @@ axiosInstance.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const requestUrl = String(error.config?.url || '');
-    const isAuthEndpoint = requestUrl.includes('/auth/login')
-      || requestUrl.includes('/auth/register')
-      || requestUrl.includes('/auth/refresh')
-      || requestUrl.includes('/auth/logout');
+    const isAuthEndpoint = requestUrl.includes('/auth/');
 
     if (status === 401 && !isAuthEndpoint) {
       clearAuth();
