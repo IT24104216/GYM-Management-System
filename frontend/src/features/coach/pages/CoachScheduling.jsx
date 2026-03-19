@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Alert,
@@ -90,7 +90,7 @@ function CoachScheduling() {
   const [viewMode, setViewMode] = useState('weekly');
   const [selectedDate, setSelectedDate] = useState(() => stripToDay(new Date()));
 
-  const loadSlots = async () => {
+  const loadSlots = useCallback(async () => {
     if (!coachId) return;
     setLoading(true);
     setError('');
@@ -111,11 +111,14 @@ function CoachScheduling() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [coachId]);
 
   useEffect(() => {
-    loadSlots();
-  }, [coachId]);
+    const timer = setTimeout(() => {
+      void loadSlots();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadSlots]);
 
   const orderedSlots = useMemo(() => {
     return [...slots].sort((a, b) => toDateTime(a.date, a.startTime) - toDateTime(b.date, b.startTime));

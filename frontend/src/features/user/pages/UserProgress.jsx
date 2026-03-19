@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 import {
@@ -265,7 +265,7 @@ function UserProgress() {
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const isCalendarOpen = Boolean(calendarAnchorEl);
 
-  const loadProgressData = async () => {
+  const loadProgressData = useCallback(async () => {
     if (!userId) return;
     try {
       const { data } = await getUserProgress(userId);
@@ -283,17 +283,23 @@ function UserProgress() {
         message: error?.response?.data?.message || 'Failed to load progress data.',
       });
     }
-  };
-
-  useEffect(() => {
-    loadProgressData();
   }, [userId]);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadProgressData();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadProgressData]);
+
+  useEffect(() => {
     if (!completedWorkoutDateFromState) return;
-    setSelectedDate(completedWorkoutDateFromState);
-    setVisibleMonth(new Date(`${completedWorkoutDateFromState}T00:00:00`));
-    setCompletionDate((prev) => prev || completedWorkoutDateFromState);
+    const timer = setTimeout(() => {
+      setSelectedDate(completedWorkoutDateFromState);
+      setVisibleMonth(new Date(`${completedWorkoutDateFromState}T00:00:00`));
+      setCompletionDate((prev) => prev || completedWorkoutDateFromState);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [completedWorkoutDateFromState]);
 
   const chartData = useMemo(() => {

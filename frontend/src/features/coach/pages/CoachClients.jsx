@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Avatar,
@@ -104,7 +104,7 @@ function CoachClients() {
   const [flippedMemberIds, setFlippedMemberIds] = useState({});
   const [toast, setToast] = useState({ open: false, message: '' });
 
-  const mapAppointmentRow = (item) => {
+  const mapAppointmentRow = useCallback((item) => {
     const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
     const priority = priorityById[item._id] || 'Normal';
     return {
@@ -124,9 +124,9 @@ function CoachClients() {
       startsAt: item.startsAt,
       updatedAt: item.updatedAt,
     };
-  };
+  }, [priorityById]);
 
-  const loadAppointments = async () => {
+  const loadAppointments = useCallback(async () => {
     if (!coachId) return;
     try {
       const { data } = await getCoachAppointments({
@@ -150,17 +150,24 @@ function CoachClients() {
       const message = error?.response?.data?.message || 'Failed to load appointments';
       setToast({ open: true, message });
     }
-  };
+  }, [coachId, user]);
 
   useEffect(() => {
-    loadAppointments();
-    const interval = setInterval(loadAppointments, 15000);
-    return () => clearInterval(interval);
-  }, [coachId]);
+    const timer = setTimeout(() => {
+      void loadAppointments();
+    }, 0);
+    const interval = setInterval(() => {
+      void loadAppointments();
+    }, 15000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [loadAppointments]);
 
   const pendingRows = useMemo(
     () => appointments.filter((item) => item.status === 'pending').map(mapAppointmentRow),
-    [appointments, priorityById],
+    [appointments, mapAppointmentRow],
   );
 
   const members = useMemo(() => {

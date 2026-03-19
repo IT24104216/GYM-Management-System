@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Autocomplete,
   Box,
@@ -35,71 +35,32 @@ import { ROUTES } from '@/shared/utils/constants';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
   deleteMealPlan,
-  getDietitianClientPlans,
   createDietitianSchedulingSlot,
   deleteDietitianSchedulingSlot,
-  getDietitianAppointments,
-  getMealLibraryItems,
-  getDietitianSchedulingSlots,
   submitMealPlan,
   upsertDietitianClientPlan,
   updateDietitianAppointmentStatus,
   updateDietitianSchedulingSlot,
 } from '../api/dietitian.api';
+import {
+  createDietPlanForm,
+  getWeekdayLabel,
+  hasAnyMealName,
+  mealSections,
+  sanitizePlanSection,
+  tabItems,
+  to12Hour,
+} from '../utils/dietitianDashboard.utils';
+import {
+  useDietitianAppointmentsData,
+  useDietitianMealsAndPlans,
+  useDietitianTimeSlots,
+} from '../hooks/useDietitianDashboardData';
+import DietitianStatsGrid from '../components/DietitianStatsGrid';
 
 const mockMembers = [];
 const mockAppointments = [];
 
-const tabItems = ['Members', 'Appointments', 'Time Slots'];
-
-const mealSections = [
-  { key: 'breakfast', title: 'Breakfast Options', icon: '🌅' },
-  { key: 'lunch', title: 'Lunch Options', icon: '🌞' },
-  { key: 'dinner', title: 'Dinner Options', icon: '🌙' },
-  { key: 'snacks', title: 'Snacks Options', icon: '🍎' },
-];
-
-const createMealOption = () => ({
-  mealName: '',
-  description: '',
-  calories: '',
-  protein: '',
-  carbs: '',
-  lipids: '',
-  vitamins: '',
-});
-
-const createDietPlanForm = () => ({
-  breakfast: [createMealOption(), createMealOption(), createMealOption()],
-  lunch: [createMealOption(), createMealOption(), createMealOption()],
-  dinner: [createMealOption(), createMealOption(), createMealOption()],
-  snacks: [createMealOption(), createMealOption(), createMealOption()],
-  additionalNotes: '',
-});
-
-const hasAnyMealName = (form) =>
-  ['breakfast', 'lunch', 'dinner', 'snacks'].some((sectionKey) =>
-    Array.isArray(form?.[sectionKey])
-    && form[sectionKey].some((item) => String(item?.mealName || '').trim().length > 0),
-  );
-
-const sanitizePlanSection = (section = []) =>
-  (Array.isArray(section) ? section : []).map((item) => ({
-    mealName: String(item?.mealName || '').trim(),
-    description: String(item?.description || '').trim(),
-    calories: item?.calories ?? '',
-    protein: item?.protein ?? '',
-    carbs: item?.carbs ?? '',
-    lipids: item?.lipids ?? '',
-    vitamins: String(item?.vitamins || '').trim(),
-  }));
-
-const getNoteValue = (notes, key) => {
-  if (!notes) return '';
-  const pattern = new RegExp(`${key}:\\s*([^|]+)`, 'i');
-  const match = notes.match(pattern);
-  return match?.[1]?.trim() || '';
-};
 
 function DietitianDashboard() {
   const navigate = useNavigate();
@@ -110,15 +71,11 @@ function DietitianDashboard() {
   const isDark = theme.palette.mode === 'dark';
   const [activeTab, setActiveTab] = useState('Members');
   const [searchText, setSearchText] = useState('');
-  const [appointments, setAppointments] = useState(mockAppointments);
-  const [members, setMembers] = useState(mockMembers);
   const [slotForm, setSlotForm] = useState({
     date: '2026-03-08',
     startTime: '08:00',
     endTime: '08:15',
   });
-  const [timeSlots, setTimeSlots] = useState([]);
-  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
   const [slotNotice, setSlotNotice] = useState({ open: false, message: '' });
   const [slotError, setSlotError] = useState('');
   const [editSlotState, setEditSlotState] = useState({
@@ -138,156 +95,19 @@ function DietitianDashboard() {
     member: null,
   });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
-  const [mealSuggestions, setMealSuggestions] = useState([]);
-  const [savedDietPlans, setSavedDietPlans] = useState({});
 
-  const loadTimeSlots = async () => {
-    if (!dietitianId) return;
-    setIsSlotsLoading(true);
-    setSlotError('');
-    try {
-      const { data } = await getDietitianSchedulingSlots(String(dietitianId));
-      const items = Array.isArray(data?.data) ? data.data : [];
-      setTimeSlots(items.map((slot) => ({
-        id: slot._id,
-        date: slot.date,
-        day: getWeekdayLabel(slot.date),
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-      })));
-    } catch (error) {
-      setSlotError(error?.response?.data?.message || 'Failed to load time slots');
-    } finally {
-      setIsSlotsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadTimeSlots();
-  }, [dietitianId]);
-
-  const toClientPlanForm = (plan) => ({
-    breakfast: Array.isArray(plan?.breakfast) ? plan.breakfast : [createMealOption(), createMealOption(), createMealOption()],
-    lunch: Array.isArray(plan?.lunch) ? plan.lunch : [createMealOption(), createMealOption(), createMealOption()],
-    dinner: Array.isArray(plan?.dinner) ? plan.dinner : [createMealOption(), createMealOption(), createMealOption()],
-    snacks: Array.isArray(plan?.snacks) ? plan.snacks : [createMealOption(), createMealOption(), createMealOption()],
-    additionalNotes: plan?.additionalNotes || '',
-  });
-
-  const loadDietitianMealsAndPlans = async () => {
-    if (!dietitianId) return;
-    try {
-      const [{ data: mealsData }, { data: plansData }] = await Promise.all([
-        getMealLibraryItems({ dietitianId }),
-        getDietitianClientPlans({ dietitianId }),
-      ]);
-
-      const meals = Array.isArray(mealsData?.data) ? mealsData.data : [];
-      setMealSuggestions(meals);
-
-      const plans = Array.isArray(plansData?.data) ? plansData.data : [];
-      const nextPlans = {};
-      plans.forEach((plan) => {
-        if (!plan?.userId) return;
-        nextPlans[String(plan.userId)] = {
-          id: String(plan._id),
-          isSubmitted: Boolean(plan.isSubmitted),
-          data: toClientPlanForm(plan),
-        };
-      });
-      setSavedDietPlans(nextPlans);
-    } catch (error) {
-      setMealSuggestions([]);
-      setSavedDietPlans({});
-      setSlotError(error?.response?.data?.message || 'Failed to load diet plans.');
-    }
-  };
-
-  useEffect(() => {
-    loadDietitianMealsAndPlans();
-  }, [dietitianId]);
-
-  const mapAppointmentRow = (item) => {
-    const startsAt = new Date(item.startsAt);
-    const date = Number.isNaN(startsAt.getTime())
-      ? ''
-      : startsAt.toISOString().split('T')[0];
-    const time = Number.isNaN(startsAt.getTime())
-      ? ''
-      : startsAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    const statusLabelByValue = {
-      pending: 'Pending',
-      approved: 'Approved',
-      rejected: 'Rejected',
-      cancelled: 'Cancelled',
-      completed: 'Completed',
-    };
-
-    return {
-      id: item._id,
-      userId: item.userId,
-      member: getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`,
-      date,
-      time,
-      goal: getNoteValue(item.notes, 'Goal') || 'Meal Planning',
-      status: statusLabelByValue[item.status] || 'Pending',
-      rawStatus: item.status,
-      email: getNoteValue(item.notes, 'User Email') || '-',
-      phone: getNoteValue(item.notes, 'Mobile') || '-',
-    };
-  };
-
-  const loadDietitianAppointments = async () => {
-    if (!dietitianId) return;
-    try {
-      const { data } = await getDietitianAppointments({
-        sessionType: 'nutrition',
-        page: 1,
-        limit: 500,
-      });
-
-      const allNutritionItems = Array.isArray(data?.data) ? data.data : [];
-      const items = allNutritionItems.filter((item) => {
-        const byId = String(item.dietitianId || '') === String(dietitianId);
-        const byNoteId = String(getNoteValue(item.notes, 'DietitianId') || '') === String(dietitianId);
-        const byName = getNoteValue(item.notes, 'Dietitian').trim().toLowerCase() === dietitianName;
-        return byId || byNoteId || byName;
-      });
-      const mapped = items.map(mapAppointmentRow);
-      setAppointments(mapped);
-
-      const approvedMembersMap = new Map();
-      mapped
-        .filter((item) => item.rawStatus === 'approved' || item.rawStatus === 'completed')
-        .forEach((item) => {
-          if (!approvedMembersMap.has(item.userId)) {
-            approvedMembersMap.set(item.userId, {
-              id: String(item.userId),
-              name: item.member,
-              joinedDate: item.date || new Date().toISOString().split('T')[0],
-              age: 27,
-              weight: 70,
-              height: 170,
-              goal: item.goal || 'Meal Planning',
-            });
-          }
-        });
-
-      setMembers(Array.from(approvedMembersMap.values()));
-    } catch (error) {
-      setAppointments(mockAppointments);
-      setMembers(mockMembers);
-      setSlotError(error?.response?.data?.message || 'Failed to load dietitian appointments.');
-    }
-  };
-
-  useEffect(() => {
-    loadDietitianAppointments();
-    const interval = setInterval(loadDietitianAppointments, 15000);
-    return () => clearInterval(interval);
-  }, [dietitianId]);
-
+  const { timeSlots, isSlotsLoading, loadTimeSlots } = useDietitianTimeSlots(dietitianId, setSlotError);
+  const { mealSuggestions, savedDietPlans, loadDietitianMealsAndPlans } = useDietitianMealsAndPlans(
+    dietitianId,
+    setSlotError,
+  );
+  const { appointments, members, loadDietitianAppointments } = useDietitianAppointmentsData(
+    dietitianId,
+    dietitianName,
+    setSlotError,
+    mockAppointments,
+    mockMembers,
+  );
   const pageBg = isDark
     ? 'radial-gradient(circle at 15% 10%, #1b355b 0%, #0f1e3d 60%, #0b1731 100%)'
     : 'linear-gradient(180deg, #f8fbff 0%, #edf3fb 100%)';
@@ -338,23 +158,6 @@ function DietitianDashboard() {
     } catch (error) {
       setSlotError(error?.response?.data?.message || 'Failed to reject appointment.');
     }
-  };
-
-  const getWeekdayLabel = (isoDate) => {
-    if (!isoDate) return '';
-    const parsed = new Date(isoDate);
-    if (Number.isNaN(parsed.getTime())) return '';
-    return parsed.toLocaleDateString('en-US', { weekday: 'long' });
-  };
-
-  const to12Hour = (time24) => {
-    const [hoursRaw, minsRaw] = (time24 || '').split(':');
-    const hours = Number(hoursRaw);
-    const mins = Number(minsRaw);
-    if (Number.isNaN(hours) || Number.isNaN(mins)) return '';
-    const suffix = hours >= 12 ? 'PM' : 'AM';
-    const converted = hours % 12 || 12;
-    return `${String(converted).padStart(2, '0')}:${String(mins).padStart(2, '0')} ${suffix}`;
   };
 
   const addTimeSlot = async () => {
@@ -584,41 +387,13 @@ function DietitianDashboard() {
         Manage diet plans and consultations
       </Typography>
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', xl: 'repeat(4, minmax(0, 1fr))' },
-          gap: 2,
-          mb: 2.5,
-        }}
-      >
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Box
-              key={stat.label}
-              sx={{
-                background: panelBg,
-                border: '1px solid',
-                borderColor: panelBorder,
-                borderRadius: 2,
-                p: 2.2,
-                minHeight: 126,
-              }}
-            >
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-                <Typography sx={{ color: subtitleColor, fontWeight: 600, fontSize: '1.05rem' }}>
-                  {stat.label}
-                </Typography>
-                <Icon sx={{ color: '#ff3048', fontSize: 18 }} />
-              </Stack>
-              <Typography sx={{ color: cardTitleColor, fontWeight: 800, fontSize: '2.2rem', lineHeight: 1 }}>
-                {stat.value}
-              </Typography>
-            </Box>
-          );
-        })}
-      </Box>
+      <DietitianStatsGrid
+        stats={stats}
+        panelBg={panelBg}
+        panelBorder={panelBorder}
+        subtitleColor={subtitleColor}
+        cardTitleColor={cardTitleColor}
+      />
 
       <Stack direction="row" spacing={0.4} sx={{ mb: 2.5, width: 'fit-content', background: panelBg, borderRadius: 99, p: 0.45 }}>
         {tabItems.map((tab) => (

@@ -167,8 +167,11 @@ function AdminUsers() {
   };
 
   useEffect(() => {
-    loadUsers();
-    loadStats();
+    const timer = setTimeout(() => {
+      void loadUsers();
+      void loadStats();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleOpenEditRole = (user) => {

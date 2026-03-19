@@ -2,7 +2,7 @@ import { Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogCont
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import { useTheme } from '@mui/material/styles';
 import Rating from '@mui/material/Rating';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { deleteFeedback, getFeedbacks, updateFeedback } from '@/features/user/api/user.api';
@@ -24,7 +24,7 @@ function UserCoachFeedbacks() {
   const [editingForm, setEditingForm] = useState({ rating: 0, comment: '' });
   const [editingError, setEditingError] = useState('');
 
-  const loadFeedbacks = async () => {
+  const loadFeedbacks = useCallback(async () => {
     try {
       const { data } = await getFeedbacks({
         subjectType: 'coach',
@@ -51,11 +51,14 @@ function UserCoachFeedbacks() {
     } catch {
       setFeedbacks([]);
     }
-  };
+  }, [coachId, coachName]);
 
   useEffect(() => {
-    loadFeedbacks();
-  }, [coachId, coachName]);
+    const timer = setTimeout(() => {
+      void loadFeedbacks();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadFeedbacks]);
 
   const averageRating = useMemo(() => {
     if (!feedbacks.length) return 0;

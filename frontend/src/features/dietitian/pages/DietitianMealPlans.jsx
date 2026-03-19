@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Autocomplete,
   Alert,
@@ -105,7 +105,7 @@ function DietitianMealPlans() {
     };
   };
 
-  const loadMeals = async () => {
+  const loadMeals = useCallback(async () => {
     if (!dietitianId) return;
     setIsLoading(true);
     try {
@@ -120,11 +120,14 @@ function DietitianMealPlans() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dietitianId]);
 
   useEffect(() => {
-    loadMeals();
-  }, [dietitianId]);
+    const timer = setTimeout(() => {
+      void loadMeals();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadMeals]);
 
   useEffect(() => {
     const query = String(mealForm.mealName || '').trim();
@@ -138,7 +141,7 @@ function DietitianMealPlans() {
         setIsNutritionLoading(true);
         const { data } = await searchNutritionFoods(query);
         setNutritionOptions(Array.isArray(data?.data) ? data.data : []);
-      } catch (_error) {
+      } catch {
         setNutritionOptions([]);
       } finally {
         setIsNutritionLoading(false);
@@ -157,7 +160,7 @@ function DietitianMealPlans() {
         setIsNutritionLoading(true);
         const { data } = await searchNutritionFoods(query);
         setNutritionOptions(Array.isArray(data?.data) ? data.data : []);
-      } catch (_error) {
+      } catch {
         setNutritionOptions([]);
       } finally {
         setIsNutritionLoading(false);

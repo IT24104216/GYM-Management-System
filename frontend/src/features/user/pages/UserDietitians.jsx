@@ -25,7 +25,7 @@ import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
 import RestaurantMenuRoundedIcon from '@mui/icons-material/RestaurantMenuRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import {
@@ -257,19 +257,8 @@ function UserDietitians() {
     medicalConditions: '',
   });
 
-  const loadDietitians = async () => {
-    try {
-      const { data } = await getPublicDietitians();
-      const items = Array.isArray(data?.data) ? data.data : [];
-      setDietitians(items);
-      await loadDietitianFeedbackStats(items);
-    } catch {
-      setDietitians(DIETITIANS);
-      setDietitianStats(buildInitialDietitianStats(DIETITIANS));
-    }
-  };
 
-  const mapAppointmentToBooking = (item) => {
+  const mapAppointmentToBooking = useCallback((item) => {
     const startsAt = new Date(item.startsAt);
     const endsAt = new Date(item.endsAt);
     const date = Number.isNaN(startsAt.getTime())
@@ -309,9 +298,9 @@ function UserDietitians() {
       progressStatus,
       rawStatus: item.status,
     };
-  };
+  }, [dietitians]);
 
-  const loadDietitianFeedbackStats = async (dietitianList) => {
+  const loadDietitianFeedbackStats = useCallback(async (dietitianList) => {
     const baseStats = buildInitialDietitianStats(dietitianList);
     const dietitianNameToId = new Map(
       (Array.isArray(dietitianList) ? dietitianList : [])
@@ -345,9 +334,9 @@ function UserDietitians() {
     } catch {
       setDietitianStats(baseStats);
     }
-  };
+  }, []);
 
-  const loadSubmittedDietitianFeedbackBookings = async () => {
+  const loadSubmittedDietitianFeedbackBookings = useCallback(async () => {
     const ownerId = String(user?.id || '');
     if (!ownerId) {
       setSubmittedDietitianFeedbackBookingIds(new Set());
@@ -371,9 +360,9 @@ function UserDietitians() {
     } catch {
       setSubmittedDietitianFeedbackBookingIds(new Set());
     }
-  };
+  }, [user?.id]);
 
-  const loadBookings = async () => {
+  const loadBookings = useCallback(async () => {
     if (!user?.id) return;
     try {
       const { data } = await getUserAppointments({
@@ -387,23 +376,52 @@ function UserDietitians() {
     } catch {
       setBookings(BOOKINGS);
     }
-  };
+  }, [mapAppointmentToBooking, user]);
+
+  const loadDietitiansWithStats = useCallback(async () => {
+    try {
+      const { data } = await getPublicDietitians();
+      const items = Array.isArray(data?.data) ? data.data : [];
+      setDietitians(items);
+      await loadDietitianFeedbackStats(items);
+    } catch {
+      setDietitians(DIETITIANS);
+      setDietitianStats(buildInitialDietitianStats(DIETITIANS));
+    }
+  }, [loadDietitianFeedbackStats]);
 
   useEffect(() => {
-    loadDietitians();
-    const interval = setInterval(loadDietitians, 60000);
-    return () => clearInterval(interval);
-  }, []);
+    const timer = setTimeout(() => {
+      void loadDietitiansWithStats();
+    }, 0);
+    const interval = setInterval(() => {
+      void loadDietitiansWithStats();
+    }, 60000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [loadDietitiansWithStats]);
 
   useEffect(() => {
-    loadBookings();
-    const interval = setInterval(loadBookings, 15000);
-    return () => clearInterval(interval);
-  }, [user?.id, dietitians]);
+    const timer = setTimeout(() => {
+      void loadBookings();
+    }, 0);
+    const interval = setInterval(() => {
+      void loadBookings();
+    }, 15000);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [loadBookings]);
 
   useEffect(() => {
-    loadSubmittedDietitianFeedbackBookings();
-  }, [user?.id]);
+    const timer = setTimeout(() => {
+      void loadSubmittedDietitianFeedbackBookings();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadSubmittedDietitianFeedbackBookings]);
 
   const handleOpenBooking = (dietitian) => {
     setSelectedDietitian(dietitian);

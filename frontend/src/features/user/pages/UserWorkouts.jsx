@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -477,7 +477,7 @@ function UserWorkouts() {
   const userId = String(user?.id || '');
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  const loadAssignedPlans = async () => {
+  const loadAssignedPlans = useCallback(async () => {
     if (!userId) return;
     try {
       const { data } = await getUserWorkoutPlans(userId);
@@ -491,11 +491,14 @@ function UserWorkouts() {
     } catch {
       setWorkouts([]);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
-    loadAssignedPlans();
-  }, [userId]);
+    const timer = setTimeout(() => {
+      void loadAssignedPlans();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadAssignedPlans]);
 
   const upcomingExercises = workouts
     .map((item) => {
@@ -530,8 +533,6 @@ function UserWorkouts() {
     item.workoutDateObject && sameDay(item.workoutDateObject, today)
   ));
 
-  const fallbackWorkout = upcomingExercises[0] || null;
-  const activeTopWorkout = todayWorkout || fallbackWorkout;
   const topDateLabel = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   const visibleUpcomingExercises = todayWorkout

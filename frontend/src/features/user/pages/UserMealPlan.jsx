@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -33,10 +33,6 @@ import {
 import { useTheme } from '@mui/material/styles';
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
-import FreeBreakfastRoundedIcon from '@mui/icons-material/FreeBreakfastRounded';
-import LunchDiningRoundedIcon from '@mui/icons-material/LunchDiningRounded';
-import DinnerDiningRoundedIcon from '@mui/icons-material/DinnerDiningRounded';
-import IcecreamRoundedIcon from '@mui/icons-material/IcecreamRounded';
 import VerifiedRoundedIcon from '@mui/icons-material/VerifiedRounded';
 import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -46,100 +42,22 @@ import {
   buildDailySummaries,
   evaluateMealQuality,
 } from '../utils/mealRiskScoring';
+import { createUserFoodLog, deleteUserFoodLog, updateUserFoodLog } from '../api/user.api';
+import CalorieTooltip from '../components/CalorieTooltip';
+import { useDietitianPlan, useNutritionSuggestions, useUserFoodLogs } from '../hooks/useUserMealPlanData';
 import {
-  createUserFoodLog,
-  deleteUserFoodLog,
-  getUserDietitianMealPlan,
-  getUserFoodLogs,
-  searchNutritionFoods,
-  updateUserFoodLog,
-} from '../api/user.api';
+  containerVariants,
+  formatSuggestionSource,
+  itemVariants,
+  mealSectionConfig,
+  mealSectionOrder,
+  shiftIsoDate,
+  toIsoDate,
+  yAxisTicks,
+} from '../utils/userMealPlan.utils';
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.08,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0 },
-};
-
-const yAxisTicks = [650, 1300, 1950, 2600];
-
-const toIsoDate = (date) => {
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return '';
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-};
-
-const shiftIsoDate = (isoDate, offsetDays) => {
-  const base = new Date(`${isoDate}T00:00:00`);
-  if (Number.isNaN(base.getTime())) return isoDate;
-  base.setDate(base.getDate() + Number(offsetDays || 0));
-  return toIsoDate(base);
-};
-
-const mealSectionConfig = {
-  breakfast: { label: 'Breakfast', icon: FreeBreakfastRoundedIcon, tone: '#d97706', bg: '#fef3c7' },
-  lunch: { label: 'Lunch', icon: LunchDiningRoundedIcon, tone: '#059669', bg: '#d1fae5' },
-  dinner: { label: 'Dinner', icon: DinnerDiningRoundedIcon, tone: '#2563eb', bg: '#dbeafe' },
-  snacks: { label: 'Snacks', icon: IcecreamRoundedIcon, tone: '#7c3aed', bg: '#ede9fe' },
-};
-const mealSectionOrder = ['breakfast', 'lunch', 'dinner', 'snacks'];
-
-const formatSuggestionSource = (source) => {
-  const value = String(source || '').trim().toLowerCase();
-  if (!value) return 'Unknown';
-  if (value === 'usda') return 'USDA';
-  if (value.includes('sri-lanka') || value.includes('local')) return 'Local DB';
-  return value
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-};
-
-function CalorieTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0]?.payload || {};
-
-  return (
-    <Box
-      sx={{
-        bgcolor: '#ffffff',
-        border: '1px solid #e5e7eb',
-        borderRadius: 2,
-        px: 1.5,
-        py: 1.1,
-        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.14)',
-      }}
-    >
-      <Typography sx={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.2 }}>
-        {point.fullDate || label}
-      </Typography>
-      <Typography sx={{ mt: 0.45, fontSize: '0.88rem', fontWeight: 800, color: '#84cc16', lineHeight: 1.2 }}>
-        cals : {payload[0].value}
-      </Typography>
-      {Number(point.mealCount || 0) > 0 && (
-        <Typography sx={{ mt: 0.35, fontSize: '0.78rem', fontWeight: 700, color: '#334155', lineHeight: 1.2 }}>
-          meals: {point.mealCount} | P {point.protein || 0}g | C {point.carbs || 0}g | F {point.fat || 0}g
-        </Typography>
-      )}
-    </Box>
-  );
-}
 
 function UserMealPlan() {
   const theme = useTheme();
@@ -148,11 +66,12 @@ function UserMealPlan() {
   const { user } = useAuth();
   const userId = String(user?.id || user?._id || '');
   const [planMode, setPlanMode] = useState('dietitian');
-  const [dietitianPlan, setDietitianPlan] = useState(null);
-  const [planError, setPlanError] = useState('');
-  const [isPlanLoading, setIsPlanLoading] = useState(false);
-  const [foodLogs, setFoodLogs] = useState([]);
-  const [allFoodLogs, setAllFoodLogs] = useState([]);
+  const { dietitianPlan, planError, setPlanError, isPlanLoading } = useDietitianPlan(userId);
+  const { foodLogs, allFoodLogs, refreshFoodLogs, refreshAllFoodLogs } = useUserFoodLogs(
+    userId,
+    todayIso,
+    planMode,
+  );
   const [isLogDialogOpen, setIsLogDialogOpen] = useState(false);
   const [editingLogId, setEditingLogId] = useState(null);
   const [logForm, setLogForm] = useState({
@@ -166,82 +85,14 @@ function UserMealPlan() {
     fat: 0,
     notes: '',
   });
-  const [nutritionOptions, setNutritionOptions] = useState([]);
-  const [isNutritionLoading, setIsNutritionLoading] = useState(false);
+  const { nutritionOptions, setNutritionOptions, isNutritionLoading } = useNutritionSuggestions(
+    isLogDialogOpen,
+    logForm.name,
+  );
 
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [customTrendDate, setCustomTrendDate] = useState(todayIso);
   const [customTrendRange, setCustomTrendRange] = useState(7);
-
-  useEffect(() => {
-    const loadDietitianPlan = async () => {
-      if (!userId) return;
-      try {
-        setIsPlanLoading(true);
-        setPlanError('');
-        const { data } = await getUserDietitianMealPlan(userId);
-        setDietitianPlan(data?.data || null);
-      } catch (error) {
-        setDietitianPlan(null);
-        setPlanError(error?.response?.data?.message || 'Failed to load dietitian plan');
-      } finally {
-        setIsPlanLoading(false);
-      }
-    };
-
-    loadDietitianPlan();
-  }, [userId]);
-
-  useEffect(() => {
-    const loadFoodLogs = async () => {
-      if (!userId) return;
-      try {
-        const { data } = await getUserFoodLogs(userId, todayIso);
-        setFoodLogs(Array.isArray(data?.data) ? data.data : []);
-      } catch {
-        setFoodLogs([]);
-      }
-    };
-
-    loadFoodLogs();
-  }, [todayIso, userId]);
-
-  useEffect(() => {
-    const loadAllFoodLogs = async () => {
-      if (!userId || planMode !== 'custom') return;
-      try {
-        const { data } = await getUserFoodLogs(userId);
-        setAllFoodLogs(Array.isArray(data?.data) ? data.data : []);
-      } catch {
-        setAllFoodLogs([]);
-      }
-    };
-
-    loadAllFoodLogs();
-  }, [planMode, userId]);
-
-  useEffect(() => {
-    if (!isLogDialogOpen) return;
-    const query = String(logForm.name || '').trim();
-    if (query.length < 2) {
-      setNutritionOptions([]);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      try {
-        setIsNutritionLoading(true);
-        const { data } = await searchNutritionFoods(query);
-        setNutritionOptions(Array.isArray(data?.data) ? data.data : []);
-      } catch {
-        setNutritionOptions([]);
-      } finally {
-        setIsNutritionLoading(false);
-      }
-    }, 250);
-
-    return () => clearTimeout(timer);
-  }, [isLogDialogOpen, logForm.name]);
 
   const meals = useMemo(() => {
     const sectionByKey = new Map();
@@ -528,18 +379,6 @@ function UserMealPlan() {
       fat: Number(option.fat || 0),
       notes: option.notes || '',
     });
-  };
-
-  const refreshFoodLogs = async () => {
-    if (!userId) return;
-    const { data } = await getUserFoodLogs(userId, todayIso);
-    setFoodLogs(Array.isArray(data?.data) ? data.data : []);
-  };
-
-  const refreshAllFoodLogs = async () => {
-    if (!userId) return;
-    const { data } = await getUserFoodLogs(userId);
-    setAllFoodLogs(Array.isArray(data?.data) ? data.data : []);
   };
 
   const handleSaveLog = async () => {

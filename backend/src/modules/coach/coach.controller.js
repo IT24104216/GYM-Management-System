@@ -89,7 +89,7 @@ const toTags = (preferredTrainingType = '', specialization = '') => {
   const base = preferredTrainingType || specialization;
   if (!base) return ['General'];
   return base
-    .split(/[\/,]/g)
+    .split(/[/,]/g)
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 3);

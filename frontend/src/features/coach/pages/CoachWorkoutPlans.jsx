@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Autocomplete,
@@ -189,7 +189,7 @@ function CoachWorkoutPlans() {
 
   const showToast = (message, severity = 'success') => setFeedback({ open: true, message, severity });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!coachId) return;
     try {
       const [reqRes, planRes, catRes] = await Promise.all([
@@ -218,11 +218,14 @@ function CoachWorkoutPlans() {
     } catch (error) {
       showToast(error?.response?.data?.message || 'Failed to load workout data', 'error');
     }
-  };
+  }, [coachId]);
 
   useEffect(() => {
-    loadData();
-  }, [coachId]);
+    const timer = setTimeout(() => {
+      void loadData();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadData]);
 
   useEffect(() => () => {
     Object.values(suggestionTimersRef.current).forEach((timerId) => clearTimeout(timerId));

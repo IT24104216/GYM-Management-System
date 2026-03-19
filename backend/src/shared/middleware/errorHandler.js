@@ -1,4 +1,5 @@
 export function errorHandler(err, _req, res, _next) {
+  void _next;
   const statusCode = err.statusCode || 500;
 
   const response = {
