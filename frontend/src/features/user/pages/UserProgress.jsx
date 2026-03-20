@@ -219,6 +219,7 @@ function UserProgress() {
   const isDark = theme.palette.mode === 'dark';
   const todayIso = getTodayIso();
   const completedWorkoutDateFromState = location.state?.completedWorkoutDate || '';
+  const openedFromWorkoutFinish = Boolean(location.state?.openedFromWorkoutFinish);
 
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [calendarAnchorEl, setCalendarAnchorEl] = useState(null);
@@ -238,6 +239,7 @@ function UserProgress() {
     weight: '',
   });
   const uploadInputRef = useRef(null);
+  const hasAutoUploadPromptedRef = useRef(false);
   const chartSvgRef = useRef(null);
   const [hoveredChartPoint, setHoveredChartPoint] = useState(null);
   const [weightHistoryByDate, setWeightHistoryByDate] = useState({});
@@ -301,6 +303,29 @@ function UserProgress() {
     }, 0);
     return () => clearTimeout(timer);
   }, [completedWorkoutDateFromState]);
+
+  useEffect(() => {
+    if (!openedFromWorkoutFinish) return;
+    if (!completedWorkoutDateFromState) return;
+    if (hasAutoUploadPromptedRef.current) return;
+    if (!canUploadSelectedDate) return;
+
+    hasAutoUploadPromptedRef.current = true;
+    const timer = setTimeout(() => {
+      setPhotoToast({
+        open: true,
+        message: `Workout completed. Upload your progress photo for ${formatIsoToShort(completedWorkoutDateFromState)}.`,
+      });
+      // Best-effort auto-open; some browsers may block without direct user click.
+      uploadInputRef.current?.click();
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [
+    canUploadSelectedDate,
+    completedWorkoutDateFromState,
+    openedFromWorkoutFinish,
+  ]);
 
   const chartData = useMemo(() => {
     const weightHistory = Object.entries(weightHistoryByDate)
