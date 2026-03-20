@@ -14,7 +14,7 @@ const dateSchema = z.string().trim()
     message: 'Invalid calendar date',
   });
 const timeSchema = z.string().trim().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'must be HH:mm');
-const phoneRegex = /^\+?[0-9]{7,15}$/;
+const phoneRegex = /^\d{10}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const SLASH_DATE_REGEX = /^\d{2}\/\d{2}\/\d{4}$/;
 
@@ -50,30 +50,48 @@ export const dietitianSlotIdParamsSchema = z.object({
   slotId: idSchema,
 });
 
-export const dietitianProfileSchema = z.object({
-  qualifications: z.string().trim().max(180).optional(),
-  specialization: z.string().trim().max(140).optional(),
-  experienceYears: z.coerce.number().min(0).max(80).optional(),
-  licenseNumber: z.string().trim().max(80).optional(),
-  phone: z
-    .string()
-    .trim()
-    .max(30)
-    .refine((value) => !value || phoneRegex.test(value), {
-      message: 'Invalid phone format. Use digits with optional leading +.',
-    })
-    .optional(),
-  joinDate: z
-    .string()
-    .trim()
-    .max(40)
-    .refine((value) => isValidDateInput(value), {
-      message: 'Invalid date format. Use YYYY-MM-DD or MM/DD/YYYY.',
-    })
-    .optional(),
-  rating: z.coerce.number().min(0).max(5).optional(),
-  slots: z.string().trim().max(120).optional(),
-});
+export const dietitianProfileSchema = z
+  .object({
+    qualifications: z.string().trim().max(180).optional(),
+    specialization: z.string().trim().max(140).optional(),
+    experienceYears: z.coerce.number().min(0).max(80).optional(),
+    licenseNumber: z.string().trim().max(80).optional(),
+    phone: z
+      .string()
+      .trim()
+      .max(30)
+      .refine((value) => !value || phoneRegex.test(value), {
+        message: 'Invalid phone format. Use exactly 10 digits.',
+      })
+      .optional(),
+    joinDate: z
+      .string()
+      .trim()
+      .max(40)
+      .refine((value) => isValidDateInput(value), {
+        message: 'Invalid date format. Use YYYY-MM-DD or MM/DD/YYYY.',
+      })
+      .optional(),
+    rating: z.coerce.number().min(0).max(5).optional(),
+    slots: z.string().trim().max(120).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!String(data.qualifications || '').trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['qualifications'],
+        message: 'Qualifications are required.',
+      });
+    }
+    const exp = Number(data.experienceYears || 0);
+    if (!exp || exp <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['experienceYears'],
+        message: 'Experience is required.',
+      });
+    }
+  });
 
 export const createDietitianSlotSchema = z.object({
   date: dateSchema,

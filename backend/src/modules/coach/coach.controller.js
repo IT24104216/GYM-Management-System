@@ -10,7 +10,7 @@ import {
 import { CoachProfile } from './coachProfile.model.js';
 import { CoachScheduling } from './coachScheduling.model.js';
 
-const PHONE_REGEX = /^\+?[0-9]{7,15}$/;
+const PHONE_REGEX = /^\d{10}$/;
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const SLASH_DATE_REGEX = /^\d{2}\/\d{2}\/\d{4}$/;
 
@@ -37,33 +37,51 @@ const isValidDateInput = (value) => {
   return false;
 };
 
-const profileSchema = z.object({
-  specialization: z.string().trim().max(120).optional(),
-  experienceYears: z.coerce.number().min(0).max(80).optional(),
-  certifications: z.string().trim().max(300).optional(),
-  phone: z
-    .string()
-    .trim()
-    .max(30)
-    .refine(
-      (value) => !value || PHONE_REGEX.test(value),
-      { message: 'Invalid phone format. Use digits with optional leading +.' },
-    )
-    .optional(),
-  preferredTrainingType: z.string().trim().max(120).optional(),
-  coachingStyle: z.string().trim().max(500).optional(),
-  joinedDate: z
-    .string()
-    .trim()
-    .max(40)
-    .refine(
-      (value) => isValidDateInput(value),
-      { message: 'Invalid date format. Use YYYY-MM-DD or MM/DD/YYYY.' },
-    )
-    .optional(),
-  rating: z.coerce.number().min(0).max(5).optional(),
-  slots: z.string().trim().max(120).optional(),
-});
+const profileSchema = z
+  .object({
+    specialization: z.string().trim().max(120).optional(),
+    experienceYears: z.coerce.number().min(0).max(80).optional(),
+    certifications: z.string().trim().max(300).optional(),
+    phone: z
+      .string()
+      .trim()
+      .max(30)
+      .refine(
+        (value) => !value || PHONE_REGEX.test(value),
+        { message: 'Invalid phone format. Use exactly 10 digits.' },
+      )
+      .optional(),
+    preferredTrainingType: z.string().trim().max(120).optional(),
+    coachingStyle: z.string().trim().max(500).optional(),
+    joinedDate: z
+      .string()
+      .trim()
+      .max(40)
+      .refine(
+        (value) => isValidDateInput(value),
+        { message: 'Invalid date format. Use YYYY-MM-DD or MM/DD/YYYY.' },
+      )
+      .optional(),
+    rating: z.coerce.number().min(0).max(5).optional(),
+    slots: z.string().trim().max(120).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!String(data.certifications || '').trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['certifications'],
+        message: 'Qualifications/Certifications are required.',
+      });
+    }
+    const exp = Number(data.experienceYears || 0);
+    if (!exp || exp <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['experienceYears'],
+        message: 'Experience is required.',
+      });
+    }
+  });
 
 const parsePayload = (schema, payload) => {
   const result = schema.safeParse(payload);

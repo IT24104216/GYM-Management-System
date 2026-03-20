@@ -52,6 +52,7 @@ import NotificationsDrawer from './NotificationsDrawer';
 
 const DRAWER_WIDTH = 240;
 const USER_PROFILE_STORAGE_KEY = 'user.profile.v1';
+const MOBILE_NUMBER_PATTERN = /^\d{10}$/;
 
 const defaultDietitianProfile = {
   qualifications: '',
@@ -165,6 +166,11 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [editUserProfile, setEditUserProfile] = useState(defaultUserProfile);
   const [coachProfile, setCoachProfile] = useState(defaultCoachProfile);
   const [editCoachProfile, setEditCoachProfile] = useState(defaultCoachProfile);
+  const [profileFormErrors, setProfileFormErrors] = useState({
+    user: '',
+    coach: '',
+    dietitian: '',
+  });
   const isUserRoute = location.pathname.startsWith('/user/');
   const isDietitian = user?.role === ROLES.DIETITIAN;
   const isMemberUser = user?.role === ROLES.USER;
@@ -263,6 +269,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   };
 
   const openProfileSettingsForm = () => {
+    setProfileFormErrors((prev) => ({ ...prev, dietitian: '' }));
     setEditDietitianProfile(dietitianProfile);
     setProfileDetailsOpen(false);
     setProfileFormOpen(true);
@@ -273,25 +280,47 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   };
 
   const closeProfileSettingsForm = () => {
+    setProfileFormErrors((prev) => ({ ...prev, dietitian: '' }));
     setProfileFormOpen(false);
   };
 
   const saveDietitianProfile = async () => {
+    const trimmedQualifications = String(editDietitianProfile.qualifications || '').trim();
+    const experienceValue = Number(editDietitianProfile.experienceYears || 0);
+    const phoneValue = String(editDietitianProfile.phone || '').trim();
+
+    if (!trimmedQualifications) {
+      setProfileFormErrors((prev) => ({ ...prev, dietitian: 'Qualifications are required.' }));
+      return;
+    }
+    if (!experienceValue || experienceValue <= 0) {
+      setProfileFormErrors((prev) => ({ ...prev, dietitian: 'Experience is required.' }));
+      return;
+    }
+    if (phoneValue && !MOBILE_NUMBER_PATTERN.test(phoneValue)) {
+      setProfileFormErrors((prev) => ({ ...prev, dietitian: 'Mobile number must be exactly 10 digits.' }));
+      return;
+    }
+
     try {
       const payload = {
         ...editDietitianProfile,
-        experienceYears: Number(editDietitianProfile.experienceYears || 0),
+        qualifications: trimmedQualifications,
+        phone: phoneValue,
+        experienceYears: experienceValue,
       };
       const { data } = await upsertDietitianProfileApi(String(user?.id || ''), payload);
       const savedProfile = data?.data?.profile
         ? { ...defaultDietitianProfile, ...data.data.profile, experienceYears: String(data.data.profile.experienceYears ?? '') }
         : editDietitianProfile;
       setDietitianProfile(savedProfile);
+      setProfileFormErrors((prev) => ({ ...prev, dietitian: '' }));
       setProfileFormOpen(false);
       setProfileDetailsOpen(true);
       setFeedbackOpen(true);
-    } catch {
-      // keep existing UI behavior
+    } catch (error) {
+      const backendMessage = error?.response?.data?.message || 'Failed to save profile.';
+      setProfileFormErrors((prev) => ({ ...prev, dietitian: backendMessage }));
     }
   };
 
@@ -307,6 +336,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   };
 
   const openUserProfileForm = () => {
+    setProfileFormErrors((prev) => ({ ...prev, user: '' }));
     setEditUserProfile(userProfile);
     setUserProfileDetailsOpen(false);
     setUserProfileFormOpen(true);
@@ -317,10 +347,18 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   };
 
   const closeUserProfileForm = () => {
+    setProfileFormErrors((prev) => ({ ...prev, user: '' }));
     setUserProfileFormOpen(false);
   };
 
   const saveUserProfile = () => {
+    const phoneValue = String(editUserProfile.phone || '').trim();
+    if (phoneValue && !MOBILE_NUMBER_PATTERN.test(phoneValue)) {
+      setProfileFormErrors((prev) => ({ ...prev, user: 'Mobile number must be exactly 10 digits.' }));
+      return;
+    }
+
+    setProfileFormErrors((prev) => ({ ...prev, user: '' }));
     setUserProfile(editUserProfile);
     localStorage.setItem(userProfileStorageKey, JSON.stringify(editUserProfile));
     setUserProfileFormOpen(false);
@@ -336,6 +374,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   };
 
   const openCoachProfileForm = () => {
+    setProfileFormErrors((prev) => ({ ...prev, coach: '' }));
     setEditCoachProfile(coachProfile);
     setCoachProfileDetailsOpen(false);
     setCoachProfileFormOpen(true);
@@ -346,25 +385,47 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   };
 
   const closeCoachProfileForm = () => {
+    setProfileFormErrors((prev) => ({ ...prev, coach: '' }));
     setCoachProfileFormOpen(false);
   };
 
   const saveCoachProfile = async () => {
+    const trimmedCertifications = String(editCoachProfile.certifications || '').trim();
+    const experienceValue = Number(editCoachProfile.experienceYears || 0);
+    const phoneValue = String(editCoachProfile.phone || '').trim();
+
+    if (!trimmedCertifications) {
+      setProfileFormErrors((prev) => ({ ...prev, coach: 'Qualifications/Certifications are required.' }));
+      return;
+    }
+    if (!experienceValue || experienceValue <= 0) {
+      setProfileFormErrors((prev) => ({ ...prev, coach: 'Experience is required.' }));
+      return;
+    }
+    if (phoneValue && !MOBILE_NUMBER_PATTERN.test(phoneValue)) {
+      setProfileFormErrors((prev) => ({ ...prev, coach: 'Mobile number must be exactly 10 digits.' }));
+      return;
+    }
+
     try {
       const payload = {
         ...editCoachProfile,
-        experienceYears: Number(editCoachProfile.experienceYears || 0),
+        certifications: trimmedCertifications,
+        phone: phoneValue,
+        experienceYears: experienceValue,
       };
       const { data } = await upsertCoachProfileApi(String(user?.id || ''), payload);
       const savedProfile = data?.data?.profile
         ? { ...defaultCoachProfile, ...data.data.profile, experienceYears: String(data.data.profile.experienceYears ?? '') }
         : editCoachProfile;
       setCoachProfile(savedProfile);
+      setProfileFormErrors((prev) => ({ ...prev, coach: '' }));
       setCoachProfileFormOpen(false);
       setCoachProfileDetailsOpen(true);
       setCoachFeedbackOpen(true);
-    } catch {
-      // keep existing UI behavior; fail silently like current dialogs
+    } catch (error) {
+      const backendMessage = error?.response?.data?.message || 'Failed to save profile.';
+      setProfileFormErrors((prev) => ({ ...prev, coach: backendMessage }));
     }
   };
 
@@ -823,13 +884,23 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               />
               <TextField
                 label="Phone"
-                placeholder="+1234567890"
+                placeholder="07XXXXXXXX"
                 value={editDietitianProfile.phone}
                 onChange={(e) =>
-                  setEditDietitianProfile((prev) => ({ ...prev, phone: e.target.value }))
+                  setEditDietitianProfile((prev) => ({
+                    ...prev,
+                    phone: String(e.target.value || '').replace(/\D/g, '').slice(0, 10),
+                  }))
                 }
                 fullWidth
                 size="small"
+                error={Boolean(editDietitianProfile.phone) && !MOBILE_NUMBER_PATTERN.test(editDietitianProfile.phone)}
+                helperText={
+                  editDietitianProfile.phone && !MOBILE_NUMBER_PATTERN.test(editDietitianProfile.phone)
+                    ? 'Enter exactly 10 digits.'
+                    : ' '
+                }
+                inputProps={{ maxLength: 10, inputMode: 'numeric', pattern: '\\d{10}' }}
                 sx={{
                   '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
@@ -858,6 +929,11 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 }}
               />
             </Box>
+            {profileFormErrors.dietitian && (
+              <Alert severity="error" sx={{ mt: 1.2 }}>
+                {profileFormErrors.dietitian}
+              </Alert>
+            )}
 
             <Box
               sx={{
@@ -1206,13 +1282,23 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               />
               <TextField
                 label="Phone"
-                placeholder="+1234567890"
+                placeholder="07XXXXXXXX"
                 value={editUserProfile.phone}
                 onChange={(e) =>
-                  setEditUserProfile((prev) => ({ ...prev, phone: e.target.value }))
+                  setEditUserProfile((prev) => ({
+                    ...prev,
+                    phone: String(e.target.value || '').replace(/\D/g, '').slice(0, 10),
+                  }))
                 }
                 fullWidth
                 size="small"
+                error={Boolean(editUserProfile.phone) && !MOBILE_NUMBER_PATTERN.test(editUserProfile.phone)}
+                helperText={
+                  editUserProfile.phone && !MOBILE_NUMBER_PATTERN.test(editUserProfile.phone)
+                    ? 'Enter exactly 10 digits.'
+                    : ' '
+                }
+                inputProps={{ maxLength: 10, inputMode: 'numeric', pattern: '\\d{10}' }}
                 sx={{
                   '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
@@ -1303,6 +1389,11 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 }}
               />
             </Box>
+            {profileFormErrors.user && (
+              <Alert severity="error" sx={{ mt: 1.2 }}>
+                {profileFormErrors.user}
+              </Alert>
+            )}
           </DialogContent>
 
           <DialogActions sx={{ px: 3, pb: 2.2 }}>
@@ -1563,13 +1654,23 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
               />
               <TextField
                 label="Phone"
-                placeholder="+1234567890"
+                placeholder="07XXXXXXXX"
                 value={editCoachProfile.phone}
                 onChange={(e) =>
-                  setEditCoachProfile((prev) => ({ ...prev, phone: e.target.value }))
+                  setEditCoachProfile((prev) => ({
+                    ...prev,
+                    phone: String(e.target.value || '').replace(/\D/g, '').slice(0, 10),
+                  }))
                 }
                 fullWidth
                 size="small"
+                error={Boolean(editCoachProfile.phone) && !MOBILE_NUMBER_PATTERN.test(editCoachProfile.phone)}
+                helperText={
+                  editCoachProfile.phone && !MOBILE_NUMBER_PATTERN.test(editCoachProfile.phone)
+                    ? 'Enter exactly 10 digits.'
+                    : ' '
+                }
+                inputProps={{ maxLength: 10, inputMode: 'numeric', pattern: '\\d{10}' }}
                 sx={{
                   '& .MuiInputLabel-root': { color: '#c6d6ef', fontWeight: 700 },
                   '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#3b4f70', borderRadius: 1.2 },
@@ -1645,6 +1746,11 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
                 }}
               />
             </Box>
+            {profileFormErrors.coach && (
+              <Alert severity="error" sx={{ mt: 1.2 }}>
+                {profileFormErrors.coach}
+              </Alert>
+            )}
           </DialogContent>
 
           <DialogActions sx={{ px: 3, pb: 2.2 }}>
