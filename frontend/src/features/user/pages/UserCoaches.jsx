@@ -128,16 +128,6 @@ const isBookingCompletedByTime = (booking) => {
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-const DAY_TO_INDEX = {
-  sun: 0,
-  mon: 1,
-  tue: 2,
-  wed: 3,
-  thu: 4,
-  fri: 5,
-  sat: 6,
-};
-
 const normalizeTimeTo24h = (rawTime) => {
   if (!rawTime) return '';
   if (rawTime.includes(':') && !rawTime.toUpperCase().includes('AM') && !rawTime.toUpperCase().includes('PM')) {
@@ -180,29 +170,13 @@ const getCoachSlotRanges = (coach) => {
       end: normalizeTimeTo24h(range?.endTime),
     }));
   }
-
-  const slotPart = coach?.slots?.split(',')?.[1]?.trim() || '';
-  const [startRaw, endRaw] = slotPart.split('-').map((t) => t.trim());
-  const fallbackRange = {
-    start: normalizeTimeTo24h(startRaw),
-    end: normalizeTimeTo24h(endRaw),
-  };
-  if (!fallbackRange.start || !fallbackRange.end) return [];
-  return [fallbackRange];
-};
-
-const formatCoachSlotDateLabel = (coach) => {
-  if (!coach?.slotDate) {
-    return coach?.slots?.split(',')?.[0]?.trim() || 'Available';
-  }
-  const parsed = new Date(`${coach.slotDate}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return coach.slotDate;
-  const today = getTodayDate();
-  if (coach.slotDate === today) return 'Today';
-  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return [];
 };
 
 const getCoachSlotDisplayLines = (coach) => {
+  const todayIso = getTodayDate();
+  if (!coach?.slotDate || coach.slotDate !== todayIso) return ['No slots'];
+
   const ranges = getCoachSlotRanges(coach)
     .map((range) => ({
       start: toDisplayTime(range.start),
@@ -210,42 +184,13 @@ const getCoachSlotDisplayLines = (coach) => {
     }))
     .filter((range) => range.start && range.end);
 
-  if (ranges.length) {
-    const dayLabel = formatCoachSlotDateLabel(coach);
-    return ranges.map((range) => `${dayLabel}, ${range.start} - ${range.end}`);
-  }
-
-  const raw = String(coach?.slots || '').replace(/\(\+\d+\s*more\)/gi, '').trim();
-  if (!raw) return ['No slot information'];
-  return raw
-    .split(/\s*[|;]\s*/)
-    .map((value) => value.trim())
-    .filter(Boolean);
+  if (!ranges.length) return ['No slots'];
+  return ranges.map((range) => `Today, ${range.start} - ${range.end}`);
 };
 
 const isDateWithinCoachSchedule = (coach, dateValue) => {
-  if (coach?.slotDate) {
-    return dateValue === coach.slotDate;
-  }
-
-  if (!coach?.slots || !dateValue) return false;
-
-  const dayPart = coach.slots.split(',')?.[0]?.trim() || '';
-  const [fromRaw, toRaw] = dayPart.split('-').map((item) => item.trim().slice(0, 3).toLowerCase());
-  const fromIndex = DAY_TO_INDEX[fromRaw];
-  const toIndex = DAY_TO_INDEX[toRaw];
-
-  if (typeof fromIndex !== 'number' || typeof toIndex !== 'number') return false;
-
-  const selectedDay = new Date(`${dateValue}T00:00:00`).getDay();
-  if (Number.isNaN(selectedDay)) return false;
-
-  if (fromIndex <= toIndex) {
-    return selectedDay >= fromIndex && selectedDay <= toIndex;
-  }
-
-  // Supports wrapped ranges like Fri - Mon
-  return selectedDay >= fromIndex || selectedDay <= toIndex;
+  if (!coach?.slotDate) return false;
+  return dateValue === coach.slotDate;
 };
 
 const isWithinAnyCoachRange = (ranges, fromMinutes, toMinutes) => {
@@ -496,6 +441,13 @@ function UserCoaches() {
   };
 
   const handleEditBooking = (booking) => {
+    if (String(booking?.progressStatus || '') !== 'pending') {
+      setToastState({
+        open: true,
+        message: 'You can reschedule only before coach approval.',
+      });
+      return;
+    }
     const coach = coaches.find((item) => item.name === booking.coachName) || null;
     setSelectedCoach(coach);
     setBookingForm({
@@ -1036,7 +988,7 @@ function UserCoaches() {
 
                     {booking.status === 'upcoming' && !isCancelled && !isCompleted && (
                       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>
-                        {effectiveStatus !== 'confirmed' && (
+                        {effectiveStatus === 'pending' && (
                           <Button
                             size="small"
                             variant="outlined"
@@ -1055,14 +1007,16 @@ function UserCoaches() {
                         >
                           Cancel
                         </Button>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => handleEditBooking(booking)}
-                          sx={{ borderRadius: 2, fontWeight: 700 }}
-                        >
-                          Reschedule
-                        </Button>
+                        {effectiveStatus === 'pending' && (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleEditBooking(booking)}
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Reschedule
+                          </Button>
+                        )}
                       </Stack>
                     )}
 

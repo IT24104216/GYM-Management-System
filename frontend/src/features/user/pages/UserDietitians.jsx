@@ -110,16 +110,6 @@ const BOOKING_PROGRESS_META = {
   cancelled: { label: 'Cancelled', step: -1 },
 };
 
-const DAY_TO_INDEX = {
-  sun: 0,
-  mon: 1,
-  tue: 2,
-  wed: 3,
-  thu: 4,
-  fri: 5,
-  sat: 6,
-};
-
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 const MOBILE_NUMBER_PATTERN = /^\d{10}$/;
 
@@ -165,36 +155,27 @@ const getDietitianSlotRanges = (dietitian) => {
       end: normalizeTimeTo24h(range?.endTime),
     }));
   }
-  const slotPart = dietitian?.slots?.split(',')?.[1]?.trim() || '';
-  const [startRaw, endRaw] = slotPart.split('-').map((t) => t.trim());
-  const fallbackRange = {
-    start: normalizeTimeTo24h(startRaw),
-    end: normalizeTimeTo24h(endRaw),
-  };
-  if (!fallbackRange.start || !fallbackRange.end) return [];
-  return [fallbackRange];
+  return [];
+};
+
+const getDietitianSlotDisplayLines = (dietitian) => {
+  const todayIso = getTodayDate();
+  if (!dietitian?.slotDate || dietitian.slotDate !== todayIso) return ['No slots'];
+
+  const ranges = getDietitianSlotRanges(dietitian)
+    .map((range) => ({
+      start: toDisplayTime(range.start),
+      end: toDisplayTime(range.end),
+    }))
+    .filter((range) => range.start && range.end);
+
+  if (!ranges.length) return ['No slots'];
+  return ranges.map((range) => `Today, ${range.start} - ${range.end}`);
 };
 
 const isDateWithinDietitianSchedule = (dietitian, dateValue) => {
-  if (dietitian?.slotDate) {
-    return dateValue === dietitian.slotDate;
-  }
-
-  if (!dietitian?.slots || !dateValue) return false;
-
-  const dayPart = dietitian.slots.split(',')?.[0]?.trim() || '';
-  const [fromRaw, toRaw] = dayPart.split('-').map((item) => item.trim().slice(0, 3).toLowerCase());
-  const fromIndex = DAY_TO_INDEX[fromRaw];
-  const toIndex = DAY_TO_INDEX[toRaw];
-
-  if (typeof fromIndex !== 'number' || typeof toIndex !== 'number') return false;
-
-  const selectedDay = new Date(`${dateValue}T00:00:00`).getDay();
-  if (Number.isNaN(selectedDay)) return false;
-
-  if (fromIndex <= toIndex) return selectedDay >= fromIndex && selectedDay <= toIndex;
-
-  return selectedDay >= fromIndex || selectedDay <= toIndex;
+  if (!dietitian?.slotDate) return false;
+  return dateValue === dietitian.slotDate;
 };
 
 const isWithinAnyDietitianRange = (ranges, fromMinutes, toMinutes) =>
@@ -445,6 +426,13 @@ function UserDietitians() {
   };
 
   const handleEditBooking = (booking) => {
+    if (String(booking?.progressStatus || '') !== 'pending') {
+      setToastState({
+        open: true,
+        message: 'You can reschedule only before dietitian approval.',
+      });
+      return;
+    }
     const dietitian = dietitians.find((item) => String(item.id) === String(booking.dietitianId))
       || dietitians.find((item) => item.name === booking.dietitianName)
       || null;
@@ -744,11 +732,18 @@ function UserDietitians() {
                       Experience {dietitian.experience}
                     </Typography>
                   </Stack>
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
                     <AccessTimeRoundedIcon sx={{ color: '#8b5cf6', fontSize: 18 }} />
-                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}>
-                      {dietitian.slots}
-                    </Typography>
+                    <Stack spacing={0.2}>
+                      {getDietitianSlotDisplayLines(dietitian).map((line, lineIndex) => (
+                        <Typography
+                          key={`${dietitian.id || dietitian.name || 'dietitian'}-slot-${lineIndex}`}
+                          sx={{ color: theme.palette.text.secondary, fontSize: '0.93rem' }}
+                        >
+                          {line}
+                        </Typography>
+                      ))}
+                    </Stack>
                   </Stack>
                 </Stack>
 
@@ -947,7 +942,7 @@ function UserDietitians() {
 
                     {booking.status === 'upcoming' && !isCancelled && !isCompleted && (
                       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>
-                        {effectiveStatus !== 'confirmed' && (
+                        {effectiveStatus === 'pending' && (
                           <Button
                             size="small"
                             variant="outlined"
@@ -966,14 +961,16 @@ function UserDietitians() {
                         >
                           Cancel
                         </Button>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          onClick={() => handleEditBooking(booking)}
-                          sx={{ borderRadius: 2, fontWeight: 700 }}
-                        >
-                          Reschedule
-                        </Button>
+                        {effectiveStatus === 'pending' && (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            onClick={() => handleEditBooking(booking)}
+                            sx={{ borderRadius: 2, fontWeight: 700 }}
+                          >
+                            Reschedule
+                          </Button>
+                        )}
                       </Stack>
                     )}
 
@@ -1107,9 +1104,21 @@ function UserDietitians() {
               />
             </Stack>
 
-            <Typography sx={{ fontSize: '0.9rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
-              Available slot: {selectedDietitian?.slots || 'N/A'}
-            </Typography>
+            <Stack spacing={0.35}>
+              <Typography sx={{ fontSize: '0.9rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
+                Available slots:
+              </Typography>
+              {(selectedDietitian ? getDietitianSlotDisplayLines(selectedDietitian) : ['No slots']).map(
+                (line, lineIndex) => (
+                  <Typography
+                    key={`selected-dietitian-slot-${lineIndex}`}
+                    sx={{ fontSize: '0.85rem', color: theme.palette.text.secondary }}
+                  >
+                    {line}
+                  </Typography>
+                ),
+              )}
+            </Stack>
 
             {availabilityError && (
               <Typography sx={{ fontSize: '0.9rem', color: '#ef4444', fontWeight: 700 }}>
