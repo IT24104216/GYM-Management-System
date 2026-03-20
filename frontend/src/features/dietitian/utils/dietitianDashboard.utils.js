@@ -32,15 +32,23 @@ export const hasAnyMealName = (form) =>
   );
 
 export const sanitizePlanSection = (section = []) =>
-  (Array.isArray(section) ? section : []).map((item) => ({
-    mealName: String(item?.mealName || '').trim(),
-    description: String(item?.description || '').trim(),
-    calories: item?.calories ?? '',
-    protein: item?.protein ?? '',
-    carbs: item?.carbs ?? '',
-    lipids: item?.lipids ?? '',
-    vitamins: String(item?.vitamins || '').trim(),
-  }));
+  (Array.isArray(section) ? section : []).map((item) => {
+    const toNumericOrZero = (value) => {
+      const trimmed = String(value ?? '').trim();
+      if (!trimmed) return 0;
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    };
+    return {
+      mealName: String(item?.mealName || '').trim(),
+      description: String(item?.description || '').trim(),
+      calories: toNumericOrZero(item?.calories),
+      protein: toNumericOrZero(item?.protein),
+      carbs: toNumericOrZero(item?.carbs),
+      lipids: toNumericOrZero(item?.lipids),
+      vitamins: String(item?.vitamins || '').trim(),
+    };
+  });
 
 export const getNoteValue = (notes, key) => {
   if (!notes) return '';

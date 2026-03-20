@@ -44,10 +44,15 @@ import {
 const parseOrThrow = (schema, payload) => {
   const result = schema.safeParse(payload);
   if (!result.success) {
+    const flattened = result.error.flatten();
+    const firstFieldError = Object.values(flattened.fieldErrors || {})
+      .flat()
+      .find(Boolean);
+    const firstFormError = (flattened.formErrors || []).find(Boolean);
     throw new AppError(
-      'Validation failed',
+      firstFieldError || firstFormError || 'Please check highlighted fields and try again.',
       HTTP_STATUS.UNPROCESSABLE_ENTITY,
-      result.error.flatten(),
+      flattened,
     );
   }
   return result.data;
@@ -149,13 +154,6 @@ export const upsertDietPlan = asyncHandler(async (req, res) => {
   await ensureDietitianExists(dietitianId);
   await ensureUserExists(payload.userId);
 
-  if (!hasAtLeastOneMealName(payload)) {
-    throw new AppError(
-      'At least one meal option with meal name is required',
-      HTTP_STATUS.UNPROCESSABLE_ENTITY,
-    );
-  }
-
   const existing = await DietPlan.findOne({
     dietitianId,
     userId: payload.userId,
@@ -197,21 +195,6 @@ export const updateDietPlan = asyncHandler(async (req, res) => {
   }
   if (plan.isSubmitted) {
     throw new AppError('Submitted diet plan cannot be edited', HTTP_STATUS.CONFLICT);
-  }
-
-  const merged = {
-    breakfast: payload.breakfast ?? plan.breakfast,
-    lunch: payload.lunch ?? plan.lunch,
-    dinner: payload.dinner ?? plan.dinner,
-    snacks: payload.snacks ?? plan.snacks,
-    additionalNotes: payload.additionalNotes ?? plan.additionalNotes,
-  };
-
-  if (!hasAtLeastOneMealName(merged)) {
-    throw new AppError(
-      'At least one meal option with meal name is required',
-      HTTP_STATUS.UNPROCESSABLE_ENTITY,
-    );
   }
 
   Object.assign(plan, payload);

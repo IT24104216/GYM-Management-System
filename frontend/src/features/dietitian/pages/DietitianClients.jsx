@@ -22,6 +22,7 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { getToken } from '@/shared/utils/storage';
 import {
   deleteMealPlan,
   getDietitianAppointments,
@@ -58,38 +59,61 @@ const createDietPlanForm = () => ({
   additionalNotes: '',
 });
 
-const hasAnyMealName = (form) =>
-  ['breakfast', 'lunch', 'dinner', 'snacks'].some((sectionKey) =>
-    Array.isArray(form?.[sectionKey])
-    && form[sectionKey].some((item) => String(item?.mealName || '').trim().length > 0),
-  );
-
 const sanitizePlanSection = (section = []) =>
-  (Array.isArray(section) ? section : []).map((item) => ({
-    mealName: String(item?.mealName || '').trim(),
-    description: String(item?.description || '').trim(),
-    calories: item?.calories ?? '',
-    protein: item?.protein ?? '',
-    carbs: item?.carbs ?? '',
-    lipids: item?.lipids ?? '',
-    vitamins: String(item?.vitamins || '').trim(),
-  }));
+  (Array.isArray(section) ? section : []).map((item) => {
+    const toNumericOrZero = (value) => {
+      const trimmed = String(value ?? '').trim();
+      if (!trimmed) return 0;
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    };
+    return {
+      mealName: String(item?.mealName || '').trim(),
+      description: String(item?.description || '').trim(),
+      calories: toNumericOrZero(item?.calories),
+      protein: toNumericOrZero(item?.protein),
+      carbs: toNumericOrZero(item?.carbs),
+      lipids: toNumericOrZero(item?.lipids),
+      vitamins: String(item?.vitamins || '').trim(),
+    };
+  });
 
 function DietitianClients() {
   const theme = useTheme();
   const { user } = useAuth();
-  const dietitianId = String(user?.id || user?._id || '');
+  const getUserIdFromToken = () => {
+    try {
+      const token = getToken();
+      if (!token) return '';
+      const parts = String(token).split('.');
+      if (parts.length < 2) return '';
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((char) => `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`)
+          .join(''),
+      );
+      const payload = JSON.parse(json);
+      return String(payload?.sub || '').trim();
+    } catch {
+      return '';
+    }
+  };
+  const dietitianId = String(user?.id || user?._id || user?.userId || getUserIdFromToken() || '');
   const dietitianName = String(user?.name || '').trim().toLowerCase();
   const isDark = theme.palette.mode === 'dark';
   const [allClients, setAllClients] = useState([]);
   const [searchText, setSearchText] = useState('');
   const [dietPlanModal, setDietPlanModal] = useState({ open: false, client: null });
   const [dietPlanForm, setDietPlanForm] = useState(createDietPlanForm());
+  const [dietPlanInitialSnapshot, setDietPlanInitialSnapshot] = useState('');
   const [savedPlans, setSavedPlans] = useState({});
   const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
   const [confirmDelete, setConfirmDelete] = useState({ open: false, client: null });
   const [mealSuggestions, setMealSuggestions] = useState([]);
   const [page, setPage] = useState(1);
+  const [isDietPlanSubmitting, setIsDietPlanSubmitting] = useState(false);
 
   const loadApprovedClients = useCallback(async () => {
     if (!dietitianId) return;
@@ -219,12 +243,85 @@ function DietitianClients() {
 
   const openDietPlanModal = (client) => {
     const existing = savedPlans[client.id]?.data;
-    setDietPlanForm(existing || createDietPlanForm());
+    const nextForm = existing || createDietPlanForm();
+    setDietPlanForm(nextForm);
+    const initialSnapshot = JSON.stringify({
+      breakfast: sanitizePlanSection(nextForm.breakfast),
+      lunch: sanitizePlanSection(nextForm.lunch),
+      dinner: sanitizePlanSection(nextForm.dinner),
+      snacks: sanitizePlanSection(nextForm.snacks),
+      additionalNotes: String(nextForm.additionalNotes || '').trim(),
+    });
+    setDietPlanInitialSnapshot(initialSnapshot);
     setDietPlanModal({ open: true, client });
   };
 
   const closeDietPlanModal = () => {
+    setDietPlanInitialSnapshot('');
+    setIsDietPlanSubmitting(false);
     setDietPlanModal({ open: false, client: null });
+  };
+
+  const getDietPlanValidationMessage = (form, submitted = false) => {
+    const sections = ['breakfast', 'lunch', 'dinner', 'snacks'];
+    const parseNumber = (value) => {
+      const raw = String(value ?? '').trim();
+      if (!raw) return null;
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) return Number.NaN;
+      return parsed;
+    };
+
+    if (String(form?.additionalNotes || '').length > 3000) {
+      return 'Additional notes are too long (max 3000 characters).';
+    }
+
+    let hasMealName = false;
+    let hasCompleteOption = false;
+
+    for (const sectionKey of sections) {
+      const options = Array.isArray(form?.[sectionKey]) ? form[sectionKey] : [];
+      for (const option of options) {
+        const mealName = String(option?.mealName || '').trim();
+        const description = String(option?.description || '');
+        const vitamins = String(option?.vitamins || '');
+
+        if (description.length > 600) return 'Description is too long (max 600 characters).';
+        if (vitamins.length > 220) return 'Vitamins text is too long (max 220 characters).';
+
+        const calories = parseNumber(option?.calories);
+        const protein = parseNumber(option?.protein);
+        const carbs = parseNumber(option?.carbs);
+        const lipids = parseNumber(option?.lipids);
+
+        const numericValues = [calories, protein, carbs, lipids].filter((value) => value !== null);
+        if (numericValues.some((value) => Number.isNaN(value) || value < 0)) {
+          return 'Calories and macros must be valid non-negative numbers.';
+        }
+        if (calories !== null && calories > 3000) return 'Calories must be between 0 and 3000.';
+        if (protein !== null && protein > 500) return 'Protein must be between 0 and 500 g.';
+        if (carbs !== null && carbs > 500) return 'Carbs must be between 0 and 500 g.';
+        if (lipids !== null && lipids > 500) return 'Lipids must be between 0 and 500 g.';
+
+        if (mealName) {
+          hasMealName = true;
+          if (
+            String(option?.description || '').trim()
+            || String(option?.vitamins || '').trim()
+            || (calories !== null && calories > 0)
+            || (protein !== null && protein > 0)
+            || (carbs !== null && carbs > 0)
+            || (lipids !== null && lipids > 0)
+          ) {
+            hasCompleteOption = true;
+          }
+        }
+      }
+    }
+
+    if (submitted && !hasMealName) return 'Add at least one meal name before publishing.';
+    if (submitted && !hasCompleteOption) return 'Please complete at least one meal option in any section before publishing.';
+    return '';
   };
 
   const updateMealField = (sectionKey, index, field, value) => {
@@ -269,13 +366,28 @@ function DietitianClients() {
     const clientId = dietPlanModal.client?.id;
     if (!clientId) return;
     if (!dietitianId) {
-      setFeedback({ open: true, message: 'Dietitian account is required.', severity: 'error' });
+      setFeedback({ open: true, message: 'Unable to save draft. Please log in again.', severity: 'error' });
       return;
     }
-    if (!hasAnyMealName(dietPlanForm)) {
-      setFeedback({ open: true, message: 'Add at least one meal name before submitting the diet plan.', severity: 'error' });
+    const clientValidationMessage = getDietPlanValidationMessage(dietPlanForm, submitted);
+    if (clientValidationMessage) {
+      setFeedback({ open: true, message: clientValidationMessage, severity: 'error' });
       return;
     }
+
+    const currentSnapshot = JSON.stringify({
+      breakfast: sanitizePlanSection(dietPlanForm.breakfast),
+      lunch: sanitizePlanSection(dietPlanForm.lunch),
+      dinner: sanitizePlanSection(dietPlanForm.dinner),
+      snacks: sanitizePlanSection(dietPlanForm.snacks),
+      additionalNotes: String(dietPlanForm.additionalNotes || '').trim(),
+    });
+    if (!submitted && currentSnapshot === dietPlanInitialSnapshot) {
+      setFeedback({ open: true, message: 'No changes to save.', severity: 'info' });
+      return;
+    }
+
+    setIsDietPlanSubmitting(true);
     try {
       const payload = {
         dietitianId,
@@ -291,28 +403,40 @@ function DietitianClients() {
       const plan = data?.data;
       const planId = String(plan?._id || plan?.id || savedPlans[clientId]?.id || '');
       if (!planId) throw new Error('Plan id is missing after save');
-      await submitMealPlan(planId, dietitianId, submitted);
+      if (submitted) {
+        await submitMealPlan(planId, dietitianId, true);
+      }
       await loadDietitianMealsAndPlans();
       setDietPlanModal({ open: false, client: null });
       setFeedback({
         open: true,
-        message: submitted ? 'Diet plan published successfully.' : 'Diet plan saved as draft.',
+        message: submitted ? 'Meal plan published successfully.' : 'Draft saved successfully.',
         severity: 'success',
       });
     } catch (error) {
       if (error?.response?.status === 409) {
         setFeedback({
           open: true,
-          message: 'This client plan is already submitted and locked.',
+          message: 'This plan is already published and cannot be edited.',
+          severity: 'error',
+        });
+        return;
+      }
+      if (error?.response?.status === 422) {
+        setFeedback({
+          open: true,
+          message: error?.response?.data?.message || 'Please check highlighted fields and try again.',
           severity: 'error',
         });
         return;
       }
       setFeedback({
         open: true,
-        message: error?.response?.data?.message || (submitted ? 'Failed to publish diet plan.' : 'Failed to save draft.'),
+        message: error?.response?.data?.message || (submitted ? 'Failed to publish meal plan. Please try again.' : 'Failed to save draft. Please try again.'),
         severity: 'error',
       });
+    } finally {
+      setIsDietPlanSubmitting(false);
     }
   };
 
@@ -738,15 +862,17 @@ function DietitianClients() {
                 <Button
                   variant="outlined"
                   onClick={saveDietPlanDraft}
+                  disabled={isDietPlanSubmitting}
                   fullWidth
                   sx={{ textTransform: 'none', fontWeight: 800, borderRadius: 1.2, py: 1 }}
                 >
-                  Save Draft
+                  {isDietPlanSubmitting ? 'Saving...' : 'Save Draft'}
                 </Button>
                 <Button
                   variant="contained"
                   startIcon={<AddRoundedIcon />}
                   onClick={publishDietPlan}
+                  disabled={isDietPlanSubmitting}
                   fullWidth
                   sx={{
                     textTransform: 'none',
@@ -758,7 +884,7 @@ function DietitianClients() {
                     '&:hover': { backgroundColor: '#cf0812' },
                   }}
                 >
-                  Publish Plan
+                  {isDietPlanSubmitting ? 'Publishing...' : 'Publish Plan'}
                 </Button>
               </>
             )}

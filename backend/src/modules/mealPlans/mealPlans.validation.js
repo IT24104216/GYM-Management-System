@@ -7,14 +7,24 @@ const idSchema = z
   ])
   .transform((value) => String(value));
 
-const numberLikeSchema = z
-  .union([z.number(), z.string().trim().min(1)])
-  .optional()
-  .transform((value) => {
-    if (value === undefined || value === null || value === '') return 0;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0;
-  });
+const toZeroWhenEmpty = (value) => {
+  if (value === undefined || value === null) return 0;
+  if (typeof value === 'string' && value.trim() === '') return 0;
+  return value;
+};
+
+const numericWithBounds = (label, max) =>
+  z.preprocess(
+    toZeroWhenEmpty,
+    z.coerce
+      .number({ invalid_type_error: `${label} must be a valid number` })
+      .finite(`${label} must be a valid number`)
+      .min(0, `${label} cannot be negative`)
+      .max(max, `${label} must be less than or equal to ${max}`),
+  );
+
+const caloriesSchema = numericWithBounds('Calories', 3000);
+const macroSchema = numericWithBounds('Macro value', 500);
 
 export const mealLibraryQuerySchema = z.object({
   dietitianId: idSchema,
@@ -25,10 +35,10 @@ export const createMealLibrarySchema = z.object({
   dietitianId: idSchema,
   category: z.enum(['weight_gain', 'weight_loss', 'other']),
   mealName: z.string().trim().min(1, 'mealName is required').max(140),
-  calories: numberLikeSchema,
-  protein: numberLikeSchema,
-  carbs: numberLikeSchema,
-  lipids: numberLikeSchema,
+  calories: caloriesSchema.optional().default(0),
+  protein: macroSchema.optional().default(0),
+  carbs: macroSchema.optional().default(0),
+  lipids: macroSchema.optional().default(0),
   vitamins: z.string().trim().max(220).optional().default(''),
   description: z.string().trim().max(600).optional().default(''),
 });
@@ -37,10 +47,10 @@ export const updateMealLibrarySchema = z
   .object({
     category: z.enum(['weight_gain', 'weight_loss', 'other']).optional(),
     mealName: z.string().trim().min(1).max(140).optional(),
-    calories: numberLikeSchema,
-    protein: numberLikeSchema,
-    carbs: numberLikeSchema,
-    lipids: numberLikeSchema,
+    calories: caloriesSchema.optional(),
+    protein: macroSchema.optional(),
+    carbs: macroSchema.optional(),
+    lipids: macroSchema.optional(),
     vitamins: z.string().trim().max(220).optional(),
     description: z.string().trim().max(600).optional(),
   })
@@ -66,10 +76,10 @@ export const userPlanQuerySchema = z.object({
 const mealOptionSchema = z.object({
   mealName: z.string().trim().max(140).optional().default(''),
   description: z.string().trim().max(600).optional().default(''),
-  calories: numberLikeSchema,
-  protein: numberLikeSchema,
-  carbs: numberLikeSchema,
-  lipids: numberLikeSchema,
+  calories: caloriesSchema.optional().default(0),
+  protein: macroSchema.optional().default(0),
+  carbs: macroSchema.optional().default(0),
+  lipids: macroSchema.optional().default(0),
   vitamins: z.string().trim().max(220).optional().default(''),
 });
 
@@ -124,10 +134,10 @@ export const createFoodLogSchema = z.object({
   logDate: dateSchema,
   mealType: mealTypeSchema,
   name: z.string().trim().min(1, 'name is required').max(140),
-  calories: numberLikeSchema,
-  protein: numberLikeSchema,
-  carbs: numberLikeSchema,
-  fat: numberLikeSchema,
+  calories: caloriesSchema.optional().default(0),
+  protein: macroSchema.optional().default(0),
+  carbs: macroSchema.optional().default(0),
+  fat: macroSchema.optional().default(0),
   notes: z.string().trim().max(500).optional().default(''),
 });
 
@@ -136,10 +146,10 @@ export const updateFoodLogSchema = z
     logDate: dateSchema.optional(),
     mealType: mealTypeSchema.optional(),
     name: z.string().trim().min(1).max(140).optional(),
-    calories: numberLikeSchema,
-    protein: numberLikeSchema,
-    carbs: numberLikeSchema,
-    fat: numberLikeSchema,
+    calories: caloriesSchema.optional(),
+    protein: macroSchema.optional(),
+    carbs: macroSchema.optional(),
+    fat: macroSchema.optional(),
     notes: z.string().trim().max(500).optional(),
   })
   .refine((payload) => Object.keys(payload).length > 0, {
