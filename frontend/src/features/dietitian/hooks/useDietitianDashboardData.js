@@ -140,6 +140,8 @@ export function useDietitianAppointmentsData(dietitianId, dietitianName, setSlot
       rawStatus: item.status,
       email: getNoteValue(item.notes, 'User Email') || '-',
       phone: getNoteValue(item.notes, 'Mobile') || '-',
+      rejectReason: getNoteValue(item.notes, 'Reject Reason') || '',
+      notes: item.notes || '',
     };
   };
 

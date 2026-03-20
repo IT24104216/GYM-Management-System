@@ -101,6 +101,7 @@ const buildInitialCoachStats = (coachList = []) => {
 };
 
 const STATUS_STEPS = ['pending', 'confirmed', 'completed'];
+const MOBILE_NUMBER_PATTERN = /^\d{10}$/;
 const PRIORITY_TAG_OPTIONS = [
   'Soon as possible',
   'Pain',
@@ -522,6 +523,11 @@ function UserCoaches() {
   };
 
   const handleFieldChange = (field) => (event) => {
+    if (field === 'mobileNumber') {
+      const digitsOnly = String(event.target.value || '').replace(/\D/g, '').slice(0, 10);
+      setBookingForm((prev) => ({ ...prev, mobileNumber: digitsOnly }));
+      return;
+    }
     setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
@@ -561,6 +567,10 @@ function UserCoaches() {
 
     if (!isWithinCoachRange) {
       setSlotError('Unavailable at that time. Please choose an available time slot.');
+      return;
+    }
+    if (!MOBILE_NUMBER_PATTERN.test(String(bookingForm.mobileNumber || ''))) {
+      setSlotError('Mobile number must be exactly 10 digits.');
       return;
     }
 
@@ -1125,6 +1135,17 @@ function UserCoaches() {
               onChange={handleFieldChange('mobileNumber')}
               required
               placeholder="Enter your mobile number"
+              error={Boolean(bookingForm.mobileNumber) && !MOBILE_NUMBER_PATTERN.test(bookingForm.mobileNumber)}
+              helperText={
+                bookingForm.mobileNumber && !MOBILE_NUMBER_PATTERN.test(bookingForm.mobileNumber)
+                  ? 'Enter exactly 10 digits.'
+                  : ' '
+              }
+              inputProps={{
+                maxLength: 10,
+                inputMode: 'numeric',
+                pattern: '\\d{10}',
+              }}
             />
 
             <TextField

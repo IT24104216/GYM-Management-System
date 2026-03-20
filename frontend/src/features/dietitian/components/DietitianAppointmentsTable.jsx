@@ -73,32 +73,37 @@ function DietitianAppointmentsTable({
                   />
                 </TableCell>
                 <TableCell align="right" sx={{ borderBottomColor: panelBorder }}>
-                  <Stack direction="row" spacing={0.8} justifyContent="flex-end">
-                    <Button
-                      size="small"
-                      variant="contained"
-                      onClick={() => onApprove(row)}
-                      sx={{
-                        textTransform: 'none',
-                        fontWeight: 700,
-                        minWidth: 84,
-                        bgcolor: '#16a34a',
-                        '&:hover': { bgcolor: '#15803d' },
-                        visibility: row.status === 'Approved' ? 'hidden' : 'visible',
-                      }}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="error"
-                      onClick={() => onReject(row)}
-                      sx={{ textTransform: 'none', fontWeight: 700, minWidth: 76 }}
-                    >
-                      Reject
-                    </Button>
-                  </Stack>
+                  {row.rawStatus === 'pending' ? (
+                    <Stack direction="row" spacing={0.8} justifyContent="flex-end">
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() => onApprove(row)}
+                        sx={{
+                          textTransform: 'none',
+                          fontWeight: 700,
+                          minWidth: 84,
+                          bgcolor: '#16a34a',
+                          '&:hover': { bgcolor: '#15803d' },
+                        }}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        onClick={() => onReject(row)}
+                        sx={{ textTransform: 'none', fontWeight: 700, minWidth: 76 }}
+                      >
+                        Reject
+                      </Button>
+                    </Stack>
+                  ) : (
+                    <Box sx={{ color: mutedText, fontSize: '0.82rem', textAlign: 'right', pr: 0.4 }}>
+                      -
+                    </Box>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

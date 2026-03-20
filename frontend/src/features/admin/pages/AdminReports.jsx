@@ -47,7 +47,7 @@ const kpiCards = [
   {
     id: 'revenue',
     label: 'Total Revenue',
-    value: '$24,500',
+    value: 'Rs 24,500',
     trend: '+12.5%',
     icon: AttachMoneyRoundedIcon,
     iconBg: '#ecfdf5',
@@ -162,7 +162,7 @@ function AdminReports() {
       if (card.id === 'revenue') {
         return {
           ...card,
-          value: `$${revenue.toLocaleString()}`,
+          value: `Rs ${revenue.toLocaleString()}`,
           trend: reportData.kpis.totalRevenue?.trend || card.trend,
         };
       }

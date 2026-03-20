@@ -121,6 +121,7 @@ const DAY_TO_INDEX = {
 };
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
+const MOBILE_NUMBER_PATTERN = /^\d{10}$/;
 
 const normalizeTimeTo24h = (rawTime) => {
   if (!rawTime) return '';
@@ -297,6 +298,7 @@ function UserDietitians() {
       status,
       progressStatus,
       rawStatus: item.status,
+      rejectReason: getNoteValue(item.notes, 'Reject Reason') || '',
     };
   }, [dietitians]);
 
@@ -472,6 +474,11 @@ function UserDietitians() {
   };
 
   const handleFieldChange = (field) => (event) => {
+    if (field === 'mobileNumber') {
+      const digitsOnly = String(event.target.value || '').replace(/\D/g, '').slice(0, 10);
+      setBookingForm((prev) => ({ ...prev, mobileNumber: digitsOnly }));
+      return;
+    }
     setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
@@ -502,6 +509,10 @@ function UserDietitians() {
     const selectedDietitianId = selectedDietitian?.id || selectedDietitian?._id;
     if (!selectedDietitianId) {
       setAvailabilityError('Selected dietitian is unavailable. Please refresh and try again.');
+      return;
+    }
+    if (!MOBILE_NUMBER_PATTERN.test(String(bookingForm.mobileNumber || ''))) {
+      setAvailabilityError('Mobile number must be exactly 10 digits.');
       return;
     }
 
@@ -917,6 +928,23 @@ function UserDietitians() {
                       </Stack>
                     </Box>
 
+                    {booking.rawStatus === 'rejected' && booking.rejectReason && (
+                      <Box
+                        sx={{
+                          mt: 1.1,
+                          px: 1.2,
+                          py: 0.8,
+                          borderRadius: 1.5,
+                          border: '1px solid #ef444433',
+                          bgcolor: '#ef444411',
+                        }}
+                      >
+                        <Typography sx={{ color: '#ef4444', fontSize: '0.82rem', fontWeight: 700 }}>
+                          Rejected Reason: {booking.rejectReason}
+                        </Typography>
+                      </Box>
+                    )}
+
                     {booking.status === 'upcoming' && !isCancelled && !isCompleted && (
                       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>
                         {effectiveStatus !== 'confirmed' && (
@@ -1035,6 +1063,17 @@ function UserDietitians() {
               value={bookingForm.mobileNumber}
               onChange={handleFieldChange('mobileNumber')}
               required
+              error={Boolean(bookingForm.mobileNumber) && !MOBILE_NUMBER_PATTERN.test(bookingForm.mobileNumber)}
+              helperText={
+                bookingForm.mobileNumber && !MOBILE_NUMBER_PATTERN.test(bookingForm.mobileNumber)
+                  ? 'Enter exactly 10 digits.'
+                  : ' '
+              }
+              inputProps={{
+                maxLength: 10,
+                inputMode: 'numeric',
+                pattern: '\\d{10}',
+              }}
             />
 
             <TextField

@@ -83,6 +83,13 @@ function DietitianDashboard() {
     id: null,
     label: '',
   });
+  const [rejectDialog, setRejectDialog] = useState({
+    open: false,
+    appointment: null,
+    reason: '',
+    error: '',
+    isSubmitting: false,
+  });
   const [dietPlanModal, setDietPlanModal] = useState({
     open: false,
     member: null,
@@ -185,12 +192,55 @@ function DietitianDashboard() {
   };
 
   const rejectAppointment = async (appointment) => {
+    setRejectDialog({
+      open: true,
+      appointment,
+      reason: appointment?.rejectReason || '',
+      error: '',
+      isSubmitting: false,
+    });
+  };
+
+  const closeRejectDialog = () => {
+    setRejectDialog({
+      open: false,
+      appointment: null,
+      reason: '',
+      error: '',
+      isSubmitting: false,
+    });
+  };
+
+  const submitRejectedAppointment = async () => {
+    const trimmedReason = rejectDialog.reason.trim();
+    if (!trimmedReason) {
+      setRejectDialog((prev) => ({ ...prev, error: 'Please add a reject reason.' }));
+      return;
+    }
+    const targetAppointment = rejectDialog.appointment;
+    if (!targetAppointment?.id) return;
+
+    const existingSegments = String(targetAppointment.notes || '')
+      .split('|')
+      .map((segment) => segment.trim())
+      .filter((segment) => segment && !/^Reject Reason\s*:/i.test(segment));
+    const notesWithRejectReason = [...existingSegments, `Reject Reason: ${trimmedReason}`].join(' | ');
+
+    setRejectDialog((prev) => ({ ...prev, isSubmitting: true, error: '' }));
     try {
-      await updateDietitianAppointmentStatus(appointment.id, { status: 'rejected' });
+      await updateDietitianAppointmentStatus(targetAppointment.id, {
+        status: 'rejected',
+        notes: notesWithRejectReason,
+      });
       await loadDietitianAppointments();
       setSlotNotice({ open: true, message: 'Appointment rejected successfully!' });
+      closeRejectDialog();
     } catch (error) {
-      setSlotError(error?.response?.data?.message || 'Failed to reject appointment.');
+      setRejectDialog((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        error: error?.response?.data?.message || 'Failed to reject appointment.',
+      }));
     }
   };
 
@@ -490,6 +540,45 @@ function DietitianDashboard() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSlotNotice((prev) => ({ ...prev, open: false }))}>OK</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={rejectDialog.open}
+        onClose={closeRejectDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Reject Appointment</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 1.2, color: mutedText, fontSize: '0.9rem' }}>
+            Add a reason for rejecting this booking. This reason will be visible in user booking history.
+          </Typography>
+          <TextField
+            value={rejectDialog.reason}
+            onChange={(event) => setRejectDialog((prev) => ({ ...prev, reason: event.target.value, error: '' }))}
+            label="Reject Reason"
+            fullWidth
+            required
+            multiline
+            minRows={3}
+          />
+          {rejectDialog.error && (
+            <Typography sx={{ mt: 1, color: '#ef4444', fontSize: '0.85rem', fontWeight: 600 }}>
+              {rejectDialog.error}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRejectDialog}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={submitRejectedAppointment}
+            disabled={rejectDialog.isSubmitting}
+          >
+            {rejectDialog.isSubmitting ? 'Submitting...' : 'Submit Rejection'}
+          </Button>
         </DialogActions>
       </Dialog>
 
