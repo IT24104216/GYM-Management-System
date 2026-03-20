@@ -235,6 +235,12 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   if (!['admin', 'user'].includes(String(req.user?.role || ''))) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
   }
+  if (String(item.status) !== 'pending') {
+    throw new AppError(
+      'Reschedule is allowed only before approval. This request is already processed.',
+      HTTP_STATUS.CONFLICT,
+    );
+  }
 
   const providerField = item.sessionType === 'nutrition' ? 'dietitianId' : 'coachId';
   const providerValue = item[providerField];
@@ -248,17 +254,18 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   });
 
   if (overlapping) {
-    throw new AppError('Coach already has a booking in this time range', HTTP_STATUS.CONFLICT);
+    throw new AppError(
+      item.sessionType === 'nutrition'
+        ? 'Dietitian is already booked at that time. Please change the time.'
+        : 'Coach is already booked at that time. Please change the time.',
+      HTTP_STATUS.CONFLICT,
+    );
   }
 
   item.startsAt = payload.startsAt;
   item.endsAt = payload.endsAt;
   if (payload.sessionType) item.sessionType = payload.sessionType;
   if (typeof payload.notes === 'string') item.notes = payload.notes;
-  if (item.status === 'cancelled' || item.status === 'rejected') {
-    item.status = 'pending';
-  }
-
   await item.save();
 
   res.status(HTTP_STATUS.OK).json({
