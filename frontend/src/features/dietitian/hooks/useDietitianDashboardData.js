@@ -111,6 +111,11 @@ export function useDietitianMealsAndPlans(dietitianId, setSlotError) {
 export function useDietitianAppointmentsData(dietitianId, dietitianName, setSlotError, mockAppointments, mockMembers) {
   const [appointments, setAppointments] = useState(mockAppointments);
   const [members, setMembers] = useState(mockMembers);
+  const isMealPlanningGoal = (goalValue) => {
+    const normalized = String(goalValue || '').trim().toLowerCase();
+    if (!normalized) return true;
+    return normalized.includes('meal planning');
+  };
 
   const mapAppointmentRow = (item) => {
     const startsAt = new Date(item.startsAt);
@@ -166,7 +171,10 @@ export function useDietitianAppointmentsData(dietitianId, dietitianName, setSlot
 
       const approvedMembersMap = new Map();
       mapped
-        .filter((item) => item.rawStatus === 'approved' || item.rawStatus === 'completed')
+        .filter((item) => (
+          (item.rawStatus === 'approved' || item.rawStatus === 'completed')
+          && isMealPlanningGoal(item.goal)
+        ))
         .forEach((item) => {
           if (!approvedMembersMap.has(item.userId)) {
             approvedMembersMap.set(item.userId, {

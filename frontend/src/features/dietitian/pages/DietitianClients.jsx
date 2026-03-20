@@ -119,6 +119,11 @@ function DietitianClients() {
   const [mealSuggestions, setMealSuggestions] = useState([]);
   const [page, setPage] = useState(1);
   const [isDietPlanSubmitting, setIsDietPlanSubmitting] = useState(false);
+  const isMealPlanningGoal = (goalValue) => {
+    const normalized = String(goalValue || '').trim().toLowerCase();
+    if (!normalized) return true;
+    return normalized.includes('meal planning');
+  };
 
   const loadApprovedClients = useCallback(async () => {
     if (!dietitianId) return;
@@ -146,6 +151,8 @@ function DietitianClients() {
       ownItems
         .filter((item) => item.status === 'approved' || item.status === 'completed')
         .forEach((item) => {
+          const goal = getNoteValue(item.notes, 'Goal') || 'Meal Planning';
+          if (!isMealPlanningGoal(goal)) return;
           if (!mapByUser.has(item.userId)) {
             const startsAt = new Date(item.startsAt);
             mapByUser.set(item.userId, {
@@ -157,7 +164,7 @@ function DietitianClients() {
               age: 27,
               weight: 70,
               height: 170,
-              goal: getNoteValue(item.notes, 'Goal') || 'Meal Planning',
+              goal,
             });
           }
         });
