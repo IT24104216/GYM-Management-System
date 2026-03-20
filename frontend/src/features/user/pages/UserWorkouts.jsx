@@ -25,6 +25,7 @@ import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUnch
 import FlipRoundedIcon from '@mui/icons-material/FlipRounded';
 import { ROUTES } from '@/shared/utils/constants';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { getToken } from '@/shared/utils/storage';
 import {
   finishUserWorkoutSession,
   getUserWorkoutPlans,
@@ -33,12 +34,47 @@ import {
 } from '@/features/user/api/user.api';
 
 const MotionBox = motion(Box);
+const UPLOAD_WINDOW_STORAGE_KEY = 'progress.uploadWindow.v1';
+const GLOBAL_UPLOAD_WINDOW_STORAGE_KEY = 'progress.uploadWindow.latest';
+
+const getNextLocalMidnightTimestamp = () => {
+  const now = new Date();
+  const nextMidnight = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1,
+    0,
+    0,
+    0,
+    0,
+  );
+  return nextMidnight.getTime();
+};
 const getLocalIsoDate = () => {
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+};
+const getUserIdFromToken = () => {
+  try {
+    const token = getToken();
+    if (!token) return '';
+    const parts = String(token).split('.');
+    if (parts.length < 2) return '';
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((char) => `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`)
+        .join(''),
+    );
+    const payload = JSON.parse(json);
+    return String(payload?.sub || '').trim();
+  } catch {
+    return '';
+  }
 };
 const TODAY_MOCK_DATE = new Date().toLocaleDateString('en-US', {
   month: 'short',
@@ -191,10 +227,6 @@ const resolveExerciseInstruction = (exerciseItem, allExercises = []) => {
   return String(nameOnlyMatch?.description || '').trim() || 'Follow the coach instructions.';
 };
 
-const areExercisesCompleted = (items = []) => (
-  Array.isArray(items) && items.length > 0 && items.every((item) => Boolean(item?.done))
-);
-
 const hydrateInstructionsFromPlan = (items = [], plan = null) => {
   const planExercises = Array.isArray(plan?.exercises) ? plan.exercises : [];
   return items.map((exercise) => {
@@ -277,7 +309,8 @@ const mapPlansToWorkouts = (plans = []) => {
             level: day.level || 'Coach Plan',
             rating: Number(day.rating || 4.7),
             gradient: PLAN_GRADIENTS[(planIdx + dayIdx) % PLAN_GRADIENTS.length],
-            done: Boolean(day.done) || isCompleted,
+            // For multi-day plans, only mark the specific finished day as done.
+            done: Boolean(day.done),
             planExercises: dayExercises.length
               ? dayExercises.map(({ item, idx }) => ({
                 id: `${plan._id || `plan-${planIdx}`}-session-${day.dayNumber || dayIdx + 1}-${idx}`,
@@ -285,7 +318,7 @@ const mapPlansToWorkouts = (plans = []) => {
                 setsReps: item.amount || '',
                 focusArea: day.muscles || plan.planTitle || 'Workout',
                 instruction: resolveExerciseInstruction(item, planExercises),
-                done: isCompleted ? true : Boolean(progressMap.get(idx)),
+                done: day.done ? true : Boolean(progressMap.get(idx)),
                 flipped: false,
                 exerciseIndex: idx,
                 assignedMinutes: Number(item.assignedMinutes) > 0 ? Number(item.assignedMinutes) : 45,
@@ -296,7 +329,7 @@ const mapPlansToWorkouts = (plans = []) => {
                 setsReps: item.amount || '',
                 focusArea: day.muscles || plan.planTitle || 'Workout',
                 instruction: resolveExerciseInstruction(item, planExercises),
-                done: isCompleted ? true : Boolean(progressMap.get(itemIdx)),
+                done: day.done ? true : Boolean(progressMap.get(itemIdx)),
                 flipped: false,
                 exerciseIndex: itemIdx,
                 assignedMinutes: Number(item.assignedMinutes) > 0 ? Number(item.assignedMinutes) : 45,
@@ -474,7 +507,13 @@ function UserWorkouts() {
   const [sessionExercises, setSessionExercises] = useState(
     MOCK_WORKOUT_SESSION.exercises.map((exercise) => ({ ...exercise, flipped: false })),
   );
-  const userId = String(user?.id || '');
+  const tokenUserId = getUserIdFromToken();
+  const userId = String(user?.id || user?._id || user?.userId || tokenUserId || '');
+  const userIdCandidates = [...new Set(
+    [user?.id, user?._id, user?.userId, tokenUserId]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  )];
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
   const loadAssignedPlans = useCallback(async () => {
@@ -562,7 +601,7 @@ function UserWorkouts() {
       : MOCK_WORKOUT_SESSION.exercises;
     const seededExercises = workoutSessionExercises.map((exercise) => ({ ...exercise, done: Boolean(exercise.done), flipped: false }));
     setSessionExercises(seededExercises);
-    setSessionStatus((todayWorkout.done || areExercisesCompleted(seededExercises)) ? 'finished' : 'idle');
+    setSessionStatus(todayWorkout.done ? 'finished' : 'idle');
     setIsWorkoutSessionOpen(true);
 
     const sourcePlanId = todayWorkout?.sourcePlanId || '';
@@ -578,9 +617,6 @@ function UserWorkouts() {
         if (isCompletedByServer) {
           setSessionStatus('finished');
           return hydrated.map((item) => ({ ...item, done: true }));
-        }
-        if (areExercisesCompleted(hydrated)) {
-          setSessionStatus('finished');
         }
         return hydrated;
       });
@@ -619,16 +655,65 @@ function UserWorkouts() {
 
   const completeWorkoutSession = () => {
     const sourcePlanId = activeSessionWorkout?.sourcePlanId || todayWorkout?.sourcePlanId || '';
-    if (!sourcePlanId || !userId) return;
+    if (!sourcePlanId || !userId) {
+      const completedWorkoutDate = getLocalIsoDate();
+      try {
+        const token = JSON.stringify({
+          date: completedWorkoutDate,
+          expiresAt: getNextLocalMidnightTimestamp(),
+        });
+        if (userIdCandidates.length) {
+          userIdCandidates.forEach((idKey) => {
+            localStorage.setItem(`${UPLOAD_WINDOW_STORAGE_KEY}.${idKey}`, token);
+          });
+        }
+        localStorage.setItem(GLOBAL_UPLOAD_WINDOW_STORAGE_KEY, token);
+      } catch {
+        // ignore local storage failures
+      }
+
+      setSessionStarted(false);
+      setSessionStatus('finished');
+      setSessionToast({ open: true, message: 'Workout marked as finished. Redirecting to progress tracking...' });
+      setTimeout(() => {
+        handleCloseWorkoutSession();
+        navigate(ROUTES.USER_PROGRESS, {
+          state: {
+            completedWorkoutDate,
+            openedFromWorkoutFinish: true,
+          },
+        });
+      }, 500);
+      return;
+    }
 
     finishUserWorkoutSession(sourcePlanId, {
       userId,
       elapsedSeconds: elapsedSessionSeconds,
+      dayDate: getLocalIsoDate(),
     })
       .then((response) => {
         const payload = response?.data?.data || {};
         const completedWorkoutDate = payload.completedDate || getLocalIsoDate();
-        return loadAssignedPlans().then(() => completedWorkoutDate);
+        if (completedWorkoutDate) {
+          try {
+            const token = JSON.stringify({
+              date: completedWorkoutDate,
+              expiresAt: getNextLocalMidnightTimestamp(),
+            });
+            if (userIdCandidates.length) {
+              userIdCandidates.forEach((idKey) => {
+                localStorage.setItem(`${UPLOAD_WINDOW_STORAGE_KEY}.${idKey}`, token);
+              });
+            }
+            localStorage.setItem(GLOBAL_UPLOAD_WINDOW_STORAGE_KEY, token);
+          } catch {
+            // ignore local storage failures
+          }
+        }
+        return loadAssignedPlans()
+          .catch(() => undefined)
+          .then(() => completedWorkoutDate);
       })
       .then((completedWorkoutDate) => {
         setSessionStarted(false);
