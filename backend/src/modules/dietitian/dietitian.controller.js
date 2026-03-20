@@ -105,6 +105,8 @@ const toProfileDto = (userDoc, profileDoc, availability = {}) => ({
   slots: availability.slotsLabel || profileDoc.slots || 'No upcoming slots',
   slotDate: availability.slotDate || '',
   slotRanges: availability.slotRanges || [],
+  todaySlotDate: availability.todaySlotDate || '',
+  todaySlotRanges: availability.todaySlotRanges || [],
   qualification: profileDoc.qualifications || 'Certified Dietitian',
   certificates: profileDoc.licenseNumber || '-',
   tags: toTags(profileDoc.specialization),
@@ -291,6 +293,9 @@ export const getPublicDietitians = asyncHandler(async (_req, res) => {
       let availability = {};
 
       if (dietitianAvailability && dietitianAvailability.size > 0) {
+        const todaySlotRanges = (dietitianAvailability.get(todayIso) || []).sort(
+          (a, b) => a.startTime.localeCompare(b.startTime),
+        );
         const firstDate = Array.from(dietitianAvailability.keys()).sort()[0];
         const slotRanges = (dietitianAvailability.get(firstDate) || []).sort(
           (a, b) => a.startTime.localeCompare(b.startTime),
@@ -305,6 +310,8 @@ export const getPublicDietitians = asyncHandler(async (_req, res) => {
         availability = {
           slotDate: firstDate,
           slotRanges,
+          todaySlotDate: todaySlotRanges.length > 0 ? todayIso : '',
+          todaySlotRanges,
           slotsLabel: `${dateLabel}, ${timeLabel}${moreCount ? ` (+${moreCount} more)` : ''}`,
         };
       }

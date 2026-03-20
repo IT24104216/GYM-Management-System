@@ -169,6 +169,8 @@ const toProfileDto = (userDoc, profileDoc, availability = {}) => ({
   slots: availability.slotsLabel || profileDoc.slots || 'No upcoming slots',
   slotDate: availability.slotDate || '',
   slotRanges: availability.slotRanges || [],
+  todaySlotDate: availability.todaySlotDate || '',
+  todaySlotRanges: availability.todaySlotRanges || [],
   qualification: profileDoc.preferredTrainingType || 'Certified Fitness Coach',
   certificates: profileDoc.certifications || '-',
   tags: toTags(profileDoc.preferredTrainingType, profileDoc.specialization),
@@ -324,6 +326,9 @@ export const getPublicCoaches = asyncHandler(async (_req, res) => {
       let availability = {};
 
       if (coachAvailability && coachAvailability.size > 0) {
+        const todaySlotRanges = (coachAvailability.get(todayIso) || []).sort(
+          (a, b) => a.startTime.localeCompare(b.startTime),
+        );
         const firstDate = Array.from(coachAvailability.keys()).sort()[0];
         const slotRanges = (coachAvailability.get(firstDate) || []).sort(
           (a, b) => a.startTime.localeCompare(b.startTime),
@@ -339,6 +344,8 @@ export const getPublicCoaches = asyncHandler(async (_req, res) => {
         availability = {
           slotDate: firstDate,
           slotRanges,
+          todaySlotDate: todaySlotRanges.length > 0 ? todayIso : '',
+          todaySlotRanges,
           slotsLabel: `${dateLabel}, ${timeLabel}${moreCount ? ` (+${moreCount} more)` : ''}`,
         };
       }

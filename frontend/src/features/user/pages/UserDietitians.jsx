@@ -149,6 +149,13 @@ const toDisplayTime = (time24h) => {
 };
 
 const getDietitianSlotRanges = (dietitian) => {
+  if (Array.isArray(dietitian?.todaySlotRanges) && dietitian.todaySlotRanges.length > 0) {
+    return dietitian.todaySlotRanges.map((range) => ({
+      start: normalizeTimeTo24h(range?.startTime),
+      end: normalizeTimeTo24h(range?.endTime),
+    }));
+  }
+
   if (Array.isArray(dietitian?.slotRanges) && dietitian.slotRanges.length > 0) {
     return dietitian.slotRanges.map((range) => ({
       start: normalizeTimeTo24h(range?.startTime),
@@ -160,7 +167,8 @@ const getDietitianSlotRanges = (dietitian) => {
 
 const getDietitianSlotDisplayLines = (dietitian) => {
   const todayIso = getTodayDate();
-  if (!dietitian?.slotDate || dietitian.slotDate !== todayIso) return ['No slots'];
+  const hasTodaySlots = Array.isArray(dietitian?.todaySlotRanges) && dietitian.todaySlotRanges.length > 0;
+  if (!hasTodaySlots && (!dietitian?.slotDate || dietitian.slotDate !== todayIso)) return ['No slots'];
 
   const ranges = getDietitianSlotRanges(dietitian)
     .map((range) => ({

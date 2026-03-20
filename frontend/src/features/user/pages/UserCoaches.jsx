@@ -164,6 +164,13 @@ const toDisplayTime = (time24h) => {
 };
 
 const getCoachSlotRanges = (coach) => {
+  if (Array.isArray(coach?.todaySlotRanges) && coach.todaySlotRanges.length > 0) {
+    return coach.todaySlotRanges.map((range) => ({
+      start: normalizeTimeTo24h(range?.startTime),
+      end: normalizeTimeTo24h(range?.endTime),
+    }));
+  }
+
   if (Array.isArray(coach?.slotRanges) && coach.slotRanges.length > 0) {
     return coach.slotRanges.map((range) => ({
       start: normalizeTimeTo24h(range?.startTime),
@@ -175,7 +182,8 @@ const getCoachSlotRanges = (coach) => {
 
 const getCoachSlotDisplayLines = (coach) => {
   const todayIso = getTodayDate();
-  if (!coach?.slotDate || coach.slotDate !== todayIso) return ['No slots'];
+  const hasTodaySlots = Array.isArray(coach?.todaySlotRanges) && coach.todaySlotRanges.length > 0;
+  if (!hasTodaySlots && (!coach?.slotDate || coach.slotDate !== todayIso)) return ['No slots'];
 
   const ranges = getCoachSlotRanges(coach)
     .map((range) => ({
