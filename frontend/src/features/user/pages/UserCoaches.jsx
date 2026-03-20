@@ -342,6 +342,7 @@ function UserCoaches() {
         .split(',')
         .map((tag) => tag.trim())
         .filter(Boolean),
+      rejectReason: getNoteValue(item.notes, 'Reject Reason') || '',
       status,
       progressStatus,
       rawStatus: item.status,
@@ -1015,6 +1016,23 @@ function UserCoaches() {
                         </Stack>
                       </Box>
                     </Box>
+
+                    {booking.rawStatus === 'rejected' && booking.rejectReason && (
+                      <Box
+                        sx={{
+                          mt: 1.1,
+                          px: 1.2,
+                          py: 0.8,
+                          borderRadius: 1.5,
+                          border: '1px solid #ef444433',
+                          bgcolor: '#ef444411',
+                        }}
+                      >
+                        <Typography sx={{ color: '#ef4444', fontSize: '0.82rem', fontWeight: 700 }}>
+                          Rejected Reason: {booking.rejectReason}
+                        </Typography>
+                      </Box>
+                    )}
 
                     {booking.status === 'upcoming' && !isCancelled && !isCompleted && (
                       <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.4 }}>

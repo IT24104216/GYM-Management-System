@@ -5,6 +5,10 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Select,
   Snackbar,
@@ -15,6 +19,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
   useTheme,
 } from '@mui/material';
@@ -109,6 +114,13 @@ function CoachClients() {
   const [priorityById, setPriorityById] = useState({});
   const [flippedMemberIds, setFlippedMemberIds] = useState({});
   const [toast, setToast] = useState({ open: false, message: '' });
+  const [rejectDialog, setRejectDialog] = useState({
+    open: false,
+    appointment: null,
+    reason: '',
+    error: '',
+    isSubmitting: false,
+  });
 
   const mapAppointmentRow = useCallback((item) => {
     const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
@@ -128,6 +140,7 @@ function CoachClients() {
       branchUserId: getNoteValue(item.notes, 'Branch User ID') || '-',
       phone: getNoteValue(item.notes, 'Mobile') || '-',
       notes: getNoteValue(item.notes, 'Description') || item.notes || '-',
+      rawNotes: item.notes || '',
       status: item.status,
       startsAt: item.startsAt,
       createdAt: item.createdAt,
@@ -234,13 +247,56 @@ function CoachClients() {
     }
   };
 
-  const rejectRequest = async (id) => {
+  const openRejectDialog = (request) => {
+    setRejectDialog({
+      open: true,
+      appointment: request,
+      reason: '',
+      error: '',
+      isSubmitting: false,
+    });
+  };
+
+  const closeRejectDialog = () => {
+    setRejectDialog({
+      open: false,
+      appointment: null,
+      reason: '',
+      error: '',
+      isSubmitting: false,
+    });
+  };
+
+  const rejectRequest = async () => {
+    const request = rejectDialog.appointment;
+    const reason = rejectDialog.reason.trim();
+    if (!request?.id) return;
+    if (!reason) {
+      setRejectDialog((prev) => ({ ...prev, error: 'Please add a reject reason.' }));
+      return;
+    }
+
+    const existingSegments = String(request.rawNotes || '')
+      .split('|')
+      .map((segment) => segment.trim())
+      .filter((segment) => segment && !/^Reject Reason\s*:/i.test(segment));
+    const notesWithRejectReason = [...existingSegments, `Reject Reason: ${reason}`].join(' | ');
+
+    setRejectDialog((prev) => ({ ...prev, error: '', isSubmitting: true }));
     try {
-      await updateCoachAppointmentStatus(id, { status: 'rejected' });
+      await updateCoachAppointmentStatus(request.id, {
+        status: 'rejected',
+        notes: notesWithRejectReason,
+      });
       await loadAppointments();
       setToast({ open: true, message: 'Appointment rejected' });
+      closeRejectDialog();
     } catch (error) {
-      setToast({ open: true, message: error?.response?.data?.message || 'Failed to reject appointment' });
+      setRejectDialog((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        error: error?.response?.data?.message || 'Failed to reject appointment',
+      }));
     }
   };
 
@@ -356,7 +412,7 @@ function CoachClients() {
                         size="small"
                         variant="outlined"
                         color="error"
-                        onClick={() => rejectRequest(row.id)}
+                        onClick={() => openRejectDialog(row)}
                         sx={{ textTransform: 'none', borderRadius: 1.4 }}
                       >
                         Reject
@@ -507,6 +563,50 @@ function CoachClients() {
         message={toast.message}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       />
+
+      <Dialog
+        open={rejectDialog.open}
+        onClose={closeRejectDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Reject Appointment</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 1, color: muted, fontSize: '0.9rem' }}>
+            Add a reason for rejection. This will be shown in user booking history.
+          </Typography>
+          <Typography sx={{ mb: 1, color: 'text.primary', fontSize: '0.9rem', fontWeight: 700 }}>
+            {rejectDialog.appointment?.name || ''}
+          </Typography>
+          <TextField
+            fullWidth
+            required
+            label="Reject Reason"
+            multiline
+            minRows={3}
+            value={rejectDialog.reason}
+            onChange={(event) =>
+              setRejectDialog((prev) => ({ ...prev, reason: event.target.value, error: '' }))
+            }
+          />
+          {rejectDialog.error && (
+            <Typography sx={{ mt: 1, color: '#ef4444', fontSize: '0.84rem', fontWeight: 600 }}>
+              {rejectDialog.error}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRejectDialog}>Cancel</Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={rejectRequest}
+            disabled={rejectDialog.isSubmitting}
+          >
+            {rejectDialog.isSubmitting ? 'Submitting...' : 'Submit Rejection'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
