@@ -183,6 +183,14 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
   if (req.user?.role === 'user') {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
   }
+  const isTerminalDecision = ['approved', 'rejected'].includes(String(item.status));
+  const isDecisionUpdate = ['approved', 'rejected'].includes(String(payload.status));
+  if (isTerminalDecision && isDecisionUpdate) {
+    throw new AppError(
+      'This booking is already decided and cannot be approved/rejected again.',
+      HTTP_STATUS.CONFLICT,
+    );
+  }
 
   item.status = payload.status;
   if (typeof payload.notes === 'string') {
