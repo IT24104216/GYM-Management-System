@@ -312,7 +312,7 @@ export default function AdminPromotions() {
               </FormControl>
 
               <TextField
-                label="Budget ($)"
+                label="Budget (Rs)"
                 type="number"
                 value={form.budget}
                 onChange={updateField('budget')}
@@ -458,7 +458,7 @@ export default function AdminPromotions() {
                   <TrendingUpRoundedIcon sx={{ color: '#1565c0', fontSize: 18 }} />
                   <Typography sx={{ fontSize: '0.78rem', color: secondaryText }}>Budget</Typography>
                 </Stack>
-                <Typography sx={{ fontWeight: 900, color: primaryText }}>${totalBudget}</Typography>
+                <Typography sx={{ fontWeight: 900, color: primaryText }}>Rs {totalBudget}</Typography>
               </CardContent>
             </Card>
           </Box>
@@ -516,7 +516,7 @@ export default function AdminPromotions() {
                       )}
 
                       <Typography sx={{ mt: 0.6, fontSize: '0.78rem', color: secondaryText }}>
-                        {formatDateRange(campaign.startDate, campaign.endDate)} | Budget ${campaign.budget}
+                        {formatDateRange(campaign.startDate, campaign.endDate)} | Budget Rs {campaign.budget}
                       </Typography>
 
                       <Divider sx={{ my: 0.8 }} />
