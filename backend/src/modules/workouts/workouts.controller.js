@@ -49,6 +49,35 @@ function parseOrThrow(schema, payload) {
   return result.data;
 }
 
+const MIN_SESSION_SECONDS_ABSOLUTE = 120;
+const MIN_SESSION_COMPLETION_RATIO = 0.2;
+
+const toPositiveIntOrZero = (value) => {
+  const next = Number(value);
+  if (!Number.isFinite(next) || next <= 0) return 0;
+  return Math.floor(next);
+};
+
+const resolveAssignedMinutesForDay = (plan, day) => {
+  if (!day) return toPositiveIntOrZero(plan?.planDurationMinutes) || 45;
+  const directDayMinutes = toPositiveIntOrZero(day.durationMinutes);
+  if (directDayMinutes > 0) return directDayMinutes;
+
+  const allExercises = Array.isArray(plan?.exercises) ? plan.exercises : [];
+  const indexes = (
+    Array.isArray(day.assignedExerciseIndexes) && day.assignedExerciseIndexes.length
+      ? day.assignedExerciseIndexes
+      : (Array.isArray(day.exerciseIndexes) ? day.exerciseIndexes : [])
+  );
+  const summed = indexes.reduce((total, index) => {
+    const row = allExercises[Number(index)];
+    return total + toPositiveIntOrZero(row?.assignedMinutes);
+  }, 0);
+  if (summed > 0) return summed;
+
+  return toPositiveIntOrZero(plan?.planDurationMinutes) || 45;
+};
+
 
 export const getworkoutsStatus = (_req, res) => {
   res.json({
@@ -442,6 +471,9 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
       data: plan,
     });
   }
+  if (!plan.session?.startedAt) {
+    throw new AppError('Please start the workout session before finishing', HTTP_STATUS.CONFLICT);
+  }
 
   const progressMap = new Map(
     (Array.isArray(plan.session?.exerciseProgress) ? plan.session.exerciseProgress : [])
@@ -453,6 +485,24 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
   }
 
   const effectiveDay = toIsoDate(payload.dayDate) || todayIso();
+  const effectiveElapsedSeconds = Number.isFinite(payload.elapsedSeconds)
+    ? payload.elapsedSeconds
+    : Number(plan.session?.elapsedSeconds || 0);
+  const dayForFinish = Array.isArray(plan.programDays)
+    ? plan.programDays.find((day) => !day.isRest && day.date === effectiveDay)
+    : null;
+  const assignedMinutes = resolveAssignedMinutesForDay(plan, dayForFinish);
+  const minimumRequiredSeconds = Math.max(
+    MIN_SESSION_SECONDS_ABSOLUTE,
+    Math.floor(assignedMinutes * 60 * MIN_SESSION_COMPLETION_RATIO),
+  );
+  if (effectiveElapsedSeconds < minimumRequiredSeconds) {
+    throw new AppError(
+      `Workout completed too quickly. Please spend at least ${Math.ceil(minimumRequiredSeconds / 60)} minutes before finishing.`,
+      HTTP_STATUS.CONFLICT,
+    );
+  }
+
   if (Array.isArray(plan.programDays) && plan.programDays.length) {
     const targetIndex = plan.programDays.findIndex(
       (day) => !day.isRest && !day.done && day.date <= effectiveDay,
@@ -473,9 +523,7 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
     ...(plan.session?.toObject ? plan.session.toObject() : plan.session || {}),
     status: 'completed',
     completedAt: new Date(),
-    elapsedSeconds: Number.isFinite(payload.elapsedSeconds)
-      ? payload.elapsedSeconds
-      : Number(plan.session?.elapsedSeconds || 0),
+    elapsedSeconds: effectiveElapsedSeconds,
   };
   await plan.save();
 

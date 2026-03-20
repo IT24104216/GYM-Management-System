@@ -546,11 +546,9 @@ function UserWorkouts() {
       MOCK_WORKOUT_SESSION.estimatedDurationMinutes,
     );
   const activeSessionLimitSeconds = activeSessionDurationMinutes * 60;
-  const isCurrentExerciseSetCompleted = areExercisesCompleted(sessionExercises);
   const isSessionViewOnly = sessionDialogMode === 'view'
     || Boolean(activeSessionWorkout?.done)
-    || sessionStatus === 'finished'
-    || isCurrentExerciseSetCompleted;
+    || sessionStatus === 'finished';
   const canFlipInSession = sessionDialogMode === 'view' || !isSessionViewOnly;
 
   const handleOpenWorkoutSession = async () => {
