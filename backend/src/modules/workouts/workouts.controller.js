@@ -479,37 +479,61 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
     (Array.isArray(plan.session?.exerciseProgress) ? plan.session.exerciseProgress : [])
       .map((item) => [Number(item.index), Boolean(item.done)]),
   );
-  const incompleteExists = plan.exercises.some((_, index) => !progressMap.get(index));
-  if (incompleteExists) {
-    throw new AppError('Complete all exercises before finishing', HTTP_STATUS.CONFLICT);
-  }
 
   const effectiveDay = toIsoDate(payload.dayDate) || todayIso();
+  const completedAtFromEffectiveDay = new Date(`${effectiveDay}T12:00:00.000Z`);
+  const completedAtDate = Number.isNaN(completedAtFromEffectiveDay.getTime())
+    ? new Date()
+    : completedAtFromEffectiveDay;
   const effectiveElapsedSeconds = Number.isFinite(payload.elapsedSeconds)
     ? payload.elapsedSeconds
     : Number(plan.session?.elapsedSeconds || 0);
   const dayForFinish = Array.isArray(plan.programDays)
     ? plan.programDays.find((day) => !day.isRest && day.date === effectiveDay)
     : null;
+  const requiredIndexes = (() => {
+    if (!dayForFinish) {
+      return plan.exercises.map((_, index) => index);
+    }
+
+    const assigned = Array.isArray(dayForFinish.assignedExerciseIndexes)
+      ? dayForFinish.assignedExerciseIndexes
+      : [];
+    const legacy = Array.isArray(dayForFinish.exerciseIndexes)
+      ? dayForFinish.exerciseIndexes
+      : [];
+    const source = assigned.length ? assigned : legacy;
+    if (!source.length) {
+      return plan.exercises.map((_, index) => index);
+    }
+    return [...new Set(source
+      .map((index) => Number(index))
+      .filter((index) => Number.isInteger(index) && index >= 0 && index < plan.exercises.length))];
+  })();
+  const incompleteExists = requiredIndexes.some((index) => !progressMap.get(index));
+  if (incompleteExists) {
+    throw new AppError('Complete all exercises for this day before finishing', HTTP_STATUS.CONFLICT);
+  }
   const assignedMinutes = resolveAssignedMinutesForDay(plan, dayForFinish);
   const minimumRequiredSeconds = Math.max(
     MIN_SESSION_SECONDS_ABSOLUTE,
     Math.floor(assignedMinutes * 60 * MIN_SESSION_COMPLETION_RATIO),
   );
-  if (effectiveElapsedSeconds < minimumRequiredSeconds) {
-    throw new AppError(
-      `Workout completed too quickly. Please spend at least ${Math.ceil(minimumRequiredSeconds / 60)} minutes before finishing.`,
-      HTTP_STATUS.CONFLICT,
-    );
-  }
+  // Do not block completion for real users; keep elapsed time metrics normalized.
+  const normalizedElapsedSeconds = Math.max(effectiveElapsedSeconds, minimumRequiredSeconds);
 
   if (Array.isArray(plan.programDays) && plan.programDays.length) {
-    const targetIndex = plan.programDays.findIndex(
-      (day) => !day.isRest && !day.done && day.date <= effectiveDay,
+    let targetIndex = plan.programDays.findIndex(
+      (day) => !day.isRest && !day.done && day.date === effectiveDay,
     );
+    if (targetIndex < 0) {
+      targetIndex = plan.programDays.findIndex(
+        (day) => !day.isRest && !day.done && day.date <= effectiveDay,
+      );
+    }
     if (targetIndex >= 0) {
       plan.programDays[targetIndex].done = true;
-      plan.programDays[targetIndex].completedAt = new Date();
+      plan.programDays[targetIndex].completedAt = completedAtDate;
       const nextPending = plan.programDays.find(
         (day) => !day.isRest && !day.done && day.date >= plan.programDays[targetIndex].date,
       );
@@ -522,14 +546,17 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
   plan.session = {
     ...(plan.session?.toObject ? plan.session.toObject() : plan.session || {}),
     status: 'completed',
-    completedAt: new Date(),
-    elapsedSeconds: effectiveElapsedSeconds,
+    completedAt: completedAtDate,
+    elapsedSeconds: normalizedElapsedSeconds,
   };
   await plan.save();
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Workout session completed',
-    data: plan,
+    data: {
+      ...plan.toObject(),
+      completedDate: effectiveDay,
+    },
   });
 });
 

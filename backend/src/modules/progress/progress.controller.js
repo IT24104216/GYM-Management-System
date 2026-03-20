@@ -56,14 +56,34 @@ const mapMeasurementsByDate = (measurements = []) => {
 };
 
 const getWorkoutCompletionDates = async (userId) => {
-  const plans = await WorkoutPlan.find({
-    userId,
-    $or: [{ status: 'completed' }, { 'session.status': 'completed' }],
-  }).select('session.completedAt updatedAt');
+  const plans = await WorkoutPlan.find({ userId }).select(
+    'status session.status session.completedAt programDays.date programDays.done updatedAt createdAt',
+  );
 
-  const dates = plans
-    .map((plan) => toIsoDate(plan?.session?.completedAt || plan.updatedAt))
-    .filter(Boolean);
+  const dates = [];
+  plans.forEach((plan) => {
+    const sessionStatus = String(plan?.session?.status || '').toLowerCase();
+    const planStatus = String(plan?.status || '').toLowerCase();
+    const sessionCompletedAt = toIsoDate(plan?.session?.completedAt || '');
+
+    if (sessionStatus === 'completed' || sessionStatus === 'finished') {
+      if (sessionCompletedAt) {
+        dates.push(sessionCompletedAt);
+      } else {
+        const fallbackSessionDate = toIsoDate(plan?.updatedAt || plan?.createdAt || '');
+        if (fallbackSessionDate) dates.push(fallbackSessionDate);
+      }
+    } else if (planStatus === 'completed' || planStatus === 'finished') {
+      const fallbackPlanDate = toIsoDate(plan?.updatedAt || plan?.createdAt || '');
+      if (fallbackPlanDate) dates.push(fallbackPlanDate);
+    }
+
+    const dayDates = (Array.isArray(plan?.programDays) ? plan.programDays : [])
+      .filter((day) => Boolean(day?.done))
+      .map((day) => toIsoDate(day?.date || ''))
+      .filter(Boolean);
+    dates.push(...dayDates);
+  });
 
   const uniqueSorted = Array.from(new Set(dates)).sort();
   return {

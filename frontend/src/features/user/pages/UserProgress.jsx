@@ -29,11 +29,22 @@ import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getUserProgress, saveUserMeasurement } from '@/features/user/api/user.api';
+import { getToken } from '@/shared/utils/storage';
+import { getUserProgress, getUserWorkoutPlans, saveUserMeasurement } from '@/features/user/api/user.api';
 
 const MotionCard = motion(Card);
+const UPLOAD_WINDOW_STORAGE_KEY = 'progress.uploadWindow.v1';
+const GLOBAL_UPLOAD_WINDOW_STORAGE_KEY = 'progress.uploadWindow.latest';
+const PROGRESS_PHOTOS_STORAGE_KEY = 'progress.photosByDate.v1';
+const GLOBAL_PROGRESS_PHOTOS_STORAGE_KEY = 'progress.photosByDate.latest';
 
-const getTodayIso = () => new Date().toISOString().split('T')[0];
+const getTodayIso = () => {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 const formatIsoToFull = (isoDate) => new Date(`${isoDate}T00:00:00`).toLocaleDateString('en-US', {
   month: 'short',
   day: 'numeric',
@@ -48,6 +59,70 @@ const toIsoDate = (dateValue) => {
   const mm = String(dateValue.getMonth() + 1).padStart(2, '0');
   const dd = String(dateValue.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+};
+const normalizeIsoDateInput = (value) => {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return toIsoDate(parsed);
+};
+const isUploadTokenValidForToday = (token, todayDate) => {
+  if (!token || token.date !== todayDate) return false;
+  if (!Number.isFinite(Number(token.expiresAt))) return false;
+  return Date.now() < Number(token.expiresAt);
+};
+const getNextLocalMidnightTimestamp = () => {
+  const now = new Date();
+  const nextMidnight = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1,
+    0,
+    0,
+    0,
+    0,
+  );
+  return nextMidnight.getTime();
+};
+const getUserIdFromToken = () => {
+  try {
+    const token = getToken();
+    if (!token) return '';
+    const parts = String(token).split('.');
+    if (parts.length < 2) return '';
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((char) => `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`)
+        .join(''),
+    );
+    const payload = JSON.parse(json);
+    return String(payload?.sub || '').trim();
+  } catch {
+    return '';
+  }
+};
+const extractCompletionDatesFromPlans = (plans = []) => {
+  const extracted = new Set();
+  (Array.isArray(plans) ? plans : []).forEach((plan) => {
+    const sessionCompleted = normalizeIsoDateInput(plan?.session?.completedAt || '');
+    if (sessionCompleted) extracted.add(sessionCompleted);
+    const isCompletedSession = String(plan?.session?.status || '').toLowerCase() === 'completed';
+    const isCompletedPlan = String(plan?.status || '').toLowerCase() === 'completed';
+    if ((isCompletedSession || isCompletedPlan) && !sessionCompleted) {
+      const completedFallback = normalizeIsoDateInput(plan?.updatedAt || plan?.createdAt || '');
+      if (completedFallback) extracted.add(completedFallback);
+    }
+    const days = Array.isArray(plan?.programDays) ? plan.programDays : [];
+    days.forEach((day) => {
+      if (!day?.done) return;
+      const dayDate = normalizeIsoDateInput(day?.date || '');
+      if (dayDate) extracted.add(dayDate);
+    });
+  });
+  return [...extracted].sort((left, right) => new Date(`${left}T00:00:00`) - new Date(`${right}T00:00:00`));
 };
 
 const buildCalendarDays = (visibleMonthDate) => {
@@ -214,19 +289,38 @@ const getConsecutiveWorkoutStreak = (completionDates, todayIso) => {
 function UserProgress() {
   const { user } = useAuth();
   const location = useLocation();
-  const userId = String(user?.id || user?._id || '');
+  const tokenUserId = getUserIdFromToken();
+  const userId = String(user?.id || user?._id || user?.userId || tokenUserId || '');
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const todayIso = getTodayIso();
-  const completedWorkoutDateFromState = location.state?.completedWorkoutDate || '';
+  const completedWorkoutDateFromState = normalizeIsoDateInput(location.state?.completedWorkoutDate || '');
   const openedFromWorkoutFinish = Boolean(location.state?.openedFromWorkoutFinish);
 
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [calendarAnchorEl, setCalendarAnchorEl] = useState(null);
   const [visibleMonth, setVisibleMonth] = useState(() => new Date(todayIso));
-  const [photosByDate, setPhotosByDate] = useState(() => ({
-    [todayIso]: createPhotoSlots(),
-  }));
+  const [photosByDate, setPhotosByDate] = useState(() => {
+    try {
+      const raw = localStorage.getItem(GLOBAL_PROGRESS_PHOTOS_STORAGE_KEY);
+      if (!raw) {
+        return {
+          [todayIso]: createPhotoSlots(),
+        };
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') {
+        return {
+          [todayIso]: createPhotoSlots(),
+        };
+      }
+      return parsed;
+    } catch {
+      return {
+        [todayIso]: createPhotoSlots(),
+      };
+    }
+  });
   const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
   const [editingPhotoIndex, setEditingPhotoIndex] = useState(null);
   const [isMeasurementDialogOpen, setIsMeasurementDialogOpen] = useState(false);
@@ -246,15 +340,72 @@ function UserProgress() {
   const [measurementsByDate, setMeasurementsByDate] = useState({});
   const [completionDate, setCompletionDate] = useState('');
   const [workoutCompletionDates, setWorkoutCompletionDates] = useState([]);
+  const [workoutCompletionDatesFromPlans, setWorkoutCompletionDatesFromPlans] = useState([]);
+  const uploadWindowDateFromStorage = useMemo(() => {
+    const possibleIds = [...new Set(
+      [user?.id, user?._id, user?.userId, tokenUserId]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    )];
+    if (!possibleIds.length) return '';
+    try {
+      for (const idKey of possibleIds) {
+        const raw = localStorage.getItem(`${UPLOAD_WINDOW_STORAGE_KEY}.${idKey}`);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        const normalized = normalizeIsoDateInput(parsed?.date || '');
+        const token = { ...parsed, date: normalized };
+        if (!isUploadTokenValidForToday(token, todayIso)) {
+          localStorage.removeItem(`${UPLOAD_WINDOW_STORAGE_KEY}.${idKey}`);
+          continue;
+        }
+        return normalized;
+      }
+      return '';
+    } catch {
+      return '';
+    }
+  }, [todayIso, tokenUserId, user?.id, user?._id, user?.userId]);
+  const uploadWindowDateFromGlobalStorage = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(GLOBAL_UPLOAD_WINDOW_STORAGE_KEY);
+      if (!raw) return '';
+      const parsed = JSON.parse(raw);
+      const normalized = normalizeIsoDateInput(parsed?.date || '');
+      const token = { ...parsed, date: normalized };
+      if (!isUploadTokenValidForToday(token, todayIso)) {
+        localStorage.removeItem(GLOBAL_UPLOAD_WINDOW_STORAGE_KEY);
+        return '';
+      }
+      return normalized;
+    } catch {
+      return '';
+    }
+  }, [todayIso]);
   const mergedCompletionDates = useMemo(() => {
     const merged = new Set(Array.isArray(workoutCompletionDates) ? workoutCompletionDates : []);
     if (completedWorkoutDateFromState) merged.add(completedWorkoutDateFromState);
+    if (uploadWindowDateFromStorage) merged.add(uploadWindowDateFromStorage);
+    if (uploadWindowDateFromGlobalStorage) merged.add(uploadWindowDateFromGlobalStorage);
+    (Array.isArray(workoutCompletionDatesFromPlans) ? workoutCompletionDatesFromPlans : []).forEach((date) => merged.add(date));
     return [...merged].sort((left, right) => new Date(`${left}T00:00:00`) - new Date(`${right}T00:00:00`));
-  }, [workoutCompletionDates, completedWorkoutDateFromState]);
+  }, [
+    workoutCompletionDates,
+    completedWorkoutDateFromState,
+    uploadWindowDateFromStorage,
+    uploadWindowDateFromGlobalStorage,
+    workoutCompletionDatesFromPlans,
+  ]);
   const latestCompletionDate = mergedCompletionDates.length
     ? mergedCompletionDates[mergedCompletionDates.length - 1]
     : '';
-  const effectiveCompletionDate = completionDate || latestCompletionDate;
+  const hasTodayCompletionEvidence = (
+    mergedCompletionDates.includes(todayIso)
+    || completedWorkoutDateFromState === todayIso
+    || uploadWindowDateFromStorage === todayIso
+    || uploadWindowDateFromGlobalStorage === todayIso
+  );
+  const effectiveCompletionDate = completionDate || latestCompletionDate || (hasTodayCompletionEvidence ? todayIso : '');
   const completionDateFull = effectiveCompletionDate ? formatIsoToFull(effectiveCompletionDate) : '';
   const selectedDateFull = formatIsoToFull(selectedDate);
   const selectedDateShort = formatIsoToShort(selectedDate);
@@ -262,27 +413,47 @@ function UserProgress() {
     month: 'long',
     year: 'numeric',
   });
-  const canUploadSelectedDate = mergedCompletionDates.includes(selectedDate);
+  const canUploadToday = selectedDate === todayIso && hasTodayCompletionEvidence;
+  const canUploadSelectedDate = canUploadToday || mergedCompletionDates.includes(selectedDate);
   const selectedDatePhotos = photosByDate[selectedDate] || createPhotoSlots();
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const isCalendarOpen = Boolean(calendarAnchorEl);
 
   const loadProgressData = useCallback(async () => {
     if (!userId) return;
-    try {
-      const { data } = await getUserProgress(userId);
-      const payload = data?.data || {};
+    const [progressResult, workoutPlansResult] = await Promise.allSettled([
+      getUserProgress(userId),
+      getUserWorkoutPlans(userId),
+    ]);
+
+    if (progressResult.status === 'fulfilled') {
+      const payload = progressResult.value?.data?.data || {};
       const nextWeightHistory = payload.weightHistoryByDate || {};
       const nextMeasurements = payload.measurementsByDate || {};
 
       setWeightHistoryByDate(nextWeightHistory);
       setMeasurementsByDate(nextMeasurements);
-      setWorkoutCompletionDates(Array.isArray(payload.workoutCompletionDates) ? payload.workoutCompletionDates : []);
-      setCompletionDate(payload.completionDate || '');
-    } catch (error) {
+      setWorkoutCompletionDates(
+        Array.isArray(payload.workoutCompletionDates)
+          ? payload.workoutCompletionDates.map((date) => normalizeIsoDateInput(date)).filter(Boolean)
+          : [],
+      );
+      setCompletionDate(normalizeIsoDateInput(payload.completionDate || ''));
+    }
+
+    if (workoutPlansResult.status === 'fulfilled') {
+      const plansPayload = Array.isArray(workoutPlansResult.value?.data?.data)
+        ? workoutPlansResult.value.data.data
+        : [];
+      setWorkoutCompletionDatesFromPlans(extractCompletionDatesFromPlans(plansPayload));
+    }
+
+    if (progressResult.status === 'rejected' && workoutPlansResult.status === 'rejected') {
+      const progressMessage = progressResult.reason?.response?.data?.message;
+      const plansMessage = workoutPlansResult.reason?.response?.data?.message;
       setPhotoToast({
         open: true,
-        message: error?.response?.data?.message || 'Failed to load progress data.',
+        message: progressMessage || plansMessage || 'Failed to load progress data.',
       });
     }
   }, [userId]);
@@ -293,6 +464,45 @@ function UserProgress() {
     }, 0);
     return () => clearTimeout(timer);
   }, [loadProgressData]);
+
+  useEffect(() => {
+    const possibleIds = [...new Set(
+      [user?.id, user?._id, user?.userId, tokenUserId]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    )];
+    if (!possibleIds.length) return;
+    try {
+      const serialized = JSON.stringify(photosByDate);
+      possibleIds.forEach((idKey) => {
+        localStorage.setItem(`${PROGRESS_PHOTOS_STORAGE_KEY}.${idKey}`, serialized);
+      });
+      localStorage.setItem(GLOBAL_PROGRESS_PHOTOS_STORAGE_KEY, serialized);
+    } catch {
+      // ignore storage failures
+    }
+  }, [photosByDate, tokenUserId, user?.id, user?._id, user?.userId]);
+
+  useEffect(() => {
+    if (!hasTodayCompletionEvidence) return;
+    try {
+      const token = JSON.stringify({
+        date: todayIso,
+        expiresAt: getNextLocalMidnightTimestamp(),
+      });
+      const possibleIds = [...new Set(
+        [user?.id, user?._id, user?.userId, tokenUserId]
+          .map((value) => String(value || '').trim())
+          .filter(Boolean),
+      )];
+      possibleIds.forEach((idKey) => {
+        localStorage.setItem(`${UPLOAD_WINDOW_STORAGE_KEY}.${idKey}`, token);
+      });
+      localStorage.setItem(GLOBAL_UPLOAD_WINDOW_STORAGE_KEY, token);
+    } catch {
+      // ignore storage failures
+    }
+  }, [hasTodayCompletionEvidence, todayIso, tokenUserId, user?.id, user?._id, user?.userId]);
 
   useEffect(() => {
     if (!completedWorkoutDateFromState) return;
@@ -418,7 +628,7 @@ function UserProgress() {
     const currentBodyFat = hasBodyFatData ? sortedBodyFatHistory[sortedBodyFatHistory.length - 1].bodyFat : null;
     const bodyFatDelta = hasBodyFatData ? Number((currentBodyFat - baselineBodyFat).toFixed(1)) : null;
 
-    const streak = getConsecutiveWorkoutStreak(workoutCompletionDates, todayIso);
+    const streak = getConsecutiveWorkoutStreak(mergedCompletionDates, todayIso);
 
     return METRIC_CARD_META.map((item) => {
       if (item.id === 'weight') {
@@ -459,7 +669,7 @@ function UserProgress() {
         changeColor: '#f59e0b',
       };
     });
-  }, [measurementsByDate, todayIso, weightHistoryByDate, workoutCompletionDates]);
+  }, [measurementsByDate, mergedCompletionDates, todayIso, weightHistoryByDate]);
 
   const hoveredPoint = hoveredChartPoint;
   const hoveredItem = hoveredChartPoint ? chartData.weightHistory[hoveredChartPoint.index] : null;
@@ -904,6 +1114,18 @@ function UserProgress() {
                     strokeWidth="3"
                     strokeLinecap="round"
                   />
+
+                  {chartData.points.map((point, index) => (
+                    <circle
+                      key={`point-${chartData.labels[index] || index}`}
+                      cx={point.x}
+                      cy={point.y}
+                      r="4"
+                      fill="#0d9488"
+                      stroke="#ffffff"
+                      strokeWidth="1.5"
+                    />
+                  ))}
 
                   {hoveredPoint && hoveredItem && (
                     <>
