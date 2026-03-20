@@ -40,6 +40,11 @@ const mealSections = [
   { key: 'dinner', title: 'Dinner Options', icon: '🌙' },
   { key: 'snacks', title: 'Snacks Options', icon: '🍎' },
 ];
+const MEAL_CATEGORY_LABELS = {
+  weight_gain: 'Weight Gaining',
+  weight_loss: 'Weight Losing',
+  other: 'Other',
+};
 
 const createMealOption = () => ({
   mealName: '',
@@ -440,6 +445,9 @@ function DietitianClients() {
     }
   };
 
+  const getMealCategoryLabel = (category) =>
+    MEAL_CATEGORY_LABELS[String(category || '').trim()] || 'Other';
+
   const saveDietPlanDraft = async () => {
     await upsertAndMaybeSubmitDietPlan(false);
   };
@@ -718,6 +726,41 @@ function DietitianClients() {
                         getOptionLabel={(mealOption) =>
                           typeof mealOption === 'string' ? mealOption : mealOption.mealName || ''
                         }
+                        renderOption={(props, mealOption) => {
+                          if (typeof mealOption === 'string') {
+                            return (
+                              <Box component="li" {...props}>
+                                <Typography sx={{ fontSize: '0.95rem' }}>{mealOption}</Typography>
+                              </Box>
+                            );
+                          }
+                          return (
+                            <Box
+                              component="li"
+                              {...props}
+                              sx={{
+                                width: '100%',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: 1,
+                              }}
+                            >
+                              <Typography sx={{ fontSize: '0.95rem' }}>
+                                {mealOption.mealName || ''}
+                              </Typography>
+                              <Chip
+                                size="small"
+                                label={getMealCategoryLabel(mealOption.category)}
+                                sx={{
+                                  fontWeight: 700,
+                                  bgcolor: '#dbeafe',
+                                  color: '#1d4ed8',
+                                }}
+                              />
+                            </Box>
+                          );
+                        }}
                         value={option.mealName || ''}
                         onInputChange={(_, value) =>
                           updateMealField(section.key, index, 'mealName', value)
