@@ -14,7 +14,14 @@ import {
   registerSchema,
   resetPasswordSchema,
 } from './auth.validation.js';
-import { normalizeRole } from '../../shared/utils/roles.js';
+import {
+  escapeRegex,
+  getBranchCode,
+  hashResetToken,
+  isLikelyEmail,
+  isValidEmailFormat,
+  toPublicUser,
+} from './auth.utils.js';
 
 function parseOrThrow(schema, payload) {
   const result = schema.safeParse(payload);
@@ -23,36 +30,6 @@ function parseOrThrow(schema, payload) {
   }
   return result.data;
 }
-
-const isLikelyEmail = (value = '') => String(value).includes('@');
-const isValidEmailFormat = (value = '') => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
-
-function toPublicUser(userDoc) {
-  return {
-    id: String(userDoc._id),
-    branchUserId: userDoc.branchUserId || '',
-    name: userDoc.name,
-    email: userDoc.email,
-    role: normalizeRole(userDoc.role),
-    status: userDoc.status,
-    branch: userDoc.branch || '',
-    notificationPreferences: {
-      email: userDoc.notificationPreferences?.email ?? true,
-      push: userDoc.notificationPreferences?.push ?? true,
-    },
-  };
-}
-
-const getBranchCode = (branch) => {
-  const normalized = String(branch || '')
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9 ]/g, '');
-  if (!normalized) return 'BR';
-  const parts = normalized.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2);
-  return parts.map((part) => part[0]).join('').slice(0, 3);
-};
 
 const generateBranchUserId = async (branch) => {
   const code = getBranchCode(branch);
@@ -74,9 +51,6 @@ const generateBranchUserId = async (branch) => {
 
   throw new AppError('Failed to generate branch user id', HTTP_STATUS.INTERNAL_SERVER_ERROR);
 };
-
-const hashResetToken = (rawToken) =>
-  crypto.createHash('sha256').update(String(rawToken || '')).digest('hex');
 
 const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
 
@@ -158,7 +132,7 @@ export const login = asyncHandler(async (req, res) => {
   const user = await User.findOne({
     $or: [
       { email: byEmail },
-      { name: { $regex: `^${identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } },
+      { name: { $regex: `^${escapeRegex(identifier)}$`, $options: 'i' } },
     ],
   });
   if (!user) {

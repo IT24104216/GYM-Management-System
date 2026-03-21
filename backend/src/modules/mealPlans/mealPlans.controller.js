@@ -40,6 +40,7 @@ import {
   mapLocalNutritionRows,
   mapUsdaFoods,
 } from './mealPlans.mapper.js';
+import { mergeNutritionResults } from './mealPlans.search.utils.js';
 
 const parseOrThrow = (schema, payload) => {
   const result = schema.safeParse(payload);
@@ -410,14 +411,6 @@ export const searchNutritionFoods = asyncHandler(async (req, res) => {
     }
   }
 
-  const merged = [...localResults, ...externalResults];
-  const seen = new Set();
-  const deduped = merged.filter((item) => {
-    const key = String(item.name || '').trim().toLowerCase();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  res.status(HTTP_STATUS.OK).json({ data: deduped.slice(0, 20) });
+  const merged = mergeNutritionResults(localResults, externalResults, 20);
+  res.status(HTTP_STATUS.OK).json({ data: merged });
 });

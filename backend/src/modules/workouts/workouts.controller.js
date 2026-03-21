@@ -36,6 +36,10 @@ import {
   todayIso,
 } from './workouts.service.js';
 import { mapWorkoutRequest } from './workouts.mapper.js';
+import {
+  getMinimumRequiredSessionSeconds,
+  resolveAssignedMinutesForDay,
+} from './workouts.session.utils.js';
 
 function parseOrThrow(schema, payload) {
   const result = schema.safeParse(payload);
@@ -48,36 +52,6 @@ function parseOrThrow(schema, payload) {
   }
   return result.data;
 }
-
-const MIN_SESSION_SECONDS_ABSOLUTE = 120;
-const MIN_SESSION_COMPLETION_RATIO = 0.2;
-
-const toPositiveIntOrZero = (value) => {
-  const next = Number(value);
-  if (!Number.isFinite(next) || next <= 0) return 0;
-  return Math.floor(next);
-};
-
-const resolveAssignedMinutesForDay = (plan, day) => {
-  if (!day) return toPositiveIntOrZero(plan?.planDurationMinutes) || 45;
-  const directDayMinutes = toPositiveIntOrZero(day.durationMinutes);
-  if (directDayMinutes > 0) return directDayMinutes;
-
-  const allExercises = Array.isArray(plan?.exercises) ? plan.exercises : [];
-  const indexes = (
-    Array.isArray(day.assignedExerciseIndexes) && day.assignedExerciseIndexes.length
-      ? day.assignedExerciseIndexes
-      : (Array.isArray(day.exerciseIndexes) ? day.exerciseIndexes : [])
-  );
-  const summed = indexes.reduce((total, index) => {
-    const row = allExercises[Number(index)];
-    return total + toPositiveIntOrZero(row?.assignedMinutes);
-  }, 0);
-  if (summed > 0) return summed;
-
-  return toPositiveIntOrZero(plan?.planDurationMinutes) || 45;
-};
-
 
 export const getworkoutsStatus = (_req, res) => {
   res.json({
@@ -515,10 +489,7 @@ export const finishWorkoutSession = asyncHandler(async (req, res) => {
     throw new AppError('Complete all exercises for this day before finishing', HTTP_STATUS.CONFLICT);
   }
   const assignedMinutes = resolveAssignedMinutesForDay(plan, dayForFinish);
-  const minimumRequiredSeconds = Math.max(
-    MIN_SESSION_SECONDS_ABSOLUTE,
-    Math.floor(assignedMinutes * 60 * MIN_SESSION_COMPLETION_RATIO),
-  );
+  const minimumRequiredSeconds = getMinimumRequiredSessionSeconds(assignedMinutes);
   // Do not block completion for real users; keep elapsed time metrics normalized.
   const normalizedElapsedSeconds = Math.max(effectiveElapsedSeconds, minimumRequiredSeconds);
 

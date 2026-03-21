@@ -8,6 +8,7 @@ import { DietitianProfile } from '../dietitian/dietitianProfile.model.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
+import { formatTrend, getMonthRange, REPORT_MONTHS, toUserDto } from './admin.utils.js';
 
 const ROLE_SET = new Set(['user', 'coach', 'dietitian', 'admin']);
 const STATUS_SET = new Set(['active', 'inactive', 'suspended']);
@@ -43,19 +44,6 @@ const adminPasswordSchema = z.object({
   }
 });
 
-const toUiRole = {
-  user: 'Member',
-  coach: 'Coach',
-  dietitian: 'Dietician',
-  admin: 'Admin',
-};
-
-const toUiStatus = {
-  active: 'Active',
-  inactive: 'Inactive',
-  suspended: 'Suspended',
-};
-
 function parseOrThrow(schema, payload) {
   const result = schema.safeParse(payload);
   if (!result.success) {
@@ -79,40 +67,6 @@ async function getAdminByIdOrThrow(adminId) {
   }
 
   return admin;
-}
-
-function toUserDto(userDoc) {
-  const roleChangedAt = userDoc.roleChangedAt || null;
-  return {
-    id: String(userDoc._id),
-    branchUserId: userDoc.branchUserId || '',
-    branch: userDoc.branch || '',
-    name: userDoc.name,
-    email: userDoc.email,
-    role: toUiRole[userDoc.role] || 'Member',
-    status: toUiStatus[userDoc.status] || 'Active',
-    joined: new Date(userDoc.createdAt).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    }),
-    avatar: userDoc.name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() || '')
-      .join('') || 'U',
-    roleChangedAt,
-    roleChangedAtLabel: roleChangedAt
-      ? new Date(roleChangedAt).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-      : null,
-  };
 }
 
 export const getAdminStatus = (_req, res) => {
@@ -328,40 +282,7 @@ export const getAdminStats = asyncHandler(async (_req, res) => {
   });
 });
 
-const REPORT_MONTHS = 7;
 const REPORT_HOURLY_RATE_USD = 40;
-
-const monthLabel = (date) =>
-  date.toLocaleString('en-US', { month: 'short' });
-
-const monthKey = (date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
-};
-
-const getMonthRange = (months = REPORT_MONTHS) => {
-  const now = new Date();
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const range = [];
-  for (let i = months - 1; i >= 0; i -= 1) {
-    const d = new Date(currentMonthStart.getFullYear(), currentMonthStart.getMonth() - i, 1);
-    range.push({
-      key: monthKey(d),
-      label: monthLabel(d),
-      start: d,
-      end: new Date(d.getFullYear(), d.getMonth() + 1, 1),
-    });
-  }
-  return range;
-};
-
-const formatTrend = (current, previous) => {
-  if (!previous) return '+0%';
-  const pct = ((current - previous) / previous) * 100;
-  const sign = pct >= 0 ? '+' : '';
-  return `${sign}${pct.toFixed(1)}%`;
-};
 
 export const getAdminReportsOverview = asyncHandler(async (_req, res) => {
   const months = getMonthRange(REPORT_MONTHS);

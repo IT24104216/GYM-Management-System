@@ -15,6 +15,13 @@ import {
   dietitianSlotIdParamsSchema,
   updateDietitianSlotSchema,
 } from './dietitian.validation.js';
+import {
+  hasStartTimePassedForToday,
+  hasTimeOverlap,
+  isEndAfterStart,
+  isPastSlot,
+  toLocalIsoDate,
+} from './dietitianScheduling.utils.js';
 
 const parseOrThrow = (schema, payload) => {
   const result = schema.safeParse(payload);
@@ -51,13 +58,6 @@ const toTags = (specialization = '') => {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 3);
-};
-
-const toLocalIsoDate = (date = new Date()) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 };
 
 const formatTimeTo12h = (time24h = '') => {
@@ -122,35 +122,26 @@ const toProfileDto = (userDoc, profileDoc, availability = {}) => ({
   },
 });
 
-const timeToMinutes = (value) => {
-  const [hours, minutes] = value.split(':').map(Number);
-  return (hours * 60) + minutes;
-};
-
 const ensureTimeRange = (startTime, endTime) => {
-  if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
+  if (!isEndAfterStart(startTime, endTime)) {
     throw new AppError('End time must be after start time', HTTP_STATUS.UNPROCESSABLE_ENTITY);
   }
 };
 
 const ensureNotPastSlot = (date, startTime) => {
   const todayIso = toLocalIsoDate(new Date());
-  if (date < todayIso) {
+  if (isPastSlot(date, todayIso)) {
     throw new AppError(
       'Please choose today or a future date.',
       HTTP_STATUS.UNPROCESSABLE_ENTITY,
     );
   }
 
-  if (date === todayIso) {
-    const now = new Date();
-    const nowMinutes = (now.getHours() * 60) + now.getMinutes();
-    if (timeToMinutes(startTime) <= nowMinutes) {
-      throw new AppError(
-        'Selected start time has already passed. Please choose a future time.',
-        HTTP_STATUS.UNPROCESSABLE_ENTITY,
-      );
-    }
+  if (hasStartTimePassedForToday(date, startTime, new Date())) {
+    throw new AppError(
+      'Selected start time has already passed. Please choose a future time.',
+      HTTP_STATUS.UNPROCESSABLE_ENTITY,
+    );
   }
 };
 
@@ -168,15 +159,8 @@ const hasOverlap = async ({
   };
 
   const sameDaySlots = await DietitianScheduling.find(filter).select('startTime endTime');
-
-  const candidateStart = timeToMinutes(startTime);
-  const candidateEnd = timeToMinutes(endTime);
-
-  return sameDaySlots.some((slot) => {
-    const currentStart = timeToMinutes(slot.startTime);
-    const currentEnd = timeToMinutes(slot.endTime);
-    return candidateStart < currentEnd && currentStart < candidateEnd;
-  });
+  return sameDaySlots.some((slot) =>
+    hasTimeOverlap(startTime, endTime, slot.startTime, slot.endTime));
 };
 
 export const getdietitianStatus = (_req, res) => {
