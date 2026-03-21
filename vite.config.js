@@ -13,4 +13,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './frontend/src'),
     },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './frontend/src/test/setupTests.js',
+    include: ['frontend/src/**/*.test.{js,jsx}'],
+    globals: true,
+    css: true,
+    testTimeout: 10000,
+  },
 })
