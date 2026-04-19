@@ -12,6 +12,13 @@ import {
   getWeekdayLabel,
 } from '../utils/dietitianDashboard.utils';
 
+const priorityRank = { urgent: 0, normal: 1, low: 2 };
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
+};
+
 export function useDietitianTimeSlots(dietitianId, setSlotError) {
   const [timeSlots, setTimeSlots] = useState([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
@@ -147,6 +154,8 @@ export function useDietitianAppointmentsData(dietitianId, dietitianName, setSlot
       phone: getNoteValue(item.notes, 'Mobile') || '-',
       rejectReason: getNoteValue(item.notes, 'Reject Reason') || '',
       notes: item.notes || '',
+      priority: normalizePriority(item.priority),
+      createdAt: item.createdAt,
     };
   };
 
@@ -166,7 +175,17 @@ export function useDietitianAppointmentsData(dietitianId, dietitianName, setSlot
         const byName = getNoteValue(item.notes, 'Dietitian').trim().toLowerCase() === dietitianName;
         return byId || byNoteId || byName;
       });
-      const mapped = items.map(mapAppointmentRow);
+      const mapped = items.map(mapAppointmentRow)
+        .sort((a, b) => {
+          if (a.rawStatus === 'pending' && b.rawStatus !== 'pending') return -1;
+          if (a.rawStatus !== 'pending' && b.rawStatus === 'pending') return 1;
+          if (a.rawStatus === 'pending' && b.rawStatus === 'pending') {
+            const rankDiff = priorityRank[a.priority] - priorityRank[b.priority];
+            if (rankDiff !== 0) return rankDiff;
+            return new Date(a.createdAt) - new Date(b.createdAt);
+          }
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
       setAppointments(mapped);
 
       const approvedMembersMap = new Map();

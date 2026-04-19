@@ -59,6 +59,12 @@ const MEAL_CATEGORY_LABELS = {
   weight_loss: 'Weight Losing',
   other: 'Other',
 };
+const APPOINTMENT_PRIORITY_RANK = { urgent: 0, normal: 1, low: 2 };
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
+};
 
 
 function DietitianDashboard() {
@@ -157,6 +163,19 @@ function DietitianDashboard() {
     [members, searchText],
   );
   const displayedMembers = filteredMembers.slice(0, 3);
+  const sortedAppointments = useMemo(() => {
+    return [...appointments].sort((a, b) => {
+      if (a.rawStatus === 'pending' && b.rawStatus !== 'pending') return -1;
+      if (a.rawStatus !== 'pending' && b.rawStatus === 'pending') return 1;
+      if (a.rawStatus === 'pending' && b.rawStatus === 'pending') {
+        const rankDiff = APPOINTMENT_PRIORITY_RANK[normalizePriority(a.priority)]
+          - APPOINTMENT_PRIORITY_RANK[normalizePriority(b.priority)];
+        if (rankDiff !== 0) return rankDiff;
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      }
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+  }, [appointments]);
 
   const stats = [
     { label: 'Total Members', value: members.length, icon: GroupRoundedIcon },
@@ -631,7 +650,7 @@ function DietitianDashboard() {
 
       {activeTab === 'Appointments' && (
         <DietitianAppointmentsTable
-          appointments={appointments}
+          appointments={sortedAppointments}
           mutedText={mutedText}
           onApprove={approveAppointment}
           onReject={rejectAppointment}
