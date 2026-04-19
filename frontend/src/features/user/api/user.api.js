@@ -85,6 +85,15 @@ export const getUserProgress = (userId) =>
 export const saveUserMeasurement = (userId, data) =>
   axiosClient.put(`/progress/${userId}/measurements`, data);
 
+export const uploadProgressPhoto = (payload) =>
+  axiosClient.post('/progress/photo/upload', payload);
+
+export const deleteProgressPhoto = (slot) =>
+  axiosClient.delete(`/progress/photo/${slot}`);
+
+export const updatePhotoNote = (slot, note) =>
+  axiosClient.patch(`/progress/photo/${slot}/note`, { note });
+
 export const getPublicPromotions = (params = {}) =>
   axiosClient.get('/promotions/public', { params });
 
