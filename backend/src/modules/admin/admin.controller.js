@@ -12,6 +12,7 @@ import { formatTrend, getMonthRange, REPORT_MONTHS, toUserDto } from './admin.ut
 
 const ROLE_SET = new Set(['user', 'coach', 'dietitian', 'admin']);
 const STATUS_SET = new Set(['active', 'inactive', 'suspended']);
+const COACH_ROLE_SET = new Set(['head', 'sub']);
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}$/;
 
 const adminSettingsSchema = z.object({
@@ -182,7 +183,9 @@ export const getUsers = asyncHandler(async (req, res) => {
     filter.status = status;
   }
 
-  const users = await User.find(filter).sort({ createdAt: -1 });
+  const users = await User.find(filter)
+    .populate('headCoachId', 'name email role coachRole')
+    .sort({ createdAt: -1 });
 
   res.status(HTTP_STATUS.OK).json({
     data: users.map(toUserDto),
@@ -190,7 +193,7 @@ export const getUsers = asyncHandler(async (req, res) => {
 });
 
 export const getUserById = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
+  const user = await User.findById(req.params.id).populate('headCoachId', 'name email role coachRole');
   if (!user) {
     throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
   }
@@ -208,6 +211,8 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   const nextRole = String(req.body?.role || '').trim().toLowerCase();
   const nextStatus = String(req.body?.status || '').trim().toLowerCase();
+  const nextCoachRoleRaw = String(req.body?.coachRole || '').trim().toLowerCase();
+  const nextHeadCoachIdRaw = String(req.body?.headCoachId || '').trim();
 
   if (nextRole) {
     if (!ROLE_SET.has(nextRole)) {
@@ -216,6 +221,10 @@ export const updateUser = asyncHandler(async (req, res) => {
     if (user.role !== nextRole) {
       user.role = nextRole;
       user.roleChangedAt = new Date();
+      if (nextRole !== 'coach') {
+        user.coachRole = 'head';
+        user.headCoachId = null;
+      }
     }
   }
 
@@ -230,13 +239,76 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.name = String(req.body.name).trim();
   }
 
+  if (nextCoachRoleRaw) {
+    if (user.role !== 'coach') {
+      throw new AppError('coachRole can be set only for coach users', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+    }
+    if (!COACH_ROLE_SET.has(nextCoachRoleRaw)) {
+      throw new AppError('Invalid coachRole value', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+    }
+    user.coachRole = nextCoachRoleRaw;
+    if (nextCoachRoleRaw === 'head') {
+      user.headCoachId = null;
+    }
+  }
+
+  if (nextHeadCoachIdRaw || req.body?.headCoachId === null || req.body?.headCoachId === '') {
+    if (user.role !== 'coach') {
+      throw new AppError('headCoachId can be set only for coach users', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+    }
+
+    if (!nextHeadCoachIdRaw) {
+      user.headCoachId = null;
+    } else {
+      if (!mongoose.isValidObjectId(nextHeadCoachIdRaw)) {
+        throw new AppError('Invalid headCoachId', HTTP_STATUS.BAD_REQUEST);
+      }
+      if (String(user._id) === nextHeadCoachIdRaw) {
+        throw new AppError('A coach cannot report to themselves', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+      }
+      const headCoach = await User.findById(nextHeadCoachIdRaw);
+      if (!headCoach || headCoach.role !== 'coach') {
+        throw new AppError('Head coach not found', HTTP_STATUS.NOT_FOUND);
+      }
+      const headCoachRole = String(headCoach.coachRole || 'head').toLowerCase();
+      if (headCoachRole !== 'head') {
+        throw new AppError('Selected head coach must have coachRole=head', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+      }
+      user.headCoachId = headCoach._id;
+      user.coachRole = 'sub';
+    }
+  }
+
+  if (user.role === 'coach') {
+    const normalizedCoachRole = String(user.coachRole || 'head').toLowerCase();
+    if (normalizedCoachRole === 'sub' && !user.headCoachId) {
+      throw new AppError('Sub-coach must have a headCoachId', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+    }
+  }
+
   await user.save();
+  await user.populate('headCoachId', 'name email role coachRole');
 
   res.status(HTTP_STATUS.OK).json({
     message: 'User updated successfully',
     data: toUserDto(user),
   });
 });
+
+export const getSubCoaches = async (headCoachId) => {
+  const safeHeadCoachId = String(headCoachId || '').trim();
+  if (!safeHeadCoachId || !mongoose.isValidObjectId(safeHeadCoachId)) {
+    return [];
+  }
+  return User.find({
+    role: 'coach',
+    coachRole: 'sub',
+    headCoachId: safeHeadCoachId,
+  })
+    .select('_id name email coachRole headCoachId status')
+    .sort({ name: 1 })
+    .lean();
+};
 
 export const deleteUser = asyncHandler(async (req, res) => {
   const deleted = await User.findByIdAndDelete(req.params.id);
