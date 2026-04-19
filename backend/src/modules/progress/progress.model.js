@@ -30,6 +30,49 @@ const progressTrackingSchema = new mongoose.Schema(
       type: [progressMeasurementSchema],
       default: [],
     },
+    photos: {
+      type: [
+        new mongoose.Schema(
+          {
+            slot: {
+              type: Number,
+              enum: [1, 2, 3, 4],
+              required: true,
+            },
+            base64Image: {
+              type: String,
+              required: true,
+            },
+            fileName: {
+              type: String,
+              trim: true,
+              default: '',
+            },
+            fileSize: {
+              type: Number,
+              min: 0,
+              default: 0,
+            },
+            uploadedAt: {
+              type: Date,
+              default: Date.now,
+            },
+            label: {
+              type: String,
+              trim: true,
+              default: '',
+            },
+            note: {
+              type: String,
+              trim: true,
+              default: '',
+            },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,
