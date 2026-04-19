@@ -15,6 +15,12 @@ const toUiStatus = {
 
 export function toUserDto(userDoc) {
   const roleChangedAt = userDoc.roleChangedAt || null;
+  const headCoachId = userDoc.headCoachId
+    ? String(userDoc.headCoachId?._id || userDoc.headCoachId)
+    : '';
+  const headCoachName = userDoc.headCoachId && typeof userDoc.headCoachId === 'object'
+    ? String(userDoc.headCoachId?.name || '')
+    : '';
   return {
     id: String(userDoc._id),
     branchUserId: userDoc.branchUserId || '',
@@ -44,6 +50,11 @@ export function toUserDto(userDoc) {
         minute: '2-digit',
       })
       : null,
+    coachRole: userDoc.role === 'coach'
+      ? (String(userDoc.coachRole || 'head').toLowerCase() === 'sub' ? 'sub' : 'head')
+      : null,
+    headCoachId,
+    headCoachName,
   };
 }
 
