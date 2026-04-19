@@ -48,6 +48,64 @@ const appointmentSchema = new mongoose.Schema(
       default: 'normal',
       index: true,
     },
+    queuePosition: {
+      type: Number,
+      default: null,
+      index: true,
+    },
+    queueEnteredAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    lastEscalatedAt: {
+      type: Date,
+      default: null,
+    },
+    escalationHistory: {
+      type: [
+        new mongoose.Schema(
+          {
+            fromPriority: {
+              type: String,
+              enum: ['urgent', 'normal', 'low'],
+              required: true,
+            },
+            toPriority: {
+              type: String,
+              enum: ['urgent', 'normal', 'low'],
+              required: true,
+            },
+            escalatedAt: {
+              type: Date,
+              required: true,
+            },
+            reason: {
+              type: String,
+              trim: true,
+              default: '',
+            },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
+    },
+    slaDeadline: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+    slaBreached: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    snoozedUntil: {
+      type: Date,
+      default: null,
+      index: true,
+    },
     notes: {
       type: String,
       trim: true,
