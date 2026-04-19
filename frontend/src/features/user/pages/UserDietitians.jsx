@@ -37,6 +37,7 @@ import {
   updateAppointmentStatus,
   updateUserAppointment,
 } from '@/features/user/api/user.api';
+import { getDietitianAvailableSlots } from '@/features/dietitian/api/dietitian.api';
 import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
@@ -112,6 +113,34 @@ const BOOKING_PROGRESS_META = {
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 const MOBILE_NUMBER_PATTERN = /^\d{10}$/;
+const APPOINTMENT_PRIORITY_OPTIONS = [
+  {
+    value: 'urgent',
+    label: 'Urgent',
+    helper: 'I need help as soon as possible',
+    color: '#dc2626',
+    bg: '#fee2e2',
+  },
+  {
+    value: 'normal',
+    label: 'Normal',
+    helper: 'Standard booking',
+    color: '#d97706',
+    bg: '#fef3c7',
+  },
+  {
+    value: 'low',
+    label: 'Low',
+    helper: 'Flexible, no rush',
+    color: '#15803d',
+    bg: '#dcfce7',
+  },
+];
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
+};
 
 const normalizeTimeTo24h = (rawTime) => {
   if (!rawTime) return '';
@@ -131,12 +160,6 @@ const normalizeTimeTo24h = (rawTime) => {
   const hh = String(hour).padStart(2, '0');
   const mm = String(minuteRaw || 0).padStart(2, '0');
   return `${hh}:${mm}`;
-};
-
-const toMinuteValue = (time24h) => {
-  const [h, m] = (time24h || '').split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return NaN;
-  return h * 60 + m;
 };
 
 const toDisplayTime = (time24h) => {
@@ -181,23 +204,6 @@ const getDietitianSlotDisplayLines = (dietitian) => {
   return ranges.map((range) => `Today, ${range.start} - ${range.end}`);
 };
 
-const isDateWithinDietitianSchedule = (dietitian, dateValue) => {
-  if (!dietitian?.slotDate) return false;
-  return dateValue === dietitian.slotDate;
-};
-
-const isWithinAnyDietitianRange = (ranges, fromMinutes, toMinutes) =>
-  ranges.some((range) => {
-    const slotStart = toMinuteValue(range.start);
-    const slotEnd = toMinuteValue(range.end);
-    return (
-      !Number.isNaN(slotStart)
-      && !Number.isNaN(slotEnd)
-      && fromMinutes >= slotStart
-      && toMinutes <= slotEnd
-    );
-  });
-
 const isBookingCompletedByTime = (booking) => {
   if (!booking?.date || !booking?.toTime) return false;
   const bookingEnd = new Date(`${booking.date}T${booking.toTime}:00`);
@@ -233,6 +239,8 @@ function UserDietitians() {
   const [feedbackForm, setFeedbackForm] = useState({ rating: 0, comment: '' });
   const [feedbackError, setFeedbackError] = useState('');
   const [submittedDietitianFeedbackBookingIds, setSubmittedDietitianFeedbackBookingIds] = useState(new Set());
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
 
   const [bookingForm, setBookingForm] = useState({
     userName: '',
@@ -243,6 +251,7 @@ function UserDietitians() {
     toTime: '',
     appointmentType: '',
     goal: '',
+    appointmentPriority: 'normal',
     description: '',
     medicalConditions: '',
   });
@@ -282,6 +291,7 @@ function UserDietitians() {
       toTime,
       appointmentType: getNoteValue(item.notes, 'Appointment Type') || 'In-person',
       goal: getNoteValue(item.notes, 'Goal') || 'Meal Planning',
+      appointmentPriority: normalizePriority(item.priority),
       description: getNoteValue(item.notes, 'Description') || '',
       medicalConditions: getNoteValue(item.notes, 'Medical') || '',
       status,
@@ -369,6 +379,24 @@ function UserDietitians() {
     }
   }, [mapAppointmentToBooking, user]);
 
+  const loadAvailableDietitianSlots = useCallback(async (targetDietitianId, targetDate) => {
+    const dietitianId = String(targetDietitianId || '').trim();
+    const date = String(targetDate || '').trim();
+    if (!dietitianId || !date) {
+      setAvailableSlots([]);
+      return;
+    }
+    try {
+      setIsSlotsLoading(true);
+      const { data } = await getDietitianAvailableSlots(dietitianId, date);
+      setAvailableSlots(Array.isArray(data?.data) ? data.data : []);
+    } catch {
+      setAvailableSlots([]);
+    } finally {
+      setIsSlotsLoading(false);
+    }
+  }, []);
+
   const loadDietitiansWithStats = useCallback(async () => {
     try {
       const { data } = await getPublicDietitians();
@@ -414,8 +442,19 @@ function UserDietitians() {
     return () => clearTimeout(timer);
   }, [loadSubmittedDietitianFeedbackBookings]);
 
+  useEffect(() => {
+    if (!isBookingOpen) return;
+    const selectedDietitianId = selectedDietitian?.id || selectedDietitian?._id;
+    if (!selectedDietitianId || !bookingForm.date) {
+      setAvailableSlots([]);
+      return;
+    }
+    void loadAvailableDietitianSlots(selectedDietitianId, bookingForm.date);
+  }, [isBookingOpen, selectedDietitian, bookingForm.date, loadAvailableDietitianSlots]);
+
   const handleOpenBooking = (dietitian) => {
     setSelectedDietitian(dietitian);
+    setAvailableSlots([]);
     setBookingForm({
       userName: user?.name || '',
       userEmail: user?.email || '',
@@ -425,6 +464,7 @@ function UserDietitians() {
       toTime: '',
       appointmentType: '',
       goal: '',
+      appointmentPriority: 'normal',
       description: '',
       medicalConditions: '',
     });
@@ -445,6 +485,7 @@ function UserDietitians() {
       || dietitians.find((item) => item.name === booking.dietitianName)
       || null;
     setSelectedDietitian(dietitian);
+    setAvailableSlots([]);
     setBookingForm({
       userName: user?.name || '',
       userEmail: user?.email || '',
@@ -454,6 +495,7 @@ function UserDietitians() {
       toTime: booking.toTime || '',
       appointmentType: booking.appointmentType?.toLowerCase() === 'in-person' ? 'inperson' : 'online',
       goal: booking.goal?.toLowerCase().includes('health') ? 'health-consultation' : 'meal-planning',
+      appointmentPriority: normalizePriority(booking.appointmentPriority),
       description: booking.description || '',
       medicalConditions: booking.medicalConditions || '',
     });
@@ -465,6 +507,7 @@ function UserDietitians() {
   const handleCloseBooking = () => {
     setIsBookingOpen(false);
     setSelectedDietitian(null);
+    setAvailableSlots([]);
     setEditingBookingId(null);
     setAvailabilityError('');
   };
@@ -475,30 +518,25 @@ function UserDietitians() {
       setBookingForm((prev) => ({ ...prev, mobileNumber: digitsOnly }));
       return;
     }
+    if (field === 'date') {
+      setBookingForm((prev) => ({ ...prev, date: event.target.value, fromTime: '', toTime: '' }));
+      return;
+    }
     setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
   };
 
   const handleSubmitBooking = async (event) => {
     event.preventDefault();
 
-    const isDateAvailable = isDateWithinDietitianSchedule(selectedDietitian, bookingForm.date);
-    if (!isDateAvailable) {
-      setAvailabilityError('Unavailable on selected date. Please choose another available date.');
-      return;
-    }
-
-    const fromMinutes = toMinuteValue(bookingForm.fromTime);
-    const toMinutes = toMinuteValue(bookingForm.toTime);
-    if (Number.isNaN(fromMinutes) || Number.isNaN(toMinutes) || fromMinutes >= toMinutes) {
+    if (!bookingForm.fromTime || !bookingForm.toTime) {
       setAvailabilityError('Unavailable at selected time. Please choose another available time slot.');
       return;
     }
-
-    const selectedRanges = getDietitianSlotRanges(selectedDietitian);
-    const isWithinSlot = isWithinAnyDietitianRange(selectedRanges, fromMinutes, toMinutes);
-
-    if (!isWithinSlot) {
-      setAvailabilityError('Unavailable at selected time. Please choose another available time slot.');
+    const selectedSlot = availableSlots.find(
+      (slot) => slot.startTime === bookingForm.fromTime && slot.endTime === bookingForm.toTime,
+    );
+    if (!selectedSlot || !selectedSlot.available) {
+      setAvailabilityError('Selected slot is no longer available. Please choose another slot.');
       return;
     }
 
@@ -543,6 +581,7 @@ function UserDietitians() {
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
           sessionType: 'nutrition',
+          priority: normalizePriority(bookingForm.appointmentPriority),
           notes,
         });
       }
@@ -1091,40 +1130,51 @@ function UserDietitians() {
               required
             />
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
-              <TextField
-                label="From Time"
-                type="time"
-                value={bookingForm.fromTime}
-                onChange={handleFieldChange('fromTime')}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                required
-              />
-              <TextField
-                label="To Time"
-                type="time"
-                value={bookingForm.toTime}
-                onChange={handleFieldChange('toTime')}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                required
-              />
-            </Stack>
-
-            <Stack spacing={0.35}>
-              <Typography sx={{ fontSize: '0.9rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
-                Available slots:
+            <Stack spacing={0.65}>
+              <Typography sx={{ fontSize: '0.9rem', color: theme.palette.text.secondary, fontWeight: 700 }}>
+                Select a slot
               </Typography>
-              {(selectedDietitian ? getDietitianSlotDisplayLines(selectedDietitian) : ['No slots']).map(
-                (line, lineIndex) => (
-                  <Typography
-                    key={`selected-dietitian-slot-${lineIndex}`}
-                    sx={{ fontSize: '0.85rem', color: theme.palette.text.secondary }}
-                  >
-                    {line}
-                  </Typography>
-                ),
+              {isSlotsLoading && (
+                <Typography sx={{ fontSize: '0.84rem', color: theme.palette.text.secondary }}>
+                  Loading slots...
+                </Typography>
+              )}
+              {!isSlotsLoading && availableSlots.length === 0 && (
+                <Typography sx={{ fontSize: '0.84rem', color: theme.palette.text.secondary }}>
+                  No available slots for this date. Try another date.
+                </Typography>
+              )}
+              {!isSlotsLoading && availableSlots.length > 0 && (
+                <Stack direction="row" spacing={0.9} useFlexGap flexWrap="wrap">
+                  {availableSlots.map((slot) => {
+                    const isSelected = bookingForm.fromTime === slot.startTime && bookingForm.toTime === slot.endTime;
+                    return (
+                      <Button
+                        key={slot.slotId}
+                        type="button"
+                        disabled={!slot.available}
+                        onClick={() =>
+                          setBookingForm((prev) => ({ ...prev, fromTime: slot.startTime, toTime: slot.endTime }))
+                        }
+                        variant={isSelected ? 'contained' : 'outlined'}
+                        sx={{
+                          textTransform: 'none',
+                          borderRadius: 99,
+                          fontWeight: 700,
+                          borderColor: isSelected ? '#0f766e' : (slot.available ? '#0f766e' : '#9ca3af'),
+                          color: isSelected ? '#ffffff' : (slot.available ? '#0f766e' : '#6b7280'),
+                          backgroundColor: isSelected ? '#0f766e' : (slot.available ? '#ccfbf1' : '#e5e7eb'),
+                          '&:hover': {
+                            borderColor: isSelected ? '#0f766e' : (slot.available ? '#0f766e' : '#9ca3af'),
+                            backgroundColor: isSelected ? '#0f766e' : (slot.available ? '#ccfbf1' : '#e5e7eb'),
+                          },
+                        }}
+                      >
+                        {slot.available ? slot.label : `${slot.label} - Booked`}
+                      </Button>
+                    );
+                  })}
+                </Stack>
               )}
             </Stack>
 
@@ -1159,6 +1209,52 @@ function UserDietitians() {
                 <MenuItem value="health-consultation">Health Consultation</MenuItem>
               </Select>
             </FormControl>
+
+            <Box>
+              <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: theme.palette.text.primary, mb: 0.75 }}>
+                Appointment Priority
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                {APPOINTMENT_PRIORITY_OPTIONS.map((option) => {
+                  const selected = bookingForm.appointmentPriority === option.value;
+                  return (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      variant={selected ? 'contained' : 'outlined'}
+                      disabled={Boolean(editingBookingId)}
+                      onClick={() => setBookingForm((prev) => ({ ...prev, appointmentPriority: option.value }))}
+                      sx={{
+                        flex: 1,
+                        textTransform: 'none',
+                        borderRadius: 99,
+                        justifyContent: 'flex-start',
+                        px: 1.5,
+                        py: 1,
+                        color: selected ? '#ffffff' : option.color,
+                        borderColor: option.color,
+                        backgroundColor: selected ? option.color : option.bg,
+                        '&:hover': {
+                          borderColor: option.color,
+                          backgroundColor: selected ? option.color : option.bg,
+                        },
+                        '&.Mui-disabled': {
+                          opacity: 0.7,
+                          color: option.color,
+                        },
+                      }}
+                    >
+                      {option.label} - {option.helper}
+                    </Button>
+                  );
+                })}
+              </Stack>
+              {editingBookingId && (
+                <Typography sx={{ mt: 0.6, fontSize: '0.78rem', color: theme.palette.text.secondary }}>
+                  Priority can be set only at booking creation.
+                </Typography>
+              )}
+            </Box>
 
             <TextField
               label="Description"
