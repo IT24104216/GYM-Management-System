@@ -1,38 +1,39 @@
-import { normalizeRole } from '../../utils/roles.js';
+function readByPath(obj, path) {
+  if (!path) return '';
+  return path.split('.').reduce((acc, key) => (acc ? acc[key] : undefined), obj);
+}
 
-const getValueByPath = (source, path) => {
-  if (!source || !path) return '';
-  return path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), source);
-};
-
-export function requireOwnership(options = {}) {
-  const {
-    checks = [{ from: 'query', key: 'userId' }],
-    allowRoles = ['admin'],
-  } = options;
+export function requireOwnership({ checks, allowRoles = [], from = 'query', key = 'userId' } = {}) {
+  const normalizedChecks = Array.isArray(checks) && checks.length
+    ? checks
+    : [{ from, key }];
 
   return (req, res, next) => {
     const authUserId = String(req.user?.id || '');
-    const role = normalizeRole(req.user?.role);
-    const normalizedAllowRoles = allowRoles.map((item) => normalizeRole(item));
+    if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
 
-    if (!authUserId || !role) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-
-    if (normalizedAllowRoles.includes(role)) {
+    const role = String(req.user?.role || '').toLowerCase();
+    const bypassRoles = new Set(
+      (Array.isArray(allowRoles) ? allowRoles : [])
+        .map((allowedRole) => String(allowedRole || '').toLowerCase())
+        .filter(Boolean)
+    );
+    if (bypassRoles.has(role)) {
       return next();
     }
 
-    const hasMatchingOwner = checks.some((check) => {
-      const from = String(check?.from || 'query');
-      const key = String(check?.key || '');
-      const source = from === 'params' ? req.params : from === 'body' ? req.body : req.query;
-      const ownerId = String(getValueByPath(source, key) || '');
-      return Boolean(ownerId) && ownerId === authUserId;
+    const hasOwnership = normalizedChecks.some((check) => {
+      const source = check?.from || 'query';
+      const path = check?.key || 'userId';
+      const sourceObj =
+        source === 'params' ? req.params
+        : source === 'body' ? req.body
+        : req.query;
+      const ownerId = readByPath(sourceObj, path);
+      return ownerId && String(ownerId) === authUserId;
     });
 
-    if (!hasMatchingOwner) {
+    if (!hasOwnership) {
       return res.status(403).json({ message: 'Forbidden: ownership mismatch' });
     }
 
