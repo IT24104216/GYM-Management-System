@@ -10,6 +10,7 @@ import SportsIcon from '@mui/icons-material/Sports';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import QuizRoundedIcon from '@mui/icons-material/QuizRounded';
+import WorkspacePremiumRoundedIcon from '@mui/icons-material/WorkspacePremiumRounded';
 import { ROLES, ROUTES } from '@/shared/utils/constants';
 
 export const NAV_CONFIG = {
@@ -19,6 +20,7 @@ export const NAV_CONFIG = {
     { label: 'Workouts', path: ROUTES.USER_WORKOUTS, icon: FitnessCenterIcon },
     { label: 'Lockers', path: ROUTES.USER_LOCKERS, icon: LockRoundedIcon },
     { label: 'FAQs', path: ROUTES.USER_FAQS, icon: QuizRoundedIcon },
+    { label: 'Subscription', path: ROUTES.USER_SUBSCRIPTION, icon: WorkspacePremiumRoundedIcon },
     { label: 'Profile', path: ROUTES.USER_PROFILE, icon: PersonIcon },
   ],
   [ROLES.ADMIN]: [
