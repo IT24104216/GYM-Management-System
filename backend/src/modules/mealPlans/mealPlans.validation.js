@@ -48,6 +48,8 @@ export const createMealLibrarySchema = z.object({
   carbs: macroSchema.optional().default(0),
   lipids: macroSchema.optional().default(0),
   vitamins: z.string().trim().max(220).optional().default(''),
+  quantity: quantitySchema.optional().default(1),
+  unit: unitSchema.optional().default('g'),
   description: z.string().trim().max(600).optional().default(''),
 });
 
@@ -60,6 +62,8 @@ export const updateMealLibrarySchema = z
     carbs: macroSchema.optional(),
     lipids: macroSchema.optional(),
     vitamins: z.string().trim().max(220).optional(),
+    quantity: quantitySchema.optional(),
+    unit: unitSchema.optional(),
     description: z.string().trim().max(600).optional(),
   })
   .refine((payload) => Object.keys(payload).length > 0, {
