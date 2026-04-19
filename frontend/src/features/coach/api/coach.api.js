@@ -33,6 +33,15 @@ export const deleteWorkoutPlan = (id) =>
 export const getCoachAppointments = (params) =>
   axiosClient.get('/appointments', { params });
 
+export const getCoachQueue = (params) =>
+  axiosClient.get('/appointments/coach/queue', { params });
+
+export const getCoachQueueStats = (params) =>
+  axiosClient.get('/appointments/coach/queue/stats', { params });
+
+export const snoozeAppointment = (id, mins) =>
+  axiosClient.post(`/appointments/${id}/snooze`, { snoozeMinutes: mins });
+
 export const updateCoachAppointmentStatus = (id, data) =>
   axiosClient.patch(`/appointments/${id}/status`, data);
 
