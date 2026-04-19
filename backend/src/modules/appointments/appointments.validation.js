@@ -106,3 +106,7 @@ export const updateAppointmentSchema = z
 export const delegateAppointmentSchema = z.object({
   subCoachId: idSchema,
 });
+
+export const snoozeAppointmentSchema = z.object({
+  snoozeMinutes: z.coerce.number().int().min(1, 'must be greater than 0'),
+});
