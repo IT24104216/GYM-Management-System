@@ -24,6 +24,7 @@ import UserAdsPromotions from '@/features/user/pages/UserAdsPromotions';
 import UserLockers from '@/features/user/pages/UserLockers';
 import UserFaqs from '@/features/user/pages/UserFaqs';
 import UserProfile from '@/features/user/pages/UserProfile';
+import SubscriptionPage from '@/features/user/pages/SubscriptionPage';
 
 // Admin pages
 import AdminDashboard from '@/features/admin/pages/AdminDashboard';
@@ -72,6 +73,7 @@ function AppRouter() {
           <Route path={ROUTES.USER_LOCKERS} element={<UserLockers />} />
           <Route path={ROUTES.USER_FAQS} element={<UserFaqs />} />
           <Route path={ROUTES.USER_PROFILE} element={<UserProfile />} />
+          <Route path={ROUTES.USER_SUBSCRIPTION} element={<SubscriptionPage />} />
         </Route>
 
         {/* Admin */}
