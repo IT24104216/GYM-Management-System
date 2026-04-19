@@ -42,11 +42,32 @@ const appointmentSchema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
+    priority: {
+      type: String,
+      enum: ['urgent', 'normal', 'low'],
+      default: 'normal',
+      index: true,
+    },
     notes: {
       type: String,
       trim: true,
       maxlength: 1000,
       default: '',
+    },
+    delegatedByCoachId: {
+      type: String,
+      trim: true,
+      default: '',
+      index: true,
+    },
+    delegatedByCoachName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    delegatedAt: {
+      type: Date,
+      default: null,
     },
   },
   {
