@@ -21,6 +21,7 @@ export const ROUTES = {
   USER_LOCKERS: '/user/lockers',
   USER_FAQS: '/user/faqs',
   USER_PROFILE: '/user/profile',
+  USER_SUBSCRIPTION: '/user/subscription',
   ADMIN_DASHBOARD: '/admin/dashboard',
   ADMIN_USERS: '/admin/users',
   ADMIN_REPORTS: '/admin/reports',

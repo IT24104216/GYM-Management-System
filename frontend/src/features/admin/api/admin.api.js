@@ -56,3 +56,14 @@ export const getLockerBookings = (params = {}) =>
 
 export const updateLockerBookingStatus = (id, data) =>
   axiosClient.patch(`/lockers/bookings/${id}/status`, data);
+
+export const grantSubscription = (userId, planType) =>
+  axiosClient.post('/subscriptions/grant', {
+    userId,
+    planType,
+    paymentMethod: 'cash',
+    last4: 'CASH',
+  });
+
+export const getUserSubscription = (userId) =>
+  axiosClient.get(`/subscriptions/user/${userId}`);

@@ -12,6 +12,8 @@ export const buildSectionData = (plan) => sectionMap.map((section) => {
       c: toNumber(item.carbs),
       f: toNumber(item.lipids),
       vitamins: item.vitamins || '',
+      quantity: toNumber(item.quantity) > 0 ? toNumber(item.quantity) : 1,
+      unit: String(item.unit || 'g'),
     }));
 
   return {

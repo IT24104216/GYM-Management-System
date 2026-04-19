@@ -15,7 +15,11 @@ export const createMealOption = () => ({
   carbs: '',
   lipids: '',
   vitamins: '',
+  quantity: '1',
+  unit: 'g',
 });
+
+export const FOOD_UNIT_OPTIONS = ['g', 'ml', 'cups', 'tbsp', 'tsp', 'piece'];
 
 export const createDietPlanForm = () => ({
   breakfast: [createMealOption(), createMealOption(), createMealOption()],
@@ -47,6 +51,14 @@ export const sanitizePlanSection = (section = []) =>
       carbs: toNumericOrZero(item?.carbs),
       lipids: toNumericOrZero(item?.lipids),
       vitamins: String(item?.vitamins || '').trim(),
+      quantity: (() => {
+        const parsed = Number(item?.quantity);
+        if (!Number.isFinite(parsed) || parsed < 0.1) return 1;
+        return parsed;
+      })(),
+      unit: FOOD_UNIT_OPTIONS.includes(String(item?.unit || '').trim())
+        ? String(item?.unit || '').trim()
+        : 'g',
     };
   });
 

@@ -33,11 +33,29 @@ export const deleteWorkoutPlan = (id) =>
 export const getCoachAppointments = (params) =>
   axiosClient.get('/appointments', { params });
 
+export const getCoachQueue = (params) =>
+  axiosClient.get('/appointments/coach/queue', { params });
+
+export const getCoachQueueStats = (params) =>
+  axiosClient.get('/appointments/coach/queue/stats', { params });
+
+export const snoozeAppointment = (id, mins) =>
+  axiosClient.post(`/appointments/${id}/snooze`, { snoozeMinutes: mins });
+
 export const updateCoachAppointmentStatus = (id, data) =>
   axiosClient.patch(`/appointments/${id}/status`, data);
 
+export const delegateAppointment = (appointmentId, subCoachId) =>
+  axiosClient.patch(`/appointments/${appointmentId}/delegate`, { subCoachId });
+
 export const getCoachSchedulingSlots = (coachId) =>
   axiosClient.get(`/coach/scheduling/${coachId}`);
+
+export const getCoachAvailableSlots = (coachId, date) =>
+  axiosClient.get(`/coach/${coachId}/slots`, { params: { date } });
+
+export const getMyTeam = () =>
+  axiosClient.get('/coach/team');
 
 export const createCoachSchedulingSlot = (coachId, data) =>
   axiosClient.post(`/coach/scheduling/${coachId}`, data);

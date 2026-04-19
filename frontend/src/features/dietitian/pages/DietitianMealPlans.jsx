@@ -35,6 +35,8 @@ const CATEGORY_OPTIONS = [
   { value: 'weight_loss', label: 'Weight Losing' },
   { value: 'other', label: 'Other' },
 ];
+const FOOD_UNIT_OPTIONS = ['g', 'ml', 'cups', 'tbsp', 'tsp', 'piece'];
+const NUTRITION_NUMERIC_FIELDS = ['calories', 'protein', 'carbs', 'lipids'];
 
 const emptyMealForm = {
   category: 'weight_gain',
@@ -44,6 +46,8 @@ const emptyMealForm = {
   carbs: '',
   lipids: '',
   vitamins: '',
+  quantity: '1',
+  unit: 'g',
   description: '',
 };
 
@@ -57,6 +61,33 @@ const formatSuggestionSource = (source) => {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
+};
+
+const toFiniteNumber = (value) => {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const roundToTwo = (value) => Math.round(value * 100) / 100;
+
+const scaleNutritionValuesByQuantity = (form, nextQuantityRaw) => {
+  const prevQuantity = toFiniteNumber(form?.quantity);
+  const nextQuantity = toFiniteNumber(nextQuantityRaw);
+  if (!prevQuantity || prevQuantity <= 0 || !nextQuantity || nextQuantity <= 0) {
+    return { ...form, quantity: nextQuantityRaw };
+  }
+
+  const ratio = nextQuantity / prevQuantity;
+  const nextForm = { ...form, quantity: nextQuantityRaw };
+
+  NUTRITION_NUMERIC_FIELDS.forEach((field) => {
+    const current = toFiniteNumber(form?.[field]);
+    if (current === null) return;
+    nextForm[field] = roundToTwo(current * ratio);
+  });
+
+  return nextForm;
 };
 
 function DietitianMealPlans() {
@@ -101,6 +132,8 @@ function DietitianMealPlans() {
       carbs: selected.carbs ?? 0,
       lipids: selected.lipids ?? selected.fat ?? 0,
       vitamins: selected.vitamins ?? '',
+      quantity: selected.quantity ?? 1,
+      unit: selected.unit ?? 'g',
       description: selected.description ?? selected.notes ?? '',
     };
   };
@@ -188,6 +221,15 @@ function DietitianMealPlans() {
       });
       return;
     }
+    const quantityValue = Number(mealForm.quantity);
+    if (!Number.isFinite(quantityValue) || quantityValue < 0.1) {
+      setFeedback({
+        open: true,
+        message: 'Quantity must be at least 0.1.',
+        severity: 'warning',
+      });
+      return;
+    }
 
     try {
       const payload = {
@@ -223,6 +265,8 @@ function DietitianMealPlans() {
       carbs: suggestion.carbs,
       lipids: suggestion.lipids,
       vitamins: suggestion.vitamins,
+      quantity: suggestion.quantity,
+      unit: suggestion.unit,
       description: suggestion.description,
     }));
   };
@@ -241,6 +285,8 @@ function DietitianMealPlans() {
         carbs: suggestion.carbs,
         lipids: suggestion.lipids,
         vitamins: suggestion.vitamins,
+        quantity: suggestion.quantity,
+        unit: suggestion.unit,
         description: suggestion.description,
       },
     }));
@@ -248,6 +294,15 @@ function DietitianMealPlans() {
 
   const saveEditedMeal = async () => {
     if (!editState.meal?.mealName?.trim() || !dietitianId) return;
+    const quantityValue = Number(editState.meal?.quantity);
+    if (!Number.isFinite(quantityValue) || quantityValue < 0.1) {
+      setFeedback({
+        open: true,
+        message: 'Quantity must be at least 0.1.',
+        severity: 'warning',
+      });
+      return;
+    }
     try {
       const { data } = await updateMealLibraryItem(
         editState.meal._id || editState.meal.id,
@@ -437,6 +492,27 @@ function DietitianMealPlans() {
             size="small"
           />
           <TextField
+            label="Quantity"
+            type="number"
+            value={mealForm.quantity}
+            onChange={(e) =>
+              setMealForm((prev) => scaleNutritionValuesByQuantity(prev, e.target.value))
+            }
+            size="small"
+            inputProps={{ min: 0.1, step: 0.1 }}
+          />
+          <TextField
+            label="Unit"
+            select
+            value={mealForm.unit}
+            onChange={(e) => setMealForm((prev) => ({ ...prev, unit: e.target.value }))}
+            size="small"
+          >
+            {FOOD_UNIT_OPTIONS.map((unitOption) => (
+              <MenuItem key={unitOption} value={unitOption}>{unitOption}</MenuItem>
+            ))}
+          </TextField>
+          <TextField
             label="Description"
             value={mealForm.description}
             onChange={(e) => setMealForm((prev) => ({ ...prev, description: e.target.value }))}
@@ -505,6 +581,8 @@ function DietitianMealPlans() {
               Lipids: {meal.lipids || 0} g
               <br />
               Vitamins: {meal.vitamins || '-'}
+              <br />
+              Quantity: {Number(meal.quantity || 1)} {String(meal.unit || 'g')}
             </Typography>
             <Stack direction="row" spacing={1} sx={{ mt: 1.2 }}>
               <Button
@@ -653,6 +731,32 @@ function DietitianMealPlans() {
                 }
                 size="small"
               />
+              <TextField
+                label="Quantity"
+                type="number"
+                value={editState.meal?.quantity || ''}
+                onChange={(e) =>
+                  setEditState((prev) => ({
+                    ...prev,
+                    meal: scaleNutritionValuesByQuantity(prev.meal || {}, e.target.value),
+                  }))
+                }
+                size="small"
+                inputProps={{ min: 0.1, step: 0.1 }}
+              />
+              <TextField
+                label="Unit"
+                select
+                value={editState.meal?.unit || 'g'}
+                onChange={(e) =>
+                  setEditState((prev) => ({ ...prev, meal: { ...prev.meal, unit: e.target.value } }))
+                }
+                size="small"
+              >
+                {FOOD_UNIT_OPTIONS.map((unitOption) => (
+                  <MenuItem key={unitOption} value={unitOption}>{unitOption}</MenuItem>
+                ))}
+              </TextField>
             </Box>
             <TextField
               label="Vitamins"

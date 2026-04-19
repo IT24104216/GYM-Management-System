@@ -15,6 +15,7 @@ import { nutritionRouter } from './modules/nutrition/nutrition.routes.js';
 import { feedbacksRouter } from './modules/feedbacks/feedbacks.routes.js';
 import { lockersRouter } from './modules/lockers/lockers.routes.js';
 import { faqsRouter } from './modules/faqs/faqs.routes.js';
+import { subscriptionsRouter } from './modules/subscriptions/subscriptions.routes.js';
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use('/nutrition', nutritionRouter);
 router.use('/feedbacks', feedbacksRouter);
 router.use('/lockers', lockersRouter);
 router.use('/faqs', faqsRouter);
+router.use('/subscriptions', subscriptionsRouter);
 
 export { router as apiRouter };

@@ -20,6 +20,11 @@ function DietitianAppointmentsTable({
   panelBorder,
   subtitleColor,
 }) {
+  const priorityMeta = {
+    urgent: { label: 'URGENT', fg: '#dc2626', bg: '#fee2e2' },
+    normal: { label: 'NORMAL', fg: '#d97706', bg: '#fef3c7' },
+    low: { label: 'LOW', fg: '#15803d', bg: '#dcfce7' },
+  };
   return (
     <Box
       sx={{
@@ -38,6 +43,7 @@ function DietitianAppointmentsTable({
               <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Date</TableCell>
               <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Time</TableCell>
               <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Goal</TableCell>
+              <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Priority</TableCell>
               <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }}>Status</TableCell>
               <TableCell sx={{ color: subtitleColor, borderBottomColor: panelBorder }} align="right">Actions</TableCell>
             </TableRow>
@@ -51,6 +57,17 @@ function DietitianAppointmentsTable({
                 <TableCell sx={{ color: mutedText, borderBottomColor: panelBorder }}>{row.date}</TableCell>
                 <TableCell sx={{ color: mutedText, borderBottomColor: panelBorder }}>{row.time}</TableCell>
                 <TableCell sx={{ color: mutedText, borderBottomColor: panelBorder }}>{row.goal}</TableCell>
+                <TableCell sx={{ borderBottomColor: panelBorder }}>
+                  <Chip
+                    size="small"
+                    label={priorityMeta[row.priority]?.label || 'NORMAL'}
+                    sx={{
+                      fontWeight: 800,
+                      color: priorityMeta[row.priority]?.fg || '#d97706',
+                      bgcolor: priorityMeta[row.priority]?.bg || '#fef3c7',
+                    }}
+                  />
+                </TableCell>
                 <TableCell sx={{ borderBottomColor: panelBorder }}>
                   <Chip
                     size="small"

@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -30,7 +31,14 @@ import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { getToken } from '@/shared/utils/storage';
-import { getUserProgress, getUserWorkoutPlans, saveUserMeasurement } from '@/features/user/api/user.api';
+import {
+  deleteProgressPhoto,
+  getUserProgress,
+  getUserWorkoutPlans,
+  saveUserMeasurement,
+  updatePhotoNote,
+  uploadProgressPhoto,
+} from '@/features/user/api/user.api';
 
 const MotionCard = motion(Card);
 const UPLOAD_WINDOW_STORAGE_KEY = 'progress.uploadWindow.v1';
@@ -229,6 +237,7 @@ const createPhotoSlots = () => Array.from({ length: 4 }, (_, index) => ({
   id: `slot-${index + 1}`,
   imageUrl: '',
 }));
+const SLOT_LABELS = ['Front View', 'Back View', 'Left Side', 'Right Side'];
 
 const METRIC_CARD_META = [
   {
@@ -321,8 +330,12 @@ function UserProgress() {
       };
     }
   });
+  const [photos, setPhotos] = useState([]);
   const [photoToast, setPhotoToast] = useState({ open: false, message: '' });
   const [editingPhotoIndex, setEditingPhotoIndex] = useState(null);
+  const [slotLoadingByIndex, setSlotLoadingByIndex] = useState({});
+  const [slotErrorsByIndex, setSlotErrorsByIndex] = useState({});
+  const [photoNotesBySlot, setPhotoNotesBySlot] = useState({});
   const [isMeasurementDialogOpen, setIsMeasurementDialogOpen] = useState(false);
   const [measurementForm, setMeasurementForm] = useState({
     chest: '',
@@ -416,6 +429,27 @@ function UserProgress() {
   const canUploadToday = selectedDate === todayIso && hasTodayCompletionEvidence;
   const canUploadSelectedDate = canUploadToday || mergedCompletionDates.includes(selectedDate);
   const selectedDatePhotos = photosByDate[selectedDate] || createPhotoSlots();
+  const backendPhotoBySlot = useMemo(
+    () => new Map((Array.isArray(photos) ? photos : []).map((photo) => [Number(photo.slot), photo])),
+    [photos],
+  );
+  const visiblePhotoSlots = useMemo(() => (
+    Array.from({ length: 4 }, (_, index) => {
+      const slot = index + 1;
+      const backendPhoto = backendPhotoBySlot.get(slot);
+      const fallbackPhoto = selectedDatePhotos[index] || { id: `slot-${slot}`, imageUrl: '' };
+      const imageUrl = backendPhoto?.base64Image || fallbackPhoto.imageUrl || '';
+      return {
+        slot,
+        index,
+        id: backendPhoto ? `backend-slot-${slot}` : fallbackPhoto.id,
+        imageUrl,
+        note: String(photoNotesBySlot[slot] ?? backendPhoto?.note ?? ''),
+        label: backendPhoto?.label || SLOT_LABELS[index] || `PHOTO ${slot}`,
+        fromBackend: Boolean(backendPhoto),
+      };
+    })
+  ), [backendPhotoBySlot, photoNotesBySlot, selectedDatePhotos]);
   const calendarDays = useMemo(() => buildCalendarDays(visibleMonth), [visibleMonth]);
   const isCalendarOpen = Boolean(calendarAnchorEl);
 
@@ -439,6 +473,15 @@ function UserProgress() {
           : [],
       );
       setCompletionDate(normalizeIsoDateInput(payload.completionDate || ''));
+      const nextPhotos = Array.isArray(payload.photos) ? payload.photos : [];
+      setPhotos(nextPhotos);
+      setPhotoNotesBySlot(
+        nextPhotos.reduce((acc, photo) => {
+          const slot = Number(photo?.slot || 0);
+          if ([1, 2, 3, 4].includes(slot)) acc[slot] = String(photo?.note || '');
+          return acc;
+        }, {}),
+      );
     }
 
     if (workoutPlansResult.status === 'fulfilled') {
@@ -805,56 +848,146 @@ function UserProgress() {
     uploadInputRef.current?.click();
   };
 
-  const handlePhotoSelect = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const photoUrl = URL.createObjectURL(file);
+  const syncLocalPhotoSlot = useCallback((slot, imageUrl) => {
     setPhotosByDate((prev) => {
       const dayPhotos = prev[selectedDate] || createPhotoSlots();
-      const targetIndex = editingPhotoIndex !== null
-        ? editingPhotoIndex
-        : dayPhotos.findIndex((item) => !item.imageUrl);
-
-      if (targetIndex === -1) return prev;
-
-      const nextDayPhotos = dayPhotos.map((item, index) => (
-        index === targetIndex
-          ? { id: `p-${Date.now()}`, imageUrl: photoUrl }
+      const nextDayPhotos = dayPhotos.map((item, itemIndex) => (
+        itemIndex === slot - 1
+          ? { id: `p-${Date.now()}`, imageUrl: imageUrl || '' }
           : item
       ));
-
       return {
         ...prev,
         [selectedDate]: nextDayPhotos,
       };
     });
+  }, [selectedDate]);
+
+  const handlePhotoSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const targetIndex = editingPhotoIndex !== null
+      ? editingPhotoIndex
+      : visiblePhotoSlots.findIndex((item) => !item.imageUrl);
+    const safeIndex = targetIndex < 0 ? 0 : targetIndex;
+    const selectedSlot = safeIndex + 1;
+
+    setSlotErrorsByIndex((prev) => ({ ...prev, [safeIndex]: '' }));
+
+    if (!file.type.startsWith('image/')) {
+      setSlotErrorsByIndex((prev) => ({
+        ...prev,
+        [safeIndex]: 'Invalid file type. Please upload an image.',
+      }));
+      event.target.value = '';
+      return;
+    }
+    if (file.size > (5 * 1024 * 1024)) {
+      setSlotErrorsByIndex((prev) => ({
+        ...prev,
+        [safeIndex]: 'File too large. Max 5MB allowed.',
+      }));
+      event.target.value = '';
+      return;
+    }
+
+    setSlotLoadingByIndex((prev) => ({ ...prev, [safeIndex]: true }));
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+      const base64Image = reader.result;
+      try {
+        const response = await uploadProgressPhoto({
+          slot: selectedSlot,
+          base64Image,
+          fileName: file.name,
+          fileSize: file.size,
+          label: SLOT_LABELS[selectedSlot - 1] || `PHOTO ${selectedSlot}`,
+          note: '',
+          uploadedAt: selectedDate,
+        });
+        const nextPhotos = Array.isArray(response?.data?.photos) ? response.data.photos : [];
+        setPhotos(nextPhotos);
+        setPhotoNotesBySlot((prev) => ({
+          ...prev,
+          [selectedSlot]: '',
+        }));
+        syncLocalPhotoSlot(selectedSlot, String(base64Image || ''));
+        setPhotoToast({ open: true, message: `Progress photo uploaded for ${selectedDateShort}.` });
+      } catch {
+        setSlotErrorsByIndex((prev) => ({
+          ...prev,
+          [safeIndex]: 'Upload failed. Please try again.',
+        }));
+      } finally {
+        setSlotLoadingByIndex((prev) => ({ ...prev, [safeIndex]: false }));
+        setEditingPhotoIndex(null);
+      }
+    };
+    reader.onerror = () => {
+      setSlotLoadingByIndex((prev) => ({ ...prev, [safeIndex]: false }));
+      setSlotErrorsByIndex((prev) => ({
+        ...prev,
+        [safeIndex]: 'Could not read file. Please try again.',
+      }));
+    };
 
     event.target.value = '';
-    setEditingPhotoIndex(null);
-    setPhotoToast({ open: true, message: `Progress photo uploaded for ${selectedDateShort}.` });
   };
 
   const handleEditPhoto = (index) => {
     setEditingPhotoIndex(index);
+    setSlotErrorsByIndex((prev) => ({ ...prev, [index]: '' }));
     uploadInputRef.current?.click();
   };
 
   const handleDeletePhoto = (index) => {
-    setPhotosByDate((prev) => {
-      const dayPhotos = prev[selectedDate] || createPhotoSlots();
-      const nextDayPhotos = dayPhotos.map((item, itemIndex) => (
-        itemIndex === index
-          ? { id: `slot-${index + 1}`, imageUrl: '' }
-          : item
-      ));
+    const slot = index + 1;
+    const backendPhoto = backendPhotoBySlot.get(slot);
+    if (backendPhoto) {
+      deleteProgressPhoto(slot)
+        .then((response) => {
+          const nextPhotos = Array.isArray(response?.data?.photos) ? response.data.photos : [];
+          setPhotos(nextPhotos);
+          setPhotoNotesBySlot((prev) => ({ ...prev, [slot]: '' }));
+          syncLocalPhotoSlot(slot, '');
+          setPhotoToast({ open: true, message: 'Photo deleted from selected date.' });
+        })
+        .catch((error) => {
+          setSlotErrorsByIndex((prev) => ({
+            ...prev,
+            [index]: error?.response?.data?.message || 'Failed to delete photo. Please try again.',
+          }));
+        });
+      return;
+    }
 
-      return {
-        ...prev,
-        [selectedDate]: nextDayPhotos,
-      };
-    });
+    syncLocalPhotoSlot(slot, '');
     setPhotoToast({ open: true, message: 'Photo deleted from selected date.' });
+  };
+
+  const handlePhotoNoteChange = (slot, nextNote) => {
+    setPhotoNotesBySlot((prev) => ({
+      ...prev,
+      [slot]: nextNote,
+    }));
+  };
+
+  const handlePhotoNoteBlur = (slot) => {
+    const backendPhoto = backendPhotoBySlot.get(slot);
+    if (!backendPhoto) return;
+    const note = String(photoNotesBySlot[slot] || '');
+    updatePhotoNote(slot, note)
+      .then((response) => {
+        const nextPhotos = Array.isArray(response?.data?.photos) ? response.data.photos : [];
+        setPhotos(nextPhotos);
+      })
+      .catch((error) => {
+        setSlotErrorsByIndex((prev) => ({
+          ...prev,
+          [slot - 1]: error?.response?.data?.message || 'Failed to save note. Please try again.',
+        }));
+      });
   };
 
   const handleClosePhotoToast = (_, reason) => {
@@ -1281,29 +1414,41 @@ function UserProgress() {
                 gap: 1.2,
               }}
             >
-              {selectedDatePhotos.map((photo, index) => (
+              {visiblePhotoSlots.map((photo, index) => (
                 <MotionCard
                   key={`${selectedDate}-${photo.id}-${index}`}
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25, delay: index * 0.04 }}
                   sx={{
-                    height: 320,
+                    minHeight: 320,
                     borderRadius: 2,
                     position: 'relative',
                     overflow: 'hidden',
                     bgcolor: isDark ? '#101b2f' : '#f2f4f8',
                   }}
                 >
-                  {photo.imageUrl ? (
+                  {slotLoadingByIndex[index] ? (
+                    <Box
+                      sx={{
+                        width: '100%',
+                        minHeight: 320,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <CircularProgress size={28} />
+                    </Box>
+                  ) : photo.imageUrl ? (
                     <>
                       <Box
                         component="img"
                         src={photo.imageUrl}
-                        alt={`Progress ${index + 1}`}
-                        sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        alt={photo.label || `Progress ${index + 1}`}
+                        sx={{ width: '100%', height: 220, objectFit: 'cover' }}
                       />
-                      <Stack direction="row" spacing={0.8} sx={{ position: 'absolute', right: 10, bottom: 10 }}>
+                      <Stack direction="row" spacing={0.8} sx={{ px: 1.2, pt: 1, pb: 0.8, justifyContent: 'flex-end' }}>
                         <Button
                           size="small"
                           variant="contained"
@@ -1338,12 +1483,22 @@ function UserProgress() {
                           Delete
                         </Button>
                       </Stack>
+                      <Box sx={{ px: 1.2, pb: 1.2 }}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          placeholder="Add a note..."
+                          value={photo.note}
+                          onChange={(event) => handlePhotoNoteChange(photo.slot, event.target.value)}
+                          onBlur={() => handlePhotoNoteBlur(photo.slot)}
+                        />
+                      </Box>
                     </>
                   ) : (
                     <Box
                       sx={{
                         width: '100%',
-                        height: '100%',
+                        minHeight: 320,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1353,6 +1508,11 @@ function UserProgress() {
                         PHOTO {index + 1}
                       </Typography>
                     </Box>
+                  )}
+                  {slotErrorsByIndex[index] && (
+                    <Typography sx={{ px: 1.2, pb: 1, color: '#ef4444', fontSize: '0.78rem', fontWeight: 700 }}>
+                      {slotErrorsByIndex[index]}
+                    </Typography>
                   )}
                 </MotionCard>
               ))}

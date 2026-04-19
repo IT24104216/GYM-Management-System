@@ -6,12 +6,14 @@ import {
   deleteCoachProfile,
   getcoachStatus,
   getCoachProfile,
+  getCoachTeam,
   getPublicCoaches,
   upsertCoachProfile,
 } from './coach.controller.js';
 import {
   createCoachSlot,
   deleteCoachSlot,
+  getCoachAvailableSlots,
   listCoachSlots,
   updateCoachSlot,
 } from './coachScheduling.controller.js';
@@ -21,6 +23,7 @@ const router = Router();
 router.get('/', getcoachStatus);
 router.get('/public', getPublicCoaches);
 router.get('/profile/:coachId', getCoachProfile);
+router.get('/team', authenticateJWT, authorizeRoles('coach'), getCoachTeam);
 
 router.put(
   '/profile/:coachId',
@@ -37,6 +40,7 @@ router.delete(
   deleteCoachProfile,
 );
 router.get('/scheduling/:coachId', listCoachSlots);
+router.get('/:coachId/slots', getCoachAvailableSlots);
 router.post(
   '/scheduling/:coachId',
   authenticateJWT,

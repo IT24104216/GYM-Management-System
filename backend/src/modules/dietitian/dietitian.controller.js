@@ -8,6 +8,7 @@ import {
 } from '../notifications/notifications.service.js';
 import { DietitianProfile } from './dietitianProfile.model.js';
 import { DietitianScheduling } from './dietitianScheduling.model.js';
+import { Appointment } from '../appointments/appointments.model.js';
 import {
   createDietitianSlotSchema,
   dietitianIdParamsSchema,
@@ -33,6 +34,15 @@ const parseOrThrow = (schema, payload) => {
     );
   }
   return result.data;
+};
+const isValidIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+const toTime24 = (date) => `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+const toLabel12h = (time24) => {
+  const [hoursRaw, minutesRaw] = String(time24 || '').split(':').map(Number);
+  if (Number.isNaN(hoursRaw) || Number.isNaN(minutesRaw)) return String(time24 || '');
+  const meridiem = hoursRaw >= 12 ? 'PM' : 'AM';
+  const hours12 = hoursRaw % 12 || 12;
+  return `${hours12}:${String(minutesRaw).padStart(2, '0')} ${meridiem}`;
 };
 
 const ensureDietitianExists = async (dietitianId) => {
@@ -318,6 +328,42 @@ export const listDietitianSlots = asyncHandler(async (req, res) => {
   res.status(HTTP_STATUS.OK).json({
     data: slots,
   });
+});
+
+export const getDietitianAvailableSlots = asyncHandler(async (req, res) => {
+  const { dietitianId } = parseOrThrow(dietitianIdParamsSchema, req.params);
+  const date = String(req.query?.date || '').trim();
+  if (!isValidIsoDate(date)) {
+    throw new AppError('date must be YYYY-MM-DD', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+  }
+  await ensureDietitianExists(dietitianId);
+
+  const slots = await DietitianScheduling.find({ dietitianId, date }).sort({ startTime: 1 });
+  const rangeStart = new Date(`${date}T00:00:00`);
+  const rangeEnd = new Date(`${date}T23:59:59.999`);
+  const appointments = await Appointment.find({
+    dietitianId,
+    status: { $in: ['pending', 'approved'] },
+    startsAt: { $gte: rangeStart, $lte: rangeEnd },
+  }).select('startsAt endsAt');
+
+  const occupied = new Set(
+    appointments.map((item) => `${toTime24(new Date(item.startsAt))}-${toTime24(new Date(item.endsAt))}`),
+  );
+
+  const data = slots.map((slot) => {
+    const key = `${slot.startTime}-${slot.endTime}`;
+    const available = !occupied.has(key);
+    return {
+      slotId: String(slot._id),
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      label: `${toLabel12h(slot.startTime)} - ${toLabel12h(slot.endTime)}`,
+      available,
+    };
+  });
+
+  res.status(HTTP_STATUS.OK).json({ data });
 });
 
 export const createDietitianSlot = asyncHandler(async (req, res) => {
