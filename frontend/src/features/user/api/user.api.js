@@ -110,3 +110,18 @@ export const getUserLockerBookings = (params = {}) =>
 
 export const createLockerBookingRequest = (data) =>
   axiosClient.post('/lockers/bookings', data);
+
+export const createMySubscription = (data) =>
+  axiosClient.post('/subscriptions/my', data);
+
+export const getMySubscription = () =>
+  axiosClient.get('/subscriptions/my');
+
+export const renewMySubscription = (data) =>
+  axiosClient.post('/subscriptions/my/renew', data);
+
+export const cancelMySubscription = () =>
+  axiosClient.patch('/subscriptions/my/cancel');
+
+export const toggleMySubscriptionAutoRenew = (autoRenew) =>
+  axiosClient.patch('/subscriptions/my/auto-renew', { autoRenew });
