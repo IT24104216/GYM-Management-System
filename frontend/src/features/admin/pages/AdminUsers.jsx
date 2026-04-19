@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
+  CircularProgress,
   Avatar,
   Box,
   Button,
@@ -11,6 +12,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   InputLabel,
   MenuItem,
@@ -34,6 +36,8 @@ import {
   deleteUser as deleteUserApi,
   getAllUsers,
   getPlatformStats,
+  getUserSubscription as getUserSubscriptionApi,
+  grantSubscription as grantSubscriptionApi,
   updateUser as updateUserApi,
 } from '@/features/admin/api/admin.api';
 
@@ -121,6 +125,11 @@ const filterToRole = {
   Admins: 'Admin',
 };
 
+const coachRoleBadge = {
+  head: { label: 'HEAD', fg: '#0f766e', bg: '#ccfbf1' },
+  sub: { label: 'SUB', fg: '#7c2d12', bg: '#ffedd5' },
+};
+
 function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
@@ -129,7 +138,14 @@ function AdminUsers() {
   const [page, setPage] = useState(1);
   const [editingUser, setEditingUser] = useState(null);
   const [nextRole, setNextRole] = useState('Member');
+  const [nextCoachRole, setNextCoachRole] = useState('head');
+  const [nextHeadCoachId, setNextHeadCoachId] = useState('');
   const [toast, setToast] = useState({ open: false, message: '' });
+  const [detailsUser, setDetailsUser] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsSubscription, setDetailsSubscription] = useState(null);
+  const [grantPlanType, setGrantPlanType] = useState('6month');
+  const [grantLoading, setGrantLoading] = useState(false);
 
   const filters = ['All', 'Members', 'Coaches', 'Dieticians', 'Admins'];
 
@@ -148,6 +164,14 @@ function AdminUsers() {
   const safePage = Math.min(page, totalPages);
   const pagedUsers = filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
   const roleOptions = ['Member', 'Coach', 'Dietician', 'Admin'];
+  const headCoachOptions = useMemo(
+    () =>
+      users.filter((item) =>
+        item.role === 'Coach'
+        && String(item.coachRole || 'head').toLowerCase() === 'head'
+        && item.id !== editingUser?.id),
+    [editingUser?.id, users],
+  );
 
   const loadUsers = async () => {
     try {
@@ -178,6 +202,8 @@ function AdminUsers() {
   const handleOpenEditRole = (user) => {
     setEditingUser(user);
     setNextRole(user.role);
+    setNextCoachRole(String(user.coachRole || 'head').toLowerCase() === 'sub' ? 'sub' : 'head');
+    setNextHeadCoachId(String(user.headCoachId || ''));
   };
 
   const handleCloseEditRole = () => {
@@ -187,7 +213,16 @@ function AdminUsers() {
   const handleSaveRole = async () => {
     if (!editingUser) return;
     try {
-      const { data } = await updateUserApi(editingUser.id, { role: displayToAuthRole[nextRole] || 'user' });
+      const payload = { role: displayToAuthRole[nextRole] || 'user' };
+      const isCoachRole = (displayToAuthRole[nextRole] || 'user') === 'coach';
+      if (isCoachRole) {
+        payload.coachRole = nextCoachRole === 'sub' ? 'sub' : 'head';
+        payload.headCoachId = nextCoachRole === 'sub' ? String(nextHeadCoachId || '') : null;
+      } else {
+        payload.coachRole = '';
+        payload.headCoachId = null;
+      }
+      const { data } = await updateUserApi(editingUser.id, payload);
       await loadUsers();
       await loadStats();
       const changedAt = data?.data?.roleChangedAtLabel;
@@ -230,6 +265,44 @@ function AdminUsers() {
   const handleCloseToast = (_, reason) => {
     if (reason === 'clickaway') return;
     setToast((prev) => ({ ...prev, open: false }));
+  };
+
+  const openDetails = async (user) => {
+    setDetailsUser(user);
+    setDetailsSubscription(null);
+    if (user.role !== 'Member') return;
+    setDetailsLoading(true);
+    try {
+      const { data } = await getUserSubscriptionApi(user.id);
+      setDetailsSubscription(data?.data || null);
+    } catch {
+      setDetailsSubscription(null);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const closeDetails = () => {
+    setDetailsUser(null);
+    setDetailsLoading(false);
+    setDetailsSubscription(null);
+    setGrantPlanType('6month');
+    setGrantLoading(false);
+  };
+
+  const handleGrantSubscription = async () => {
+    if (!detailsUser?.id || detailsUser.role !== 'Member') return;
+    setGrantLoading(true);
+    try {
+      await grantSubscriptionApi(detailsUser.id, grantPlanType);
+      const { data } = await getUserSubscriptionApi(detailsUser.id);
+      setDetailsSubscription(data?.data || null);
+      setToast({ open: true, message: `Granted ${grantPlanType} plan to ${detailsUser.name}.` });
+    } catch (error) {
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to grant subscription.' });
+    } finally {
+      setGrantLoading(false);
+    }
   };
 
   return (
@@ -372,7 +445,20 @@ function AdminUsers() {
                     </TableCell>
                     <TableCell sx={{ color: '#64748b' }}>{user.email}</TableCell>
                     <TableCell>
-                      <Chip size="small" label={user.role} sx={{ fontWeight: 700, bgcolor: role.bg, color: role.color }} />
+                      <Stack direction="row" spacing={0.6} alignItems="center" useFlexGap flexWrap="wrap">
+                        <Chip size="small" label={user.role} sx={{ fontWeight: 700, bgcolor: role.bg, color: role.color }} />
+                        {user.role === 'Coach' && (
+                          <Chip
+                            size="small"
+                            label={coachRoleBadge[String(user.coachRole || 'head').toLowerCase()]?.label || 'HEAD'}
+                            sx={{
+                              fontWeight: 800,
+                              bgcolor: coachRoleBadge[String(user.coachRole || 'head').toLowerCase()]?.bg || '#ccfbf1',
+                              color: coachRoleBadge[String(user.coachRole || 'head').toLowerCase()]?.fg || '#0f766e',
+                            }}
+                          />
+                        )}
+                      </Stack>
                     </TableCell>
                     <TableCell>
                       <Stack direction="row" spacing={0.8} alignItems="center">
@@ -383,6 +469,20 @@ function AdminUsers() {
                     <TableCell sx={{ color: '#94a3b8' }}>{user.joined}</TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={0.8} justifyContent="flex-end" useFlexGap flexWrap="wrap">
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            void openDetails(user);
+                          }}
+                          sx={{
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            minWidth: 'auto',
+                            px: 1.1,
+                          }}
+                        >
+                          Details
+                        </Button>
                         <Button
                           size="small"
                           onClick={() => handleOpenEditRole(user)}
@@ -472,13 +572,123 @@ function AdminUsers() {
               ))}
             </Select>
           </FormControl>
+          {nextRole === 'Coach' && (
+            <Stack spacing={1.2} sx={{ mt: 1.4 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="admin-user-coach-role-label">Coach Role</InputLabel>
+                <Select
+                  labelId="admin-user-coach-role-label"
+                  label="Coach Role"
+                  value={nextCoachRole}
+                  onChange={(event) => {
+                    const value = String(event.target.value || 'head');
+                    setNextCoachRole(value);
+                    if (value !== 'sub') setNextHeadCoachId('');
+                  }}
+                >
+                  <MenuItem value="head">Head Coach</MenuItem>
+                  <MenuItem value="sub">Sub-Coach</MenuItem>
+                </Select>
+              </FormControl>
+              {nextCoachRole === 'sub' && (
+                <FormControl fullWidth size="small">
+                  <InputLabel id="admin-user-head-coach-label">Reports to</InputLabel>
+                  <Select
+                    labelId="admin-user-head-coach-label"
+                    label="Reports to"
+                    value={nextHeadCoachId}
+                    onChange={(event) => setNextHeadCoachId(event.target.value)}
+                  >
+                    {headCoachOptions.map((coach) => (
+                      <MenuItem key={coach.id} value={coach.id}>{coach.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+            </Stack>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.2 }}>
           <Button onClick={handleCloseEditRole} variant="outlined" sx={{ textTransform: 'none', fontWeight: 700 }}>
             Cancel
           </Button>
-          <Button onClick={handleSaveRole} variant="contained" sx={{ textTransform: 'none', fontWeight: 700 }}>
+          <Button
+            onClick={handleSaveRole}
+            variant="contained"
+            disabled={nextRole === 'Coach' && nextCoachRole === 'sub' && !nextHeadCoachId}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
             Save Role
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(detailsUser)} onClose={closeDetails} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 900 }}>
+          User Details
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.1} sx={{ mt: 0.5 }}>
+            <Typography><strong>Name:</strong> {detailsUser?.name || '-'}</Typography>
+            <Typography><strong>Email:</strong> {detailsUser?.email || '-'}</Typography>
+            <Typography><strong>Role:</strong> {detailsUser?.role || '-'}</Typography>
+            <Typography><strong>Status:</strong> {detailsUser?.status || '-'}</Typography>
+            {detailsUser?.role === 'Member' && (
+              <>
+                <Divider sx={{ my: 0.8 }} />
+                <Typography sx={{ fontWeight: 800 }}>Subscription</Typography>
+                {detailsLoading ? (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <CircularProgress size={16} />
+                    <Typography sx={{ color: '#64748b' }}>Loading subscription...</Typography>
+                  </Stack>
+                ) : (
+                  <>
+                    <Typography>
+                      <strong>Status:</strong> {String(detailsSubscription?.status || 'none')}
+                    </Typography>
+                    <Typography>
+                      <strong>Plan:</strong> {detailsSubscription?.planType || '-'}
+                    </Typography>
+                    <Typography>
+                      <strong>End Date:</strong> {detailsSubscription?.endDate ? new Date(detailsSubscription.endDate).toLocaleDateString() : '-'}
+                    </Typography>
+                    <Typography>
+                      <strong>Auto Renew:</strong> {detailsSubscription ? (detailsSubscription.autoRenew ? 'Enabled' : 'Disabled') : '-'}
+                    </Typography>
+                  </>
+                )}
+                <Divider sx={{ my: 0.8 }} />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }}>
+                  <FormControl size="small" sx={{ minWidth: 160 }}>
+                    <InputLabel id="grant-plan-type-label">Grant Plan</InputLabel>
+                    <Select
+                      labelId="grant-plan-type-label"
+                      label="Grant Plan"
+                      value={grantPlanType}
+                      onChange={(event) => setGrantPlanType(event.target.value)}
+                    >
+                      <MenuItem value="3month">3month</MenuItem>
+                      <MenuItem value="6month">6month</MenuItem>
+                      <MenuItem value="12month">12month</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Button
+                    variant="contained"
+                    onClick={handleGrantSubscription}
+                    disabled={grantLoading}
+                    sx={{ textTransform: 'none', fontWeight: 700 }}
+                  >
+                    {grantLoading ? 'Granting...' : 'Grant Subscription'}
+                  </Button>
+                </Stack>
+              </>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.2 }}>
+          <Button onClick={closeDetails} variant="outlined" sx={{ textTransform: 'none', fontWeight: 700 }}>
+            Close
           </Button>
         </DialogActions>
       </Dialog>
