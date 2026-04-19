@@ -31,19 +31,19 @@ const PLAN_CATALOG = [
   {
     planType: '3month',
     title: '3 Months',
-    monthlyPrice: 29.99,
+    monthlyPrice: 9461.85,
     recommended: false,
   },
   {
     planType: '6month',
     title: '6 Months',
-    monthlyPrice: 24.99,
+    monthlyPrice: 7884.35,
     recommended: true,
   },
   {
     planType: '12month',
     title: '12 Months',
-    monthlyPrice: 19.99,
+    monthlyPrice: 6306.85,
     recommended: false,
   },
 ];
@@ -55,7 +55,13 @@ const toTotal = (planType) => {
   return Number(total.toFixed(2));
 };
 
-const formatUsd = (amount) => `$${Number(amount || 0).toFixed(2)}`;
+const formatLkr = (amount) =>
+  Number(amount || 0).toLocaleString('en-LK', {
+    style: 'currency',
+    currency: 'LKR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 const normalizeCardNumber = (rawValue = '') =>
   String(rawValue || '')
@@ -267,7 +273,7 @@ function SubscriptionPage() {
                 Ends on {subscription?.endDate ? new Date(subscription.endDate).toLocaleDateString() : '-'}
               </Typography>
               <Typography sx={{ color: 'text.secondary' }}>
-                Total Paid for current cycle: {formatUsd(subscription?.price)}
+                Total Paid for current cycle: {formatLkr(subscription?.price)}
               </Typography>
 
               <FormControlLabel
@@ -321,7 +327,7 @@ function SubscriptionPage() {
                     >
                       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between">
                         <Typography sx={{ fontWeight: 700 }}>
-                          {formatUsd(entry.amount)} via {String(entry.method || '').toUpperCase()}
+                          {formatLkr(entry.amount)} via {String(entry.method || '').toUpperCase()}
                         </Typography>
                         <Typography sx={{ color: 'text.secondary' }}>
                           {entry.date ? new Date(entry.date).toLocaleDateString() : '-'}
@@ -373,8 +379,8 @@ function SubscriptionPage() {
                         <Typography sx={{ fontWeight: 800, fontSize: '1.1rem' }}>{plan.title}</Typography>
                         {plan.recommended && <Chip size="small" color="success" label="Recommended" />}
                       </Stack>
-                      <Typography sx={{ color: 'text.secondary' }}>{formatUsd(plan.monthlyPrice)}/month</Typography>
-                      <Typography sx={{ fontWeight: 800 }}>Pay {formatUsd(toTotal(plan.planType))}</Typography>
+                      <Typography sx={{ color: 'text.secondary' }}>{formatLkr(plan.monthlyPrice)}/month</Typography>
+                      <Typography sx={{ fontWeight: 800 }}>Pay {formatLkr(toTotal(plan.planType))}</Typography>
                     </Stack>
                   </CardContent>
                 </Card>
@@ -388,7 +394,7 @@ function SubscriptionPage() {
                 <Stack direction="row" spacing={1} alignItems="center">
                   <CreditCardRoundedIcon color="primary" />
                   <Typography sx={{ fontWeight: 800 }}>
-                    Payment Details ({selectedPlanCard?.title} - {formatUsd(toTotal(selectedPlan))})
+                    Payment Details ({selectedPlanCard?.title} - {formatLkr(toTotal(selectedPlan))})
                   </Typography>
                 </Stack>
 
@@ -437,7 +443,7 @@ function SubscriptionPage() {
                   disabled={submitting}
                   sx={{ textTransform: 'none', fontWeight: 800 }}
                 >
-                  {submitting ? 'Processing...' : `Pay ${formatUsd(toTotal(selectedPlan))}`}
+                  {submitting ? 'Processing...' : `Pay ${formatLkr(toTotal(selectedPlan))}`}
                 </Button>
               </Stack>
             </CardContent>

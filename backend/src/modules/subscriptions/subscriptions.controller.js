@@ -18,10 +18,12 @@ const PLAN_MONTHS = {
   '12month': 12,
 };
 
+const USD_TO_LKR_RATE = 315.5;
 const MONTHLY_RATES = {
-  '3month': 29.99,
-  '6month': 24.99,
-  '12month': 19.99,
+  // Converted from original USD catalog using USD_TO_LKR_RATE.
+  '3month': Number((29.99 * USD_TO_LKR_RATE).toFixed(2)),
+  '6month': Number((24.99 * USD_TO_LKR_RATE).toFixed(2)),
+  '12month': Number((19.99 * USD_TO_LKR_RATE).toFixed(2)),
 };
 
 const parseOrThrow = (schema, payload) => {
@@ -56,8 +58,42 @@ const toAmount = (planType) => {
   return Number((monthly * months).toFixed(2));
 };
 
+const maybeConvertLegacyUsdAmounts = async (subscription) => {
+  if (!subscription) return subscription;
+
+  let changed = false;
+  const legacyThreshold = 1000;
+
+  const currentPrice = Number(subscription.price || 0);
+  if (currentPrice > 0 && currentPrice < legacyThreshold) {
+    subscription.price = Number((currentPrice * USD_TO_LKR_RATE).toFixed(2));
+    changed = true;
+  }
+
+  if (Array.isArray(subscription.paymentHistory) && subscription.paymentHistory.length) {
+    subscription.paymentHistory = subscription.paymentHistory.map((entry) => {
+      const amount = Number(entry?.amount || 0);
+      if (amount > 0 && amount < legacyThreshold) {
+        changed = true;
+        return {
+          ...entry,
+          amount: Number((amount * USD_TO_LKR_RATE).toFixed(2)),
+        };
+      }
+      return entry;
+    });
+  }
+
+  if (changed) {
+    await subscription.save();
+  }
+
+  return subscription;
+};
+
 const ensureFreshStatus = async (subscription) => {
   if (!subscription) return null;
+  await maybeConvertLegacyUsdAmounts(subscription);
   if (subscription.status !== 'active') return subscription;
   if (new Date(subscription.endDate).getTime() >= Date.now()) return subscription;
   subscription.status = 'expired';
