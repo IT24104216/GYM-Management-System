@@ -1,9 +1,13 @@
 import { Router } from 'express';
 import {
   createAppointment,
+  delegateAppointment,
   deleteAppointment,
   getAppointmentById,
   getAppointments,
+  getCoachQueue,
+  getQueueStats,
+  snoozeAppointment,
   updateAppointment,
   updateAppointmentStatus,
 } from './appointments.controller.js';
@@ -37,6 +41,8 @@ const enforceAppointmentScope = (req, res, next) => {
 router.use(authenticateJWT);
 
 router.get('/', authorizeRoles('admin', 'user', 'coach', 'dietitian'), enforceAppointmentScope, getAppointments);
+router.get('/coach/queue', authorizeRoles('coach', 'admin'), getCoachQueue);
+router.get('/coach/queue/stats', authorizeRoles('coach', 'admin'), getQueueStats);
 router.get('/:id', authorizeRoles('admin', 'user', 'coach', 'dietitian'), getAppointmentById);
 router.post(
   '/',
@@ -46,6 +52,8 @@ router.post(
 );
 router.patch('/:id', authorizeRoles('admin', 'user'), updateAppointment);
 router.patch('/:id/status', authorizeRoles('admin', 'coach', 'dietitian'), updateAppointmentStatus);
+router.patch('/:id/delegate', authorizeRoles('admin', 'coach'), delegateAppointment);
+router.post('/:id/snooze', authorizeRoles('coach'), snoozeAppointment);
 router.delete('/:id', authorizeRoles('admin', 'user'), deleteAppointment);
 
 export { router as appointmentsRouter };

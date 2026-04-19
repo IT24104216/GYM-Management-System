@@ -59,6 +59,7 @@ import {
 
 const MotionBox = motion(Box);
 const MotionCard = motion(Card);
+const FOOD_UNIT_OPTIONS = ['g', 'ml', 'cups', 'tbsp', 'tsp', 'piece'];
 
 function UserMealPlan() {
   const theme = useTheme();
@@ -79,6 +80,8 @@ function UserMealPlan() {
   const [logForm, setLogForm] = useState({
     mealType: 'breakfast',
     name: '',
+    quantity: '1',
+    unit: 'g',
   });
   const [logNutrition, setLogNutrition] = useState({
     calories: 0,
@@ -106,6 +109,8 @@ function UserMealPlan() {
       const config = mealSectionConfig[mealType];
       const planItems = (sectionByKey.get(mealType) || []).map((item) => ({
         name: item.name,
+        quantity: Number(item.quantity || 1),
+        unit: String(item.unit || 'g'),
         cals: Number(item.cals || 0),
         p: Number(item.p || 0),
         c: Number(item.c || 0),
@@ -136,6 +141,8 @@ function UserMealPlan() {
           .map((log) => ({
             id: String(log._id),
             name: log.name,
+            quantity: Number(log.quantity || 1),
+            unit: String(log.unit || 'g'),
             cals: Number(log.calories || 0),
             p: Number(log.protein || 0),
             c: Number(log.carbs || 0),
@@ -324,6 +331,8 @@ function UserMealPlan() {
     setLogForm({
       mealType,
       name: '',
+      quantity: '1',
+      unit: 'g',
     });
     setLogNutrition({
       calories: 0,
@@ -346,6 +355,8 @@ function UserMealPlan() {
     setLogForm({
       mealType,
       name: logItem.name || '',
+      quantity: String(logItem.quantity || 1),
+      unit: String(logItem.unit || 'g'),
     });
     setLogNutrition({
       calories: Number(logItem.cals || 0),
@@ -408,6 +419,8 @@ function UserMealPlan() {
         logDate: todayIso,
         mealType: logForm.mealType,
         name: logForm.name.trim(),
+        quantity: Number(logForm.quantity || 1),
+        unit: String(logForm.unit || 'g'),
         calories: Number(effectiveNutrition.calories || 0),
         protein: Number(effectiveNutrition.protein || 0),
         carbs: Number(effectiveNutrition.carbs || 0),
@@ -801,14 +814,12 @@ function UserMealPlan() {
                       <Stack key={`${item.name}-${idx}`} direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1.2, borderRadius: 1.5, '&:hover': { bgcolor: isDark ? '#13233a' : '#f8fafc' } }}>
                         <Box>
                           <Stack direction="row" spacing={0.8} alignItems="center">
-                            <Typography sx={{ fontWeight: 700 }}>{item.name}</Typography>
+                            <Typography sx={{ fontWeight: 700 }}>{`${item.name} - ${Number(item.quantity || 1)} ${String(item.unit || 'g')} - ${item.cals} kcal`}</Typography>
                             {item.isLogged && (
                               <Chip label="Logged" size="small" sx={{ height: 20, fontSize: '0.7rem', fontWeight: 700 }} />
                             )}
                           </Stack>
                           <Stack direction="row" spacing={0.9} sx={{ mt: 0.3 }}>
-                            <Typography sx={{ color: theme.palette.text.secondary }}>{item.cals} kcal</Typography>
-                            <Typography sx={{ color: '#9ca3af' }}>•</Typography>
                             <Typography sx={{ color: '#0D9488' }}>{item.p}g P</Typography>
                             <Typography sx={{ color: '#F59E0B' }}>{item.c}g C</Typography>
                             <Typography sx={{ color: '#8B5CF6' }}>{item.f}g F</Typography>
@@ -961,6 +972,31 @@ function UserMealPlan() {
                   />
                 )}
               />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                <TextField
+                  label="Quantity"
+                  type="number"
+                  size="small"
+                  value={logForm.quantity}
+                  onChange={(event) => setLogForm((prev) => ({ ...prev, quantity: event.target.value }))}
+                  inputProps={{ min: 0.1, step: 0.1 }}
+                  fullWidth
+                />
+                <TextField
+                  select
+                  label="Unit"
+                  size="small"
+                  value={logForm.unit}
+                  onChange={(event) => setLogForm((prev) => ({ ...prev, unit: event.target.value }))}
+                  fullWidth
+                >
+                  {FOOD_UNIT_OPTIONS.map((unitOption) => (
+                    <MenuItem key={unitOption} value={unitOption}>
+                      {unitOption}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Stack>
               <Typography sx={{ fontSize: '0.86rem', color: theme.palette.text.secondary }}>
                 Nutrition is auto-filled from selected food suggestion and shown in the meal card.
               </Typography>

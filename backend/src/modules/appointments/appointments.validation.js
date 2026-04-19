@@ -10,6 +10,7 @@ const idSchema = z
 const dateSchema = z.coerce.date({
   invalid_type_error: 'must be a valid date',
 });
+const appointmentPrioritySchema = z.enum(['urgent', 'normal', 'low']);
 
 export const createAppointmentSchema = z
   .object({
@@ -22,6 +23,7 @@ export const createAppointmentSchema = z
       .enum(['consultation', 'training', 'assessment', 'nutrition', 'other'])
       .optional()
       .default('consultation'),
+    priority: appointmentPrioritySchema.optional().default('normal'),
     notes: z.string().trim().max(1000).optional().default(''),
   })
   .superRefine((data, ctx) => {
@@ -74,8 +76,11 @@ export const appointmentIdParamsSchema = z.object({
 });
 
 export const updateAppointmentStatusSchema = z.object({
-  status: z.enum(['pending', 'approved', 'rejected', 'cancelled', 'completed']),
+  status: z.enum(['pending', 'approved', 'rejected', 'cancelled', 'completed']).optional(),
+  priority: appointmentPrioritySchema.optional(),
   notes: z.string().trim().max(1000).optional(),
+}).refine((payload) => Object.keys(payload).length > 0, {
+  message: 'At least one field is required',
 });
 
 export const updateAppointmentSchema = z
@@ -85,6 +90,7 @@ export const updateAppointmentSchema = z
     sessionType: z
       .enum(['consultation', 'training', 'assessment', 'nutrition', 'other'])
       .optional(),
+    priority: appointmentPrioritySchema.optional(),
     notes: z.string().trim().max(1000).optional(),
   })
   .superRefine((data, ctx) => {
@@ -96,3 +102,11 @@ export const updateAppointmentSchema = z
       });
     }
   });
+
+export const delegateAppointmentSchema = z.object({
+  subCoachId: idSchema,
+});
+
+export const snoozeAppointmentSchema = z.object({
+  snoozeMinutes: z.coerce.number().int().min(1, 'must be greater than 0'),
+});

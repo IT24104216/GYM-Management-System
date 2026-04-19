@@ -69,6 +69,9 @@ export const getPublicDietitians = () =>
 export const getDietitianSchedulingSlots = (dietitianId) =>
   axiosClient.get(`/dietitian/scheduling/${dietitianId}`);
 
+export const getDietitianAvailableSlots = (dietitianId, date) =>
+  axiosClient.get(`/dietitian/${dietitianId}/slots`, { params: { date } });
+
 export const createDietitianSchedulingSlot = (dietitianId, data) =>
   axiosClient.post(`/dietitian/scheduling/${dietitianId}`, data);
 

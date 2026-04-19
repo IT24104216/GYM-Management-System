@@ -6,6 +6,7 @@ import {
   createDietitianSlot,
   deleteDietitianProfile,
   deleteDietitianSlot,
+  getDietitianAvailableSlots,
   getdietitianStatus,
   getDietitianProfile,
   getPublicDietitians,
@@ -35,6 +36,7 @@ router.delete(
   deleteDietitianProfile,
 );
 router.get('/scheduling/:dietitianId', listDietitianSlots);
+router.get('/:dietitianId/slots', getDietitianAvailableSlots);
 router.post(
   '/scheduling/:dietitianId',
   authenticateJWT,

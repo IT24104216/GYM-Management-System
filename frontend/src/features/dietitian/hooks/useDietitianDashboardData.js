@@ -7,10 +7,18 @@ import {
 } from '../api/dietitian.api';
 import {
   createDietPlanForm,
+  FOOD_UNIT_OPTIONS,
   createMealOption,
   getNoteValue,
   getWeekdayLabel,
 } from '../utils/dietitianDashboard.utils';
+
+const priorityRank = { urgent: 0, normal: 1, low: 2 };
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
+};
 
 export function useDietitianTimeSlots(dietitianId, setSlotError) {
   const [timeSlots, setTimeSlots] = useState([]);
@@ -56,13 +64,27 @@ export function useDietitianMealsAndPlans(dietitianId, setSlotError) {
   const [mealSuggestions, setMealSuggestions] = useState([]);
   const [savedDietPlans, setSavedDietPlans] = useState({});
 
-  const toClientPlanForm = (plan) => ({
-    breakfast: Array.isArray(plan?.breakfast) ? plan.breakfast : [createMealOption(), createMealOption(), createMealOption()],
-    lunch: Array.isArray(plan?.lunch) ? plan.lunch : [createMealOption(), createMealOption(), createMealOption()],
-    dinner: Array.isArray(plan?.dinner) ? plan.dinner : [createMealOption(), createMealOption(), createMealOption()],
-    snacks: Array.isArray(plan?.snacks) ? plan.snacks : [createMealOption(), createMealOption(), createMealOption()],
+  const normalizeSection = useCallback((section = []) =>
+    (Array.isArray(section) ? section : []).map((item) => ({
+      ...createMealOption(),
+      ...item,
+      quantity: (() => {
+        const parsed = Number(item?.quantity);
+        if (!Number.isFinite(parsed) || parsed < 0.1) return '1';
+        return String(parsed);
+      })(),
+      unit: FOOD_UNIT_OPTIONS.includes(String(item?.unit || '').trim())
+        ? String(item?.unit || '').trim()
+        : 'g',
+    })), []);
+
+  const toClientPlanForm = useCallback((plan) => ({
+    breakfast: Array.isArray(plan?.breakfast) ? normalizeSection(plan.breakfast) : [createMealOption(), createMealOption(), createMealOption()],
+    lunch: Array.isArray(plan?.lunch) ? normalizeSection(plan.lunch) : [createMealOption(), createMealOption(), createMealOption()],
+    dinner: Array.isArray(plan?.dinner) ? normalizeSection(plan.dinner) : [createMealOption(), createMealOption(), createMealOption()],
+    snacks: Array.isArray(plan?.snacks) ? normalizeSection(plan.snacks) : [createMealOption(), createMealOption(), createMealOption()],
     additionalNotes: plan?.additionalNotes || '',
-  });
+  }), [normalizeSection]);
 
   const loadDietitianMealsAndPlans = useCallback(async () => {
     if (!dietitianId) return;
@@ -91,7 +113,7 @@ export function useDietitianMealsAndPlans(dietitianId, setSlotError) {
       setSavedDietPlans({});
       setSlotError(error?.response?.data?.message || 'Failed to load diet plans.');
     }
-  }, [dietitianId, setSlotError]);
+  }, [dietitianId, setSlotError, toClientPlanForm]);
 
   useEffect(() => {
     let isMounted = true;
@@ -147,6 +169,8 @@ export function useDietitianAppointmentsData(dietitianId, dietitianName, setSlot
       phone: getNoteValue(item.notes, 'Mobile') || '-',
       rejectReason: getNoteValue(item.notes, 'Reject Reason') || '',
       notes: item.notes || '',
+      priority: normalizePriority(item.priority),
+      createdAt: item.createdAt,
     };
   };
 
@@ -166,7 +190,17 @@ export function useDietitianAppointmentsData(dietitianId, dietitianName, setSlot
         const byName = getNoteValue(item.notes, 'Dietitian').trim().toLowerCase() === dietitianName;
         return byId || byNoteId || byName;
       });
-      const mapped = items.map(mapAppointmentRow);
+      const mapped = items.map(mapAppointmentRow)
+        .sort((a, b) => {
+          if (a.rawStatus === 'pending' && b.rawStatus !== 'pending') return -1;
+          if (a.rawStatus !== 'pending' && b.rawStatus === 'pending') return 1;
+          if (a.rawStatus === 'pending' && b.rawStatus === 'pending') {
+            const rankDiff = priorityRank[a.priority] - priorityRank[b.priority];
+            if (rankDiff !== 0) return rankDiff;
+            return new Date(a.createdAt) - new Date(b.createdAt);
+          }
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
       setAppointments(mapped);
 
       const approvedMembersMap = new Map();

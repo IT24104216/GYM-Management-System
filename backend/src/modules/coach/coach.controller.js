@@ -3,6 +3,7 @@ import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { User } from '../users/users.model.js';
+import { Appointment } from '../appointments/appointments.model.js';
 import {
   createNotification,
   createNotificationForAdmins,
@@ -357,4 +358,76 @@ export const getPublicCoaches = asyncHandler(async (_req, res) => {
   res.status(HTTP_STATUS.OK).json({
     data: coaches,
   });
+});
+
+export const getCoachTeam = asyncHandler(async (req, res) => {
+  const authCoachId = String(req.user?.id || '').trim();
+  if (!authCoachId) {
+    throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+  }
+
+  const me = await User.findById(authCoachId).select('_id role name coachRole');
+  if (!me || me.role !== 'coach') {
+    throw new AppError('Coach not found', HTTP_STATUS.NOT_FOUND);
+  }
+
+  const myCoachRole = String(me.coachRole || 'head').toLowerCase();
+  if (myCoachRole !== 'head') {
+    return res.status(HTTP_STATUS.OK).json({ data: [] });
+  }
+
+  const subCoaches = await User.find({
+    role: 'coach',
+    coachRole: 'sub',
+    headCoachId: authCoachId,
+    status: 'active',
+  })
+    .select('_id name email coachRole headCoachId status')
+    .sort({ name: 1 })
+    .lean();
+
+  if (!subCoaches.length) {
+    return res.status(HTTP_STATUS.OK).json({ data: [] });
+  }
+
+  const subCoachIds = subCoaches.map((coach) => String(coach._id));
+  const [profiles, pendingCounts] = await Promise.all([
+    CoachProfile.find({ coachId: { $in: subCoachIds } })
+      .select('coachId specialization')
+      .lean(),
+    Appointment.aggregate([
+      {
+        $match: {
+          coachId: { $in: subCoachIds },
+          status: 'pending',
+          sessionType: { $ne: 'nutrition' },
+        },
+      },
+      {
+        $group: {
+          _id: '$coachId',
+          pendingCount: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+
+  const profileByCoachId = new Map(
+    profiles.map((item) => [String(item.coachId), item]),
+  );
+  const pendingByCoachId = new Map(
+    pendingCounts.map((item) => [String(item._id), Number(item.pendingCount || 0)]),
+  );
+
+  const data = subCoaches.map((subCoach) => ({
+    id: String(subCoach._id),
+    name: subCoach.name,
+    email: subCoach.email,
+    coachRole: 'sub',
+    headCoachId: subCoach.headCoachId ? String(subCoach.headCoachId) : '',
+    specialization: profileByCoachId.get(String(subCoach._id))?.specialization || 'General Fitness',
+    pendingCount: pendingByCoachId.get(String(subCoach._id)) || 0,
+  }));
+
+  return res.status(HTTP_STATUS.OK).json({ data });
 });

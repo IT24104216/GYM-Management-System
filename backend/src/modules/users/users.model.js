@@ -28,6 +28,17 @@ const userSchema = new mongoose.Schema(
       default: 'user',
       index: true,
     },
+    coachRole: {
+      type: String,
+      enum: ['head', 'sub'],
+      default: 'head',
+    },
+    headCoachId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
     status: {
       type: String,
       enum: ['active', 'inactive', 'suspended'],

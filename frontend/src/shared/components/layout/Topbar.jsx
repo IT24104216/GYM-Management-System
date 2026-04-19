@@ -48,6 +48,7 @@ import {
   getDietitianProfile as getDietitianProfileApi,
   upsertDietitianProfile as upsertDietitianProfileApi,
 } from '@/features/dietitian/api/dietitian.api';
+import { getMySubscription } from '@/features/user/api/user.api';
 import NotificationsDrawer from './NotificationsDrawer';
 
 const DRAWER_WIDTH = 240;
@@ -139,6 +140,15 @@ const hasCoachProfileData = (profile) =>
       || profile?.joinedDate,
   );
 
+const getDaysRemaining = (endDate) => {
+  if (!endDate) return 0;
+  const parsed = new Date(endDate);
+  if (Number.isNaN(parsed.getTime())) return 0;
+  const diff = parsed.getTime() - Date.now();
+  if (diff <= 0) return 0;
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+};
+
 function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebarHidden = false }) {
   const { user, logout, updateUser } = useAuth();
   const { mode, toggleTheme } = useAppTheme();
@@ -159,6 +169,7 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const [coachDeleteFeedbackOpen, setCoachDeleteFeedbackOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [memberSubscription, setMemberSubscription] = useState(null);
   const [notificationPrefSaving, setNotificationPrefSaving] = useState(false);
   const [dietitianProfile, setDietitianProfile] = useState(defaultDietitianProfile);
   const [editDietitianProfile, setEditDietitianProfile] = useState(defaultDietitianProfile);
@@ -178,6 +189,47 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
   const userProfileStorageKey = `${USER_PROFILE_STORAGE_KEY}.${user?.id || 'guest'}`;
   const notificationRole = roleToApiRole[user?.role] || 'user';
   const notificationsEnabled = user?.notificationPreferences?.push !== false;
+  const subscriptionDaysRemaining = getDaysRemaining(memberSubscription?.endDate);
+  const subscriptionStatusText = (() => {
+    const status = String(memberSubscription?.status || '').toLowerCase();
+    if (status !== 'active' || subscriptionDaysRemaining <= 0) return 'Expired';
+    return `Pro — ${subscriptionDaysRemaining} days`;
+  })();
+  const subscriptionChipColors = (() => {
+    const status = String(memberSubscription?.status || '').toLowerCase();
+    if (status !== 'active' || subscriptionDaysRemaining <= 0) {
+      return { bg: '#ef444422', color: '#ef4444' };
+    }
+    if (subscriptionDaysRemaining <= 7) {
+      return { bg: '#f59e0b22', color: '#f59e0b' };
+    }
+    return { bg: '#16a34a22', color: '#16a34a' };
+  })();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSubscription = async () => {
+      if (user?.role !== ROLES.USER) {
+        if (isMounted) setMemberSubscription(null);
+        return;
+      }
+      try {
+        const { data } = await getMySubscription();
+        if (!isMounted) return;
+        setMemberSubscription(data?.data || null);
+      } catch {
+        if (isMounted) setMemberSubscription(null);
+      }
+    };
+
+    loadSubscription();
+    const intervalId = setInterval(loadSubscription, 60000);
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [user?.role, user?.id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -625,11 +677,27 @@ function Topbar({ onMenuClick, showSidebarButton = false, onShowSidebar, sidebar
         </Tooltip>
 
         <Tooltip title="Account">
-          <IconButton onClick={handleAvatarClick} sx={{ ml: 1 }}>
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 14 }}>
-              {user?.name?.charAt(0).toUpperCase() || '?'}
-            </Avatar>
-          </IconButton>
+          <Stack direction="row" spacing={0.8} alignItems="center" sx={{ ml: 1 }}>
+            {isMemberUser && (
+              <Chip
+                label={subscriptionStatusText}
+                size="small"
+                onClick={() => navigate(ROUTES.USER_SUBSCRIPTION)}
+                sx={{
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  bgcolor: subscriptionChipColors.bg,
+                  color: subscriptionChipColors.color,
+                  border: `1px solid ${subscriptionChipColors.color}55`,
+                }}
+              />
+            )}
+            <IconButton onClick={handleAvatarClick}>
+              <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main', fontSize: 14 }}>
+                {user?.name?.charAt(0).toUpperCase() || '?'}
+              </Avatar>
+            </IconButton>
+          </Stack>
         </Tooltip>
 
         <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>

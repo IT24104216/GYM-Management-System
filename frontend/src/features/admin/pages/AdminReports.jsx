@@ -110,6 +110,14 @@ const activeUsersData = [
   { month: 'Jul', value: 210 },
 ];
 
+const formatLkr = (value) =>
+  Number(value || 0).toLocaleString('en-LK', {
+    style: 'currency',
+    currency: 'LKR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
 
@@ -129,6 +137,30 @@ function ChartTooltip({ active, payload, label }) {
       </Typography>
       <Typography sx={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 800, mt: 0.15 }}>
         {payload[0].value}
+      </Typography>
+    </Box>
+  );
+}
+
+function RevenueChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <Box
+      sx={{
+        bgcolor: '#ffffff',
+        border: '1px solid #e5e7eb',
+        borderRadius: 2,
+        px: 1.1,
+        py: 0.8,
+        boxShadow: '0 6px 18px rgba(15, 23, 42, 0.1)',
+      }}
+    >
+      <Typography sx={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 700 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: '0.82rem', color: '#0f172a', fontWeight: 800, mt: 0.15 }}>
+        {formatLkr(payload[0].value)}
       </Typography>
     </Box>
   );
@@ -162,7 +194,7 @@ function AdminReports() {
       if (card.id === 'revenue') {
         return {
           ...card,
-          value: `Rs ${revenue.toLocaleString()}`,
+          value: formatLkr(revenue),
           trend: reportData.kpis.totalRevenue?.trend || card.trend,
         };
       }
@@ -274,8 +306,14 @@ function AdminReports() {
                 <BarChart data={liveRevenueData} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94A3B8', fontSize: 12 }} />
-                  <Tooltip cursor={{ fill: '#F8FAFC' }} content={<ChartTooltip />} />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#94A3B8', fontSize: 12 }}
+                    tickFormatter={(value) => formatLkr(value)}
+                    width={86}
+                  />
+                  <Tooltip cursor={{ fill: '#F8FAFC' }} content={<RevenueChartTooltip />} />
                   <Bar dataKey="value" fill="#0D9488" radius={[6, 6, 0, 0]} barSize={42} />
                 </BarChart>
               </ResponsiveContainer>

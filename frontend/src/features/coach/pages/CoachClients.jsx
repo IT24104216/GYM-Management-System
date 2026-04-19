@@ -9,49 +9,76 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  InputLabel,
   MenuItem,
   Select,
   Snackbar,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
   useTheme,
 } from '@mui/material';
-import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getCoachAppointments, updateCoachAppointmentStatus } from '@/features/coach/api/coach.api';
+import {
+  delegateAppointment,
+  getCoachAppointments,
+  getCoachQueue,
+  getCoachQueueStats,
+  getMyTeam,
+  snoozeAppointment,
+  updateCoachAppointmentStatus,
+} from '@/features/coach/api/coach.api';
 
 const MotionBox = motion(Box);
 
-const PRIORITY_GRADIENT = {
-  Urgent: 'linear-gradient(135deg, #EF4444, #DC2626)',
-  High: 'linear-gradient(135deg, #F97316, #EF4444)',
-  Medium: 'linear-gradient(135deg, #6366f1, #3b82f6)',
-  Normal: 'linear-gradient(135deg, #3B82F6, #0D9488)',
-  Low: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+const PRIORITY_META = {
+  urgent: {
+    label: 'URGENT',
+    fg: '#dc2626',
+    bg: '#fee2e2',
+    border: '#ef4444',
+  },
+  normal: {
+    label: 'NORMAL',
+    fg: '#d97706',
+    bg: '#fef3c7',
+    border: '#f59e0b',
+  },
+  low: {
+    label: 'LOW',
+    fg: '#0f766e',
+    bg: '#ccfbf1',
+    border: '#14b8a6',
+  },
 };
 
-const getInitials = (name = '') => name
-  .split(' ')
-  .filter(Boolean)
-  .slice(0, 2)
-  .map((part) => part[0]?.toUpperCase() || '')
-  .join('') || 'NA';
+const FILTER_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'urgent', label: 'Urgent' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Low' },
+];
 
-const toDateTimeLabel = (rawDate) => {
-  if (!rawDate) return 'N/A';
-  const date = new Date(rawDate);
-  if (Number.isNaN(date.getTime())) return 'N/A';
-  const datePart = date.toISOString().split('T')[0];
-  const timePart = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return `${datePart} ${timePart}`;
+const SNOOZE_OPTIONS = [
+  { value: 60, label: 'Snooze 1 hour' },
+  { value: 240, label: 'Snooze 4 hours' },
+  { value: 'tomorrow', label: 'Snooze until tomorrow' },
+];
+
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
 };
+
+const getInitials = (name = '') =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || 'NA';
 
 const getNoteValue = (notes, key) => {
   if (!notes) return '';
@@ -60,46 +87,40 @@ const getNoteValue = (notes, key) => {
   return match?.[1]?.trim() || '';
 };
 
-const parseNoteTags = (notes) =>
-  String(getNoteValue(notes, 'Priority Tags') || '')
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+const formatWait = (hours) => {
+  const totalMinutes = Math.max(0, Math.round(Number(hours || 0) * 60));
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `waiting ${h}h ${m}m`;
+};
 
-function CircularScore({ score, id, isDark }) {
-  const r = 28;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (score / 100) * circ;
-  const gradId = `clientScoreGrad-${id}`;
+const formatSla = (hoursRemaining) => {
+  if (hoursRemaining === null || hoursRemaining === undefined) return 'No SLA';
+  const totalMinutes = Math.round(Math.abs(Number(hoursRemaining)) * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (hoursRemaining < 0) {
+    return `OVERDUE by ${h}h ${m}m`;
+  }
+  return `respond in ${h}h ${m}m`;
+};
 
-  return (
-    <Box sx={{ position: 'relative', width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <svg width="64" height="64" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="32" cy="32" r={r} fill="none" stroke={isDark ? '#334155' : '#E5E7EB'} strokeWidth="5" />
-        <motion.circle
-          cx="32"
-          cy="32"
-          r={r}
-          fill="none"
-          stroke={`url(#${gradId})`}
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          initial={{ strokeDashoffset: circ }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.1, ease: 'easeOut' }}
-        />
-        <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#84CC16" />
-            <stop offset="100%" stopColor="#0D9488" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <Typography sx={{ position: 'absolute', fontSize: '0.875rem', fontWeight: 900, color: isDark ? '#f8fafc' : '#111827' }}>{score}</Typography>
-    </Box>
-  );
-}
+const formatRelativeSeconds = (dateValue) => {
+  if (!dateValue) return 'not updated';
+  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(dateValue).getTime()) / 1000));
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const mins = Math.floor(diffSec / 60);
+  return `${mins}m ago`;
+};
+
+const toTomorrowMinutes = () => {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+  const diffMs = Math.max(tomorrow.getTime() - now.getTime(), 60 * 1000);
+  return Math.ceil(diffMs / (60 * 1000));
+};
 
 function CoachClients() {
   const theme = useTheme();
@@ -109,10 +130,26 @@ function CoachClients() {
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
   const panelBorder = isDark ? '#24344f' : '#e5e7eb';
   const muted = isDark ? '#94a3b8' : '#6b7280';
+  const isHeadCoach = String(user?.coachRole || 'head').toLowerCase() === 'head';
+  const isSubCoach = String(user?.coachRole || 'head').toLowerCase() === 'sub';
 
-  const [appointments, setAppointments] = useState([]);
-  const [priorityById, setPriorityById] = useState({});
-  const [flippedMemberIds, setFlippedMemberIds] = useState({});
+  const [queue, setQueue] = useState([]);
+  const [snoozedQueue, setSnoozedQueue] = useState([]);
+  const [queueStats, setQueueStats] = useState({
+    urgentCount: 0,
+    normalCount: 0,
+    lowCount: 0,
+    slaBreachedCount: 0,
+    avgWaitHours: 0,
+    longestWaitHours: 0,
+    escalatedTodayCount: 0,
+  });
+  const [members, setMembers] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [queuePriorityFilter, setQueuePriorityFilter] = useState('all');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [showSnoozed, setShowSnoozed] = useState(false);
   const [toast, setToast] = useState({ open: false, message: '' });
   const [rejectDialog, setRejectDialog] = useState({
     open: false,
@@ -121,129 +158,135 @@ function CoachClients() {
     error: '',
     isSubmitting: false,
   });
+  const [delegateDialog, setDelegateDialog] = useState({
+    open: false,
+    appointment: null,
+    subCoachId: '',
+    error: '',
+    isSubmitting: false,
+  });
 
-  const mapAppointmentRow = useCallback((item) => {
-    const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
-    const priority = priorityById[item._id] || 'Normal';
+  const mapQueueRow = useCallback((item) => {
+    const priority = normalizePriority(item.priority);
+    const escalations = Array.isArray(item.escalationHistory) ? item.escalationHistory : [];
+    const latestEscalation = escalations.length ? escalations[escalations.length - 1] : null;
+    const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId || '').slice(0, 6)}`;
     return {
       id: item._id,
+      queuePosition: Number(item.queuePosition || 0),
       userId: item.userId,
       name,
-      age: '-',
       goal: getNoteValue(item.notes, 'Goal') || item.sessionType || 'General',
-      priorityTags: parseNoteTags(item.notes),
-      requestedAt: toDateTimeLabel(item.startsAt),
+      description: getNoteValue(item.notes, 'Description') || item.notes || '-',
+      notes: item.notes || '',
       priority,
-      avatar: getInitials(name),
-      gradient: PRIORITY_GRADIENT[priority] || PRIORITY_GRADIENT.Normal,
-      email: getNoteValue(item.notes, 'User Email') || '-',
-      branchUserId: getNoteValue(item.notes, 'Branch User ID') || '-',
-      phone: getNoteValue(item.notes, 'Mobile') || '-',
-      notes: getNoteValue(item.notes, 'Description') || item.notes || '-',
-      rawNotes: item.notes || '',
-      status: item.status,
+      waitTimeHours: Number(item.waitTimeHours || 0),
+      slaRemainingHours:
+        item.slaRemainingHours === null || item.slaRemainingHours === undefined
+          ? null
+          : Number(item.slaRemainingHours),
+      slaBreached: Boolean(item.slaBreached),
+      delegatedByCoachName: String(item.delegatedByCoachName || ''),
+      delegatedByCoachId: String(item.delegatedByCoachId || ''),
+      snoozedUntil: item.snoozedUntil || null,
       startsAt: item.startsAt,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
+      latestEscalation,
+      avatar: getInitials(name),
     };
-  }, [priorityById]);
+  }, []);
 
-  const loadAppointments = useCallback(async () => {
+  const mapMemberRow = useCallback((item) => {
+    const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
+    const status = item.status === 'completed' ? 'Completed' : 'Active';
+    return {
+      id: item.userId,
+      name,
+      goal: getNoteValue(item.notes, 'Goal') || item.sessionType || 'General',
+      email: getNoteValue(item.notes, 'User Email') || '-',
+      phone: getNoteValue(item.notes, 'Mobile') || '-',
+      status,
+      avatar: getInitials(name),
+      priority: normalizePriority(item.priority),
+    };
+  }, []);
+
+  const loadData = useCallback(async () => {
     if (!coachId) return;
     try {
-      const { data } = await getCoachAppointments({
-        page: 1,
-        limit: 200,
-      });
-      const all = Array.isArray(data?.data) ? data.data : [];
-      const coachName = String(user?.name || '').trim().toLowerCase();
-      const mine = all.filter((item) => {
-        const byId = String(item.coachId || '') === coachId;
-        const byNoteId = String(getNoteValue(item.notes, 'CoachId') || '') === coachId;
-        const noteCoach = getNoteValue(item.notes, 'Coach').toLowerCase();
-        const byName = coachName && noteCoach && noteCoach === coachName;
-        const isCoachBooking = item.sessionType !== 'nutrition';
-        return isCoachBooking && (byId || byNoteId || byName);
+      const [queuePayload, statsPayload, appointmentsPayload, teamPayload] = await Promise.all([
+        getCoachQueue(),
+        getCoachQueueStats(),
+        getCoachAppointments({ page: 1, limit: 200 }),
+        isHeadCoach
+          ? getMyTeam().catch(() => ({ data: { data: [] } }))
+          : Promise.resolve({ data: { data: [] } }),
+      ]);
+
+      const queueRows = Array.isArray(queuePayload?.data?.data)
+        ? queuePayload.data.data.map(mapQueueRow)
+        : [];
+      const snoozedRows = Array.isArray(queuePayload?.data?.snoozed)
+        ? queuePayload.data.snoozed.map(mapQueueRow)
+        : [];
+      setQueue(queueRows);
+      setSnoozedQueue(snoozedRows);
+
+      setQueueStats({
+        urgentCount: Number(statsPayload?.data?.data?.urgentCount || 0),
+        normalCount: Number(statsPayload?.data?.data?.normalCount || 0),
+        lowCount: Number(statsPayload?.data?.data?.lowCount || 0),
+        slaBreachedCount: Number(statsPayload?.data?.data?.slaBreachedCount || 0),
+        avgWaitHours: Number(statsPayload?.data?.data?.avgWaitHours || 0),
+        longestWaitHours: Number(statsPayload?.data?.data?.longestWaitHours || 0),
+        escalatedTodayCount: Number(statsPayload?.data?.data?.escalatedTodayCount || 0),
       });
 
-      setAppointments(mine);
+      const allAppointments = Array.isArray(appointmentsPayload?.data?.data)
+        ? appointmentsPayload.data.data
+        : [];
+      const accepted = allAppointments.filter((item) => item.status === 'approved' || item.status === 'completed');
+      const byUser = new Map();
+      accepted.forEach((item) => {
+        const previous = byUser.get(item.userId);
+        if (!previous || new Date(item.updatedAt).getTime() > new Date(previous.updatedAt).getTime()) {
+          byUser.set(item.userId, item);
+        }
+      });
+      setMembers(Array.from(byUser.values()).map(mapMemberRow));
+
+      setTeamMembers(Array.isArray(teamPayload?.data?.data) ? teamPayload.data.data : []);
+      setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
-      setAppointments([]);
-      const message = error?.response?.data?.message || 'Failed to load appointments';
-      setToast({ open: true, message });
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to load coach queue.' });
     }
-  }, [coachId, user]);
+  }, [coachId, isHeadCoach, mapMemberRow, mapQueueRow]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      void loadAppointments();
-    }, 0);
-    const interval = setInterval(() => {
-      void loadAppointments();
-    }, 15000);
+    void loadData();
+    const refreshInterval = setInterval(() => {
+      void loadData();
+    }, 60000);
+    const tickInterval = setInterval(() => {
+      setNowTick(Date.now());
+    }, 1000);
     return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
+      clearInterval(refreshInterval);
+      clearInterval(tickInterval);
     };
-  }, [loadAppointments]);
+  }, [loadData]);
 
-  const pendingRows = useMemo(
-    () =>
-      appointments
-        .filter((item) => item.status === 'pending')
-        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-        .map(mapAppointmentRow),
-    [appointments, mapAppointmentRow],
-  );
-
-  const members = useMemo(() => {
-    const accepted = appointments.filter((item) => item.status === 'approved' || item.status === 'completed');
-    const byUser = new Map();
-
-    accepted.forEach((item) => {
-      const prev = byUser.get(item.userId);
-      if (!prev || new Date(item.updatedAt).getTime() > new Date(prev.updatedAt).getTime()) {
-        byUser.set(item.userId, item);
-      }
-    });
-
-    return Array.from(byUser.values()).map((item) => {
-      const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
-      const goal = getNoteValue(item.notes, 'Goal') || item.sessionType || 'General';
-      return {
-        id: item.userId,
-        name,
-        age: '-',
-        goal,
-        score: item.status === 'completed' ? 65 : 0,
-        progress: item.status === 'completed' ? 100 : 0,
-        lastActive: item.status === 'completed' ? 'Completed session' : 'Recently approved',
-        avatar: getInitials(name),
-        gradient: 'linear-gradient(135deg, #3B82F6, #0D9488)',
-        status: item.status === 'completed' ? 'Completed' : 'Active',
-        branchUserId: getNoteValue(item.notes, 'Branch User ID') || '-',
-        priorityTags: parseNoteTags(item.notes),
-        email: getNoteValue(item.notes, 'User Email') || '-',
-        phone: getNoteValue(item.notes, 'Mobile') || '-',
-        preferredSlot: toDateTimeLabel(item.startsAt),
-        trainingDays: 'To be scheduled',
-        notes: getNoteValue(item.notes, 'Description') || item.notes || '-',
-        priority: 'Normal',
-      };
-    });
-  }, [appointments]);
-
-  const updatePriority = (id, priority) => {
-    setPriorityById((prev) => ({ ...prev, [id]: priority }));
-  };
+  const visibleQueue = useMemo(() => {
+    if (queuePriorityFilter === 'all') return queue;
+    return queue.filter((item) => item.priority === queuePriorityFilter);
+  }, [queue, queuePriorityFilter]);
 
   const approveRequest = async (request) => {
     try {
       await updateCoachAppointmentStatus(request.id, { status: 'approved' });
-      await loadAppointments();
-      setToast({ open: true, message: 'Appointment approved' });
+      await loadData();
+      setToast({ open: true, message: 'Appointment approved.' });
     } catch (error) {
-      setToast({ open: true, message: error?.response?.data?.message || 'Failed to approve appointment' });
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to approve appointment.' });
     }
   };
 
@@ -276,7 +319,7 @@ function CoachClients() {
       return;
     }
 
-    const existingSegments = String(request.rawNotes || '')
+    const existingSegments = String(request.notes || '')
       .split('|')
       .map((segment) => segment.trim())
       .filter((segment) => segment && !/^Reject Reason\s*:/i.test(segment));
@@ -288,30 +331,80 @@ function CoachClients() {
         status: 'rejected',
         notes: notesWithRejectReason,
       });
-      await loadAppointments();
-      setToast({ open: true, message: 'Appointment rejected' });
+      await loadData();
+      setToast({ open: true, message: 'Appointment rejected.' });
       closeRejectDialog();
     } catch (error) {
       setRejectDialog((prev) => ({
         ...prev,
         isSubmitting: false,
-        error: error?.response?.data?.message || 'Failed to reject appointment',
+        error: error?.response?.data?.message || 'Failed to reject appointment.',
       }));
     }
   };
 
-  const toggleMemberCard = (id) => {
-    setFlippedMemberIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  const handleSnooze = async (appointmentId, value) => {
+    const minutes = value === 'tomorrow' ? toTomorrowMinutes() : Number(value || 0);
+    if (!minutes || minutes < 1) return;
+    try {
+      await snoozeAppointment(appointmentId, minutes);
+      await loadData();
+      setToast({ open: true, message: 'Appointment snoozed.' });
+    } catch (error) {
+      setToast({ open: true, message: error?.response?.data?.message || 'Failed to snooze appointment.' });
+    }
+  };
+
+  const openDelegateDialog = (request) => {
+    setDelegateDialog({
+      open: true,
+      appointment: request,
+      subCoachId: '',
+      error: '',
+      isSubmitting: false,
+    });
+  };
+
+  const closeDelegateDialog = () => {
+    setDelegateDialog({
+      open: false,
+      appointment: null,
+      subCoachId: '',
+      error: '',
+      isSubmitting: false,
+    });
+  };
+
+  const submitDelegate = async () => {
+    if (!delegateDialog.appointment?.id) return;
+    if (!delegateDialog.subCoachId) {
+      setDelegateDialog((prev) => ({ ...prev, error: 'Please select a sub-coach.' }));
+      return;
+    }
+
+    setDelegateDialog((prev) => ({ ...prev, error: '', isSubmitting: true }));
+    try {
+      await delegateAppointment(delegateDialog.appointment.id, delegateDialog.subCoachId);
+      await loadData();
+      setToast({ open: true, message: 'Appointment delegated successfully.' });
+      closeDelegateDialog();
+    } catch (error) {
+      setDelegateDialog((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        error: error?.response?.data?.message || 'Failed to delegate appointment.',
+      }));
+    }
   };
 
   return (
     <Box sx={{ pb: 3 }}>
       <Box sx={{ mb: 2 }}>
         <Typography sx={{ fontSize: { xs: '1.4rem', md: '1.85rem' }, fontWeight: 900, color: 'text.primary' }}>
-          Coach Clients
+          Coach Clients Queue
         </Typography>
         <Typography sx={{ color: 'text.secondary', mt: 0.4 }}>
-          Review appointment requests and track progress of approved members.
+          Priority queue with FIFO behavior, auto-escalation support, and SLA tracking.
         </Typography>
       </Box>
 
@@ -319,6 +412,42 @@ function CoachClients() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
+        sx={{
+          background: queueStats.slaBreachedCount > 0 ? (isDark ? '#331515' : '#fff1f2') : panelBg,
+          borderRadius: 2.2,
+          border: '1px solid',
+          borderColor: queueStats.slaBreachedCount > 0 ? '#ef4444' : panelBorder,
+          p: 2,
+          mb: 2,
+        }}
+      >
+        <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={1.2}>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            <Chip label={`${queueStats.urgentCount} Urgent`} sx={{ fontWeight: 800, bgcolor: '#fee2e2', color: '#dc2626' }} />
+            <Chip label={`${queueStats.normalCount} Normal`} sx={{ fontWeight: 800, bgcolor: '#fef3c7', color: '#d97706' }} />
+            <Chip label={`${queueStats.lowCount} Low`} sx={{ fontWeight: 800, bgcolor: '#ccfbf1', color: '#0f766e' }} />
+            <Chip label={`${queueStats.slaBreachedCount} SLA Breached`} sx={{ fontWeight: 800, bgcolor: '#fecaca', color: '#b91c1c' }} />
+          </Stack>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'text.secondary' }}>
+              Avg wait: {Number(queueStats.avgWaitHours || 0).toFixed(1)} hrs
+            </Typography>
+            <Typography sx={{ fontSize: '0.8rem', color: muted }}>
+              Last updated {formatRelativeSeconds(lastUpdatedAt || nowTick)}
+            </Typography>
+          </Stack>
+        </Stack>
+        {queueStats.slaBreachedCount > 0 && (
+          <Typography sx={{ mt: 1, color: '#dc2626', fontWeight: 900, fontSize: '0.84rem' }}>
+            ACTION REQUIRED
+          </Typography>
+        )}
+      </MotionBox>
+
+      <MotionBox
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.05 }}
         sx={{
           background: panelBg,
           borderRadius: 2.2,
@@ -328,233 +457,252 @@ function CoachClients() {
           mb: 2,
         }}
       >
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.2 }}>
-          <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1.05rem' }}>Appointments</Typography>
-          <Chip label={`${pendingRows.length} pending`} size="small" sx={{ fontWeight: 700 }} />
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between" sx={{ mb: 1.5 }}>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            {FILTER_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                size="small"
+                variant={queuePriorityFilter === option.value ? 'contained' : 'outlined'}
+                onClick={() => setQueuePriorityFilter(option.value)}
+                sx={{ textTransform: 'none', borderRadius: 99, fontWeight: 700 }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </Stack>
+          <Typography sx={{ fontSize: '0.82rem', color: muted }}>
+            Queue positions stay fixed while filtering.
+          </Typography>
         </Stack>
 
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Client</TableCell>
-                <TableCell>Branch ID</TableCell>
-                <TableCell>Goal</TableCell>
-                <TableCell>Tags</TableCell>
-                <TableCell>Requested Time</TableCell>
-                <TableCell>Priority</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {!pendingRows.length && (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    <Typography sx={{ color: 'text.secondary', py: 1 }}>No pending requests.</Typography>
-                  </TableCell>
-                </TableRow>
-              )}
+        <Stack spacing={1.3}>
+          {!queue.length && (
+            <Typography sx={{ color: 'text.secondary', py: 1 }}>No pending requests in the active queue.</Typography>
+          )}
 
-              {pendingRows.map((row) => (
-                <TableRow key={row.id} hover>
-                  <TableCell>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Avatar sx={{ width: 32, height: 32, fontSize: '0.75rem', background: row.gradient }}>
-                        {row.avatar}
-                      </Avatar>
-                      <Box>
-                        <Typography sx={{ fontWeight: 700, fontSize: '0.88rem' }}>{row.name}</Typography>
-                        <Typography sx={{ color: muted, fontSize: '0.76rem' }}>Age {row.age}</Typography>
-                      </Box>
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Typography sx={{ fontSize: '0.84rem', color: muted, fontWeight: 700 }}>{row.branchUserId}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography sx={{ fontSize: '0.84rem', color: 'text.primary' }}>{row.goal}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
-                      {row.priorityTags.length
-                        ? row.priorityTags.map((tag) => <Chip key={`${row.id}-${tag}`} label={tag} size="small" />)
-                        : <Typography sx={{ fontSize: '0.82rem', color: muted }}>-</Typography>}
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Typography sx={{ fontSize: '0.84rem', color: muted }}>{row.requestedAt}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Select
+          {visibleQueue.map((row) => {
+            const meta = PRIORITY_META[row.priority] || PRIORITY_META.normal;
+            const overdue = Number(row.slaRemainingHours || 0) < 0 || row.slaBreached;
+            return (
+              <Box
+                key={row.id}
+                sx={{
+                  borderLeft: `6px solid ${meta.border}`,
+                  borderRadius: 1.8,
+                  border: '1px solid',
+                  borderColor: panelBorder,
+                  p: 1.4,
+                  background: isDark ? '#0c162d' : '#ffffff',
+                }}
+              >
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.2} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip
+                      label={`#${row.queuePosition}`}
                       size="small"
-                      value={row.priority}
-                      onChange={(e) => updatePriority(row.id, e.target.value)}
-                      sx={{ minWidth: 110, '& .MuiSelect-select': { py: 0.6 } }}
-                    >
-                      <MenuItem value="Urgent">Urgent</MenuItem>
-                      <MenuItem value="High">High</MenuItem>
-                      <MenuItem value="Medium">Medium</MenuItem>
-                      <MenuItem value="Normal">Normal</MenuItem>
-                      <MenuItem value="Low">Low</MenuItem>
-                    </Select>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Stack direction="row" spacing={0.8} justifyContent="flex-end">
-                      <Button
+                      sx={{ fontWeight: 900, bgcolor: isDark ? '#1f2937' : '#eef2ff' }}
+                    />
+                    <Chip
+                      size="small"
+                      label={meta.label}
+                      sx={{ fontWeight: 800, color: meta.fg, bgcolor: meta.bg }}
+                    />
+                    {row.slaBreached && (
+                      <Chip
                         size="small"
-                        variant="contained"
-                        onClick={() => approveRequest(row)}
-                        sx={{ textTransform: 'none', borderRadius: 1.4, bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' } }}
+                        label="SLA BREACHED"
+                        sx={{
+                          fontWeight: 900,
+                          color: '#ffffff',
+                          bgcolor: '#dc2626',
+                          animation: 'pulse 1.3s infinite',
+                          '@keyframes pulse': {
+                            '0%': { opacity: 1 },
+                            '50%': { opacity: 0.5 },
+                            '100%': { opacity: 1 },
+                          },
+                        }}
+                      />
+                    )}
+                  </Stack>
+
+                  <Stack direction="row" spacing={0.8} alignItems="center">
+                    <FormControl size="small" sx={{ minWidth: 160 }}>
+                      <InputLabel id={`snooze-${row.id}`}>Snooze</InputLabel>
+                      <Select
+                        labelId={`snooze-${row.id}`}
+                        label="Snooze"
+                        value=""
+                        onChange={(event) => {
+                          void handleSnooze(row.id, event.target.value);
+                        }}
                       >
-                        Approve
-                      </Button>
+                        {SNOOZE_OPTIONS.map((option) => (
+                          <MenuItem key={String(option.value)} value={option.value}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => approveRequest(row)}
+                      sx={{ textTransform: 'none', borderRadius: 1.4, bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' } }}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      onClick={() => openRejectDialog(row)}
+                      sx={{ textTransform: 'none', borderRadius: 1.4 }}
+                    >
+                      Reject
+                    </Button>
+                    {isHeadCoach && teamMembers.length > 0 && (
                       <Button
                         size="small"
                         variant="outlined"
-                        color="error"
-                        onClick={() => openRejectDialog(row)}
+                        onClick={() => openDelegateDialog(row)}
                         sx={{ textTransform: 'none', borderRadius: 1.4 }}
                       >
-                        Reject
+                        Delegate
                       </Button>
+                    )}
+                  </Stack>
+                </Stack>
+
+                <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mt: 1 }}>
+                  <Avatar sx={{ width: 34, height: 34, fontSize: '0.75rem', fontWeight: 800 }}>{row.avatar}</Avatar>
+                  <Box>
+                    <Typography sx={{ fontWeight: 800, fontSize: '0.93rem' }}>{row.name}</Typography>
+                    <Typography sx={{ color: muted, fontSize: '0.83rem' }}>{row.goal}</Typography>
+                    {isSubCoach && row.delegatedByCoachName && (
+                      <Typography sx={{ color: '#0d9488', fontSize: '0.74rem', fontWeight: 700 }}>
+                        Delegated by {row.delegatedByCoachName}
+                      </Typography>
+                    )}
+                    {row.latestEscalation?.fromPriority && (
+                      <Typography sx={{ color: muted, fontSize: '0.74rem', mt: 0.2 }}>
+                        Auto-escalated from {String(row.latestEscalation.fromPriority).toUpperCase()}
+                      </Typography>
+                    )}
+                  </Box>
+                </Stack>
+
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} sx={{ mt: 1 }}>
+                  <Typography sx={{ fontSize: '0.81rem', color: muted }}>{formatWait(row.waitTimeHours)}</Typography>
+                  <Typography sx={{ fontSize: '0.81rem', color: overdue ? '#dc2626' : muted, fontWeight: overdue ? 800 : 500 }}>
+                    {formatSla(row.slaRemainingHours)}
+                  </Typography>
+                </Stack>
+
+                <Typography sx={{ mt: 0.8, color: 'text.secondary', fontSize: '0.82rem' }}>
+                  {row.description}
+                </Typography>
+              </Box>
+            );
+          })}
+
+          {queue.length > 0 && visibleQueue.length === 0 && (
+            <Typography sx={{ color: 'text.secondary', py: 1 }}>
+              No queue items match this priority filter.
+            </Typography>
+          )}
+        </Stack>
+
+        <Box sx={{ mt: 2 }}>
+          <Button
+            size="small"
+            onClick={() => setShowSnoozed((prev) => !prev)}
+            sx={{ textTransform: 'none', fontWeight: 700 }}
+          >
+            {showSnoozed ? 'Hide Snoozed' : `Show Snoozed (${snoozedQueue.length})`}
+          </Button>
+          {showSnoozed && (
+            <Stack spacing={1} sx={{ mt: 1 }}>
+              {!snoozedQueue.length && (
+                <Typography sx={{ color: muted, fontSize: '0.84rem' }}>No snoozed items.</Typography>
+              )}
+              {snoozedQueue.map((row) => {
+                const meta = PRIORITY_META[row.priority] || PRIORITY_META.normal;
+                return (
+                  <Box
+                    key={`snoozed-${row.id}`}
+                    sx={{
+                      borderLeft: `6px solid ${meta.border}`,
+                      borderRadius: 1.6,
+                      border: '1px dashed',
+                      borderColor: panelBorder,
+                      p: 1,
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" justifyContent="space-between">
+                      <Typography sx={{ fontWeight: 700, fontSize: '0.88rem' }}>
+                        {row.name} - {row.goal}
+                      </Typography>
+                      <Typography sx={{ fontSize: '0.78rem', color: muted }}>
+                        Snoozed until {row.snoozedUntil ? new Date(row.snoozedUntil).toLocaleString() : 'N/A'}
+                      </Typography>
                     </Stack>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+        </Box>
       </MotionBox>
 
-      <Box sx={{ mb: 1.1 }}>
-        <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1.06rem' }}>Members Progress</Typography>
-      </Box>
-
-      <Box
+      <MotionBox
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.08 }}
         sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', xl: '1fr 1fr 1fr' },
-          gap: 2,
+          background: panelBg,
+          borderRadius: 2.2,
+          border: '1px solid',
+          borderColor: panelBorder,
+          p: 2,
+          mb: 2,
         }}
       >
-        {members.map((client, index) => (
-          <MotionBox
-            key={client.id}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05, duration: 0.28 }}
-            whileHover={{ y: -4 }}
-            sx={{ perspective: '1200px' }}
-          >
-            <Box
-              sx={{
-                position: 'relative',
-                minHeight: 258,
-                transformStyle: 'preserve-3d',
-                transition: 'transform 0.5s ease',
-                transform: flippedMemberIds[client.id] ? 'rotateY(180deg)' : 'rotateY(0deg)',
-              }}
-            >
-              <Box
-                sx={{
-                  position: 'absolute',
-                  inset: 0,
-                  borderRadius: 2.2,
-                  p: 2,
-                  border: '1px solid',
-                  borderColor: panelBorder,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                  background: panelBg,
-                  backfaceVisibility: 'hidden',
-                }}
+        <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1.05rem', mb: 1.2 }}>
+          Members Progress Snapshot
+        </Typography>
+        <Stack spacing={1}>
+          {!members.length && (
+            <Typography sx={{ color: muted, fontSize: '0.86rem' }}>No approved/completed members yet.</Typography>
+          )}
+          {members.map((member) => {
+            const meta = PRIORITY_META[member.priority] || PRIORITY_META.normal;
+            return (
+              <Stack
+                key={member.id}
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+                sx={{ p: 1.2, border: '1px solid', borderColor: panelBorder, borderRadius: 1.5 }}
               >
-                <Stack direction="row" spacing={1.4} alignItems="center" sx={{ mb: 1.7 }}>
-                  <Avatar sx={{ width: 46, height: 46, fontWeight: 800, fontSize: '1.05rem', color: '#fff', background: client.gradient }}>
-                    {client.avatar}
-                  </Avatar>
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1.02rem' }}>{client.name}</Typography>
-                    <Typography sx={{ color: muted, fontSize: '0.84rem' }}>
-                      Age {client.age} - {client.goal}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ ml: 'auto' }}>
-                    <CircularScore score={client.score} id={client.id} isDark={isDark} />
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Avatar sx={{ width: 34, height: 34, fontSize: '0.75rem' }}>{member.avatar}</Avatar>
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }}>{member.name}</Typography>
+                    <Typography sx={{ color: muted, fontSize: '0.79rem' }}>{member.goal}</Typography>
+                    <Typography sx={{ color: muted, fontSize: '0.76rem' }}>{member.email} | {member.phone}</Typography>
                   </Box>
                 </Stack>
-
-                <Typography sx={{ color: muted, fontSize: '0.84rem' }}>Program Progress</Typography>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.65, mb: 1.2 }}>
-                  <Box sx={{ flex: 1, height: 7, borderRadius: 999, overflow: 'hidden', bgcolor: isDark ? '#1f2937' : '#e5e7eb' }}>
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${client.progress}%` }}
-                      transition={{ duration: 0.9, ease: 'easeOut', delay: 0.15 + index * 0.05 }}
-                      style={{ height: '100%', borderRadius: 999, background: client.gradient }}
-                    />
-                  </Box>
-                  <Typography sx={{ fontSize: '0.84rem', fontWeight: 700, color: 'text.primary' }}>{client.progress}%</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip label={member.status} size="small" sx={{ fontWeight: 700 }} />
+                  <Chip size="small" label={meta.label} sx={{ color: meta.fg, bgcolor: meta.bg, fontWeight: 800 }} />
                 </Stack>
-
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography sx={{ color: muted, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
-                    <MonitorHeartRoundedIcon sx={{ fontSize: 13 }} /> {client.lastActive}
-                  </Typography>
-                  <Button
-                    size="small"
-                    onClick={() => toggleMemberCard(client.id)}
-                    sx={{ textTransform: 'none', color: '#0d9488', fontWeight: 700, p: 0, minWidth: 0 }}
-                  >
-                    View Profile
-                  </Button>
-                </Stack>
-              </Box>
-
-              <Box
-                sx={{
-                  position: 'absolute',
-                  inset: 0,
-                  borderRadius: 2.2,
-                  p: 2,
-                  border: '1px solid',
-                  borderColor: panelBorder,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                  background: panelBg,
-                  backfaceVisibility: 'hidden',
-                  transform: 'rotateY(180deg)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <Box>
-                  <Typography sx={{ fontWeight: 800, color: 'text.primary', mb: 1 }}>Client Details</Typography>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Branch ID:</strong> {client.branchUserId}</Typography>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Email:</strong> {client.email}</Typography>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Phone:</strong> {client.phone}</Typography>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Preferred Slot:</strong> {client.preferredSlot}</Typography>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Training Days:</strong> {client.trainingDays}</Typography>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Tags:</strong></Typography>
-                  <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ mb: 0.7 }}>
-                    {client.priorityTags.length
-                      ? client.priorityTags.map((tag) => <Chip key={`${client.id}-${tag}`} label={tag} size="small" />)
-                      : <Typography sx={{ color: muted, fontSize: '0.84rem' }}>-</Typography>}
-                  </Stack>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Priority:</strong> {client.priority}</Typography>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem' }}><strong>Notes:</strong> {client.notes}</Typography>
-                </Box>
-                <Button
-                  size="small"
-                  onClick={() => toggleMemberCard(client.id)}
-                  sx={{ textTransform: 'none', color: '#0d9488', fontWeight: 700, alignSelf: 'flex-start', p: 0, minWidth: 0 }}
-                >
-                  Back
-                </Button>
-              </Box>
-            </Box>
-          </MotionBox>
-        ))}
-      </Box>
+              </Stack>
+            );
+          })}
+        </Stack>
+      </MotionBox>
 
       <Snackbar
         open={toast.open}
@@ -564,12 +712,7 @@ function CoachClients() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       />
 
-      <Dialog
-        open={rejectDialog.open}
-        onClose={closeRejectDialog}
-        maxWidth="sm"
-        fullWidth
-      >
+      <Dialog open={rejectDialog.open} onClose={closeRejectDialog} maxWidth="sm" fullWidth>
         <DialogTitle>Reject Appointment</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 1, color: muted, fontSize: '0.9rem' }}>
@@ -604,6 +747,50 @@ function CoachClients() {
             disabled={rejectDialog.isSubmitting}
           >
             {rejectDialog.isSubmitting ? 'Submitting...' : 'Submit Rejection'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={delegateDialog.open} onClose={closeDelegateDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>Delegate Appointment</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 1, color: muted, fontSize: '0.9rem' }}>
+            Select a sub-coach to reassign this pending booking.
+          </Typography>
+          <Typography sx={{ mb: 1.2, color: 'text.primary', fontSize: '0.9rem', fontWeight: 700 }}>
+            {delegateDialog.appointment?.name || ''}
+          </Typography>
+          <FormControl fullWidth size="small">
+            <InputLabel id="delegate-subcoach-label">Sub-Coach</InputLabel>
+            <Select
+              labelId="delegate-subcoach-label"
+              label="Sub-Coach"
+              value={delegateDialog.subCoachId}
+              onChange={(event) =>
+                setDelegateDialog((prev) => ({
+                  ...prev,
+                  subCoachId: event.target.value,
+                  error: '',
+                }))
+              }
+            >
+              {teamMembers.map((member) => (
+                <MenuItem key={member.id} value={member.id}>
+                  {`${member.name} (${Number(member.pendingCount || 0)} pending)`}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {delegateDialog.error && (
+            <Typography sx={{ mt: 1, color: '#ef4444', fontSize: '0.84rem', fontWeight: 600 }}>
+              {delegateDialog.error}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDelegateDialog}>Cancel</Button>
+          <Button variant="contained" onClick={submitDelegate} disabled={delegateDialog.isSubmitting}>
+            {delegateDialog.isSubmitting ? 'Delegating...' : 'Delegate'}
           </Button>
         </DialogActions>
       </Dialog>

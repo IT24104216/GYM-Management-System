@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Appointment } from '../appointments/appointments.model.js';
 import { CoachProfile } from '../coach/coachProfile.model.js';
 import { DietitianProfile } from '../dietitian/dietitianProfile.model.js';
+import { Subscription } from '../subscriptions/subscriptions.model.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { AppError } from '../../shared/errors/AppError.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
@@ -12,7 +13,10 @@ import { formatTrend, getMonthRange, REPORT_MONTHS, toUserDto } from './admin.ut
 
 const ROLE_SET = new Set(['user', 'coach', 'dietitian', 'admin']);
 const STATUS_SET = new Set(['active', 'inactive', 'suspended']);
+const COACH_ROLE_SET = new Set(['head', 'sub']);
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}$/;
+const LEGACY_USD_TO_LKR_RATE = 315.5;
+const LEGACY_PRICE_THRESHOLD = 1000;
 
 const adminSettingsSchema = z.object({
   adminId: z.string().trim().min(1),
@@ -182,7 +186,9 @@ export const getUsers = asyncHandler(async (req, res) => {
     filter.status = status;
   }
 
-  const users = await User.find(filter).sort({ createdAt: -1 });
+  const users = await User.find(filter)
+    .populate('headCoachId', 'name email role coachRole')
+    .sort({ createdAt: -1 });
 
   res.status(HTTP_STATUS.OK).json({
     data: users.map(toUserDto),
@@ -190,7 +196,7 @@ export const getUsers = asyncHandler(async (req, res) => {
 });
 
 export const getUserById = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
+  const user = await User.findById(req.params.id).populate('headCoachId', 'name email role coachRole');
   if (!user) {
     throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
   }
@@ -208,6 +214,8 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   const nextRole = String(req.body?.role || '').trim().toLowerCase();
   const nextStatus = String(req.body?.status || '').trim().toLowerCase();
+  const nextCoachRoleRaw = String(req.body?.coachRole || '').trim().toLowerCase();
+  const nextHeadCoachIdRaw = String(req.body?.headCoachId || '').trim();
 
   if (nextRole) {
     if (!ROLE_SET.has(nextRole)) {
@@ -216,6 +224,10 @@ export const updateUser = asyncHandler(async (req, res) => {
     if (user.role !== nextRole) {
       user.role = nextRole;
       user.roleChangedAt = new Date();
+      if (nextRole !== 'coach') {
+        user.coachRole = 'head';
+        user.headCoachId = null;
+      }
     }
   }
 
@@ -230,13 +242,80 @@ export const updateUser = asyncHandler(async (req, res) => {
     user.name = String(req.body.name).trim();
   }
 
+  if (nextCoachRoleRaw) {
+    if (user.role !== 'coach') {
+      throw new AppError('coachRole can be set only for coach users', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+    }
+    if (!COACH_ROLE_SET.has(nextCoachRoleRaw)) {
+      throw new AppError('Invalid coachRole value', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+    }
+    user.coachRole = nextCoachRoleRaw;
+    if (nextCoachRoleRaw === 'head') {
+      user.headCoachId = null;
+    }
+  }
+
+  if (nextHeadCoachIdRaw || req.body?.headCoachId === null || req.body?.headCoachId === '') {
+    if (user.role !== 'coach') {
+      // Non-coach role transitions can send null/empty headCoachId from UI reset payloads.
+      // Ignore empty reset values, but still reject explicit non-empty values.
+      if (nextHeadCoachIdRaw) {
+        throw new AppError('headCoachId can be set only for coach users', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+      }
+    } else {
+      if (!nextHeadCoachIdRaw) {
+        user.headCoachId = null;
+      } else {
+        if (!mongoose.isValidObjectId(nextHeadCoachIdRaw)) {
+          throw new AppError('Invalid headCoachId', HTTP_STATUS.BAD_REQUEST);
+        }
+        if (String(user._id) === nextHeadCoachIdRaw) {
+          throw new AppError('A coach cannot report to themselves', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+        }
+        const headCoach = await User.findById(nextHeadCoachIdRaw);
+        if (!headCoach || headCoach.role !== 'coach') {
+          throw new AppError('Head coach not found', HTTP_STATUS.NOT_FOUND);
+        }
+        const headCoachRole = String(headCoach.coachRole || 'head').toLowerCase();
+        if (headCoachRole !== 'head') {
+          throw new AppError('Selected head coach must have coachRole=head', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+        }
+        user.headCoachId = headCoach._id;
+        user.coachRole = 'sub';
+      }
+    }
+  }
+
+  if (user.role === 'coach') {
+    const normalizedCoachRole = String(user.coachRole || 'head').toLowerCase();
+    if (normalizedCoachRole === 'sub' && !user.headCoachId) {
+      throw new AppError('Sub-coach must have a headCoachId', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+    }
+  }
+
   await user.save();
+  await user.populate('headCoachId', 'name email role coachRole');
 
   res.status(HTTP_STATUS.OK).json({
     message: 'User updated successfully',
     data: toUserDto(user),
   });
 });
+
+export const getSubCoaches = async (headCoachId) => {
+  const safeHeadCoachId = String(headCoachId || '').trim();
+  if (!safeHeadCoachId || !mongoose.isValidObjectId(safeHeadCoachId)) {
+    return [];
+  }
+  return User.find({
+    role: 'coach',
+    coachRole: 'sub',
+    headCoachId: safeHeadCoachId,
+  })
+    .select('_id name email coachRole headCoachId status')
+    .sort({ name: 1 })
+    .lean();
+};
 
 export const deleteUser = asyncHandler(async (req, res) => {
   const deleted = await User.findByIdAndDelete(req.params.id);
@@ -282,54 +361,74 @@ export const getAdminStats = asyncHandler(async (_req, res) => {
   });
 });
 
-const REPORT_HOURLY_RATE_USD = 40;
-
 export const getAdminReportsOverview = asyncHandler(async (_req, res) => {
+  const legacyRows = await Subscription.find({
+    $or: [
+      { price: { $gt: 0, $lt: LEGACY_PRICE_THRESHOLD } },
+      { 'paymentHistory.amount': { $gt: 0, $lt: LEGACY_PRICE_THRESHOLD } },
+    ],
+  }).select('_id price paymentHistory').lean();
+
+  if (legacyRows.length) {
+    await Promise.all(legacyRows.map(async (row) => {
+      const nextPrice = Number(row.price || 0) > 0 && Number(row.price || 0) < LEGACY_PRICE_THRESHOLD
+        ? Number((Number(row.price) * LEGACY_USD_TO_LKR_RATE).toFixed(2))
+        : Number(row.price || 0);
+      const nextHistory = (Array.isArray(row.paymentHistory) ? row.paymentHistory : []).map((entry) => {
+        const amount = Number(entry?.amount || 0);
+        if (amount > 0 && amount < LEGACY_PRICE_THRESHOLD) {
+          return { ...entry, amount: Number((amount * LEGACY_USD_TO_LKR_RATE).toFixed(2)) };
+        }
+        return entry;
+      });
+
+      await Subscription.updateOne(
+        { _id: row._id },
+        { $set: { price: nextPrice, paymentHistory: nextHistory } },
+      );
+    }));
+  }
+
   const months = getMonthRange(REPORT_MONTHS);
   const startDate = months[0].start;
 
   const [
     totalMembers,
     activeMembers,
-    completedAppointments,
+    totalSubscriptionRevenue,
+    subscriptionRevenueByMonth,
     newUsersByMonth,
     coachRatings,
     dietitianRatings,
   ] = await Promise.all([
     User.countDocuments({ role: 'user' }),
     User.countDocuments({ role: 'user', status: 'active' }),
-    Appointment.aggregate([
+    Subscription.aggregate([
+      { $unwind: '$paymentHistory' },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $ifNull: ['$paymentHistory.amount', 0] } },
+        },
+      },
+    ]),
+    Subscription.aggregate([
+      { $unwind: '$paymentHistory' },
       {
         $match: {
-          status: 'completed',
-          startsAt: { $gte: startDate },
+          'paymentHistory.date': { $gte: startDate },
         },
       },
       {
         $project: {
-          ym: { $dateToString: { format: '%Y-%m', date: '$startsAt' } },
-          startsAt: 1,
-          endsAt: 1,
-        },
-      },
-      {
-        $addFields: {
-          durationHours: {
-            $max: [
-              1,
-              {
-                $ceil: {
-                  $divide: [{ $subtract: ['$endsAt', '$startsAt'] }, 1000 * 60 * 60],
-                },
-              },
-            ],
-          },
+          ym: { $dateToString: { format: '%Y-%m', date: '$paymentHistory.date' } },
+          amount: { $ifNull: ['$paymentHistory.amount', 0] },
         },
       },
       {
         $group: {
           _id: '$ym',
-          revenue: { $sum: { $multiply: ['$durationHours', REPORT_HOURLY_RATE_USD] } },
+          revenue: { $sum: '$amount' },
         },
       },
     ]),
@@ -351,7 +450,7 @@ export const getAdminReportsOverview = asyncHandler(async (_req, res) => {
     DietitianProfile.find({ rating: { $gt: 0 } }).select('rating').lean(),
   ]);
 
-  const revenueByMonth = new Map(completedAppointments.map((row) => [row._id, Number(row.revenue || 0)]));
+  const revenueByMonth = new Map(subscriptionRevenueByMonth.map((row) => [row._id, Number(row.revenue || 0)]));
   const usersByMonth = new Map(newUsersByMonth.map((row) => [row._id, Number(row.count || 0)]));
 
   const revenueTrend = months.map((m) => ({
@@ -368,7 +467,7 @@ export const getAdminReportsOverview = asyncHandler(async (_req, res) => {
     };
   });
 
-  const totalRevenue = revenueTrend.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const totalRevenue = Number(totalSubscriptionRevenue?.[0]?.total || 0);
   const firstRevenueHalf = revenueTrend.slice(0, Math.floor(revenueTrend.length / 2))
     .reduce((sum, item) => sum + Number(item.value || 0), 0);
   const secondRevenueHalf = revenueTrend.slice(Math.floor(revenueTrend.length / 2))
