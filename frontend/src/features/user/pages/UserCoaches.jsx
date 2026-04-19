@@ -37,6 +37,7 @@ import {
   updateAppointmentStatus,
   updateUserAppointment,
 } from '@/features/user/api/user.api';
+import { getCoachAvailableSlots } from '@/features/coach/api/coach.api';
 import { ROUTES } from '@/shared/utils/constants';
 
 const MotionCard = motion(Card);
@@ -112,6 +113,29 @@ const PRIORITY_TAG_OPTIONS = [
   'Dizziness',
   'Chest discomfort',
 ];
+const APPOINTMENT_PRIORITY_OPTIONS = [
+  {
+    value: 'urgent',
+    label: 'Urgent',
+    helper: 'I need help as soon as possible',
+    color: '#dc2626',
+    bg: '#fee2e2',
+  },
+  {
+    value: 'normal',
+    label: 'Normal',
+    helper: 'Standard booking',
+    color: '#d97706',
+    bg: '#fef3c7',
+  },
+  {
+    value: 'low',
+    label: 'Low',
+    helper: 'Flexible, no rush',
+    color: '#15803d',
+    bg: '#dcfce7',
+  },
+];
 const BOOKING_PROGRESS_META = {
   pending: { label: 'Pending', step: 0, color: '#16a34a' },
   confirmed: { label: 'Confirmed', step: 1, color: '#16a34a' },
@@ -127,6 +151,11 @@ const isBookingCompletedByTime = (booking) => {
 };
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
+};
 
 const normalizeTimeTo24h = (rawTime) => {
   if (!rawTime) return '';
@@ -146,12 +175,6 @@ const normalizeTimeTo24h = (rawTime) => {
   const hh = String(hour).padStart(2, '0');
   const mm = String(minuteRaw || 0).padStart(2, '0');
   return `${hh}:${mm}`;
-};
-
-const toMinuteValue = (time24h) => {
-  const [h, m] = (time24h || '').split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return NaN;
-  return h * 60 + m;
 };
 
 const toDisplayTime = (time24h) => {
@@ -196,24 +219,6 @@ const getCoachSlotDisplayLines = (coach) => {
   return ranges.map((range) => `Today, ${range.start} - ${range.end}`);
 };
 
-const isDateWithinCoachSchedule = (coach, dateValue) => {
-  if (!coach?.slotDate) return false;
-  return dateValue === coach.slotDate;
-};
-
-const isWithinAnyCoachRange = (ranges, fromMinutes, toMinutes) => {
-  return ranges.some((range) => {
-    const coachStart = toMinuteValue(range.start);
-    const coachEnd = toMinuteValue(range.end);
-    return (
-      !Number.isNaN(coachStart)
-      && !Number.isNaN(coachEnd)
-      && fromMinutes >= coachStart
-      && toMinutes <= coachEnd
-    );
-  });
-};
-
 function UserCoaches() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -233,6 +238,8 @@ function UserCoaches() {
   const [feedbackForm, setFeedbackForm] = useState({ rating: 0, comment: '' });
   const [feedbackError, setFeedbackError] = useState('');
   const [submittedCoachFeedbackBookingIds, setSubmittedCoachFeedbackBookingIds] = useState(new Set());
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
   const [bookingForm, setBookingForm] = useState({
     userName: '',
     userEmail: '',
@@ -242,6 +249,7 @@ function UserCoaches() {
     toTime: '',
     appointmentType: '',
     goal: '',
+    appointmentPriority: 'normal',
     description: '',
     medicalConditions: '',
     priorityTags: [],
@@ -289,6 +297,7 @@ function UserCoaches() {
       appointmentType: getNoteValue(item.notes, 'Appointment Type')
         || (item.sessionType === 'training' ? 'In-person' : 'Online'),
       goal: getNoteValue(item.notes, 'Goal') || 'Weight Gaining',
+      appointmentPriority: normalizePriority(item.priority),
       description: getNoteValue(item.notes, 'Description'),
       medicalConditions: getNoteValue(item.notes, 'Medical'),
       priorityTags: String(getNoteValue(item.notes, 'Priority Tags') || '')
@@ -383,6 +392,24 @@ function UserCoaches() {
     }
   }, [mapAppointmentToBooking, user]);
 
+  const loadAvailableCoachSlots = useCallback(async (targetCoachId, targetDate) => {
+    const coachId = String(targetCoachId || '').trim();
+    const date = String(targetDate || '').trim();
+    if (!coachId || !date) {
+      setAvailableSlots([]);
+      return;
+    }
+    try {
+      setIsSlotsLoading(true);
+      const { data } = await getCoachAvailableSlots(coachId, date);
+      setAvailableSlots(Array.isArray(data?.data) ? data.data : []);
+    } catch {
+      setAvailableSlots([]);
+    } finally {
+      setIsSlotsLoading(false);
+    }
+  }, []);
+
   const loadCoaches = useCallback(async () => {
     try {
       const { data } = await getPublicCoaches();
@@ -428,8 +455,19 @@ function UserCoaches() {
     return () => clearTimeout(timer);
   }, [loadSubmittedCoachFeedbackBookings]);
 
+  useEffect(() => {
+    if (!isBookingOpen) return;
+    const selectedCoachId = selectedCoach?.id || selectedCoach?._id;
+    if (!selectedCoachId || !bookingForm.date) {
+      setAvailableSlots([]);
+      return;
+    }
+    void loadAvailableCoachSlots(selectedCoachId, bookingForm.date);
+  }, [isBookingOpen, selectedCoach, bookingForm.date, loadAvailableCoachSlots]);
+
   const handleOpenBooking = (coach) => {
     setSelectedCoach(coach);
+    setAvailableSlots([]);
     setBookingForm({
       userName: user?.name || '',
       userEmail: user?.email || '',
@@ -439,6 +477,7 @@ function UserCoaches() {
       toTime: '',
       appointmentType: '',
       goal: '',
+      appointmentPriority: 'normal',
       description: '',
       medicalConditions: '',
       priorityTags: [],
@@ -458,15 +497,17 @@ function UserCoaches() {
     }
     const coach = coaches.find((item) => item.name === booking.coachName) || null;
     setSelectedCoach(coach);
+    setAvailableSlots([]);
     setBookingForm({
       userName: user?.name || '',
       userEmail: user?.email || '',
       mobileNumber: user?.mobileNumber || user?.mobile || user?.phone || '',
       date: booking.date || getTodayDate(),
-      fromTime: booking.fromTime || normalizeTimeTo24h(booking.time),
+      fromTime: booking.fromTime || '',
       toTime: booking.toTime || '',
       appointmentType: booking.appointmentType?.toLowerCase() === 'in-person' ? 'inperson' : 'online',
       goal: booking.goal?.toLowerCase().includes('reducing') ? 'weight-reducing' : 'weight-gaining',
+      appointmentPriority: normalizePriority(booking.appointmentPriority),
       description: booking.description || '',
       medicalConditions: booking.medicalConditions || '',
       priorityTags: Array.isArray(booking.priorityTags) ? booking.priorityTags : [],
@@ -479,6 +520,7 @@ function UserCoaches() {
   const handleCloseBooking = () => {
     setIsBookingOpen(false);
     setSelectedCoach(null);
+    setAvailableSlots([]);
     setEditingBookingId(null);
     setSlotError('');
   };
@@ -487,6 +529,10 @@ function UserCoaches() {
     if (field === 'mobileNumber') {
       const digitsOnly = String(event.target.value || '').replace(/\D/g, '').slice(0, 10);
       setBookingForm((prev) => ({ ...prev, mobileNumber: digitsOnly }));
+      return;
+    }
+    if (field === 'date') {
+      setBookingForm((prev) => ({ ...prev, date: event.target.value, fromTime: '', toTime: '' }));
       return;
     }
     setBookingForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -510,24 +556,15 @@ function UserCoaches() {
       return;
     }
 
-    const isDateAvailable = isDateWithinCoachSchedule(selectedCoach, bookingForm.date);
-    if (!isDateAvailable) {
-      setSlotError('Unavailable on selected date. Please choose an available date.');
-      return;
-    }
-
-    const fromMinutes = toMinuteValue(bookingForm.fromTime);
-    const toMinutes = toMinuteValue(bookingForm.toTime);
-    if (Number.isNaN(fromMinutes) || Number.isNaN(toMinutes) || fromMinutes >= toMinutes) {
+    if (!bookingForm.fromTime || !bookingForm.toTime) {
       setSlotError('Unavailable at that time. Please choose an available time slot.');
       return;
     }
-
-    const selectedRanges = getCoachSlotRanges(selectedCoach);
-    const isWithinCoachRange = isWithinAnyCoachRange(selectedRanges, fromMinutes, toMinutes);
-
-    if (!isWithinCoachRange) {
-      setSlotError('Unavailable at that time. Please choose an available time slot.');
+    const selectedSlot = availableSlots.find(
+      (slot) => slot.startTime === bookingForm.fromTime && slot.endTime === bookingForm.toTime,
+    );
+    if (!selectedSlot || !selectedSlot.available) {
+      setSlotError('Selected slot is no longer available. Please choose another slot.');
       return;
     }
     if (!MOBILE_NUMBER_PATTERN.test(String(bookingForm.mobileNumber || ''))) {
@@ -576,6 +613,7 @@ function UserCoaches() {
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
           sessionType: sessionTypeMap[bookingForm.appointmentType] || 'consultation',
+          priority: normalizePriority(bookingForm.appointmentPriority),
           notes,
         });
       }
@@ -1138,39 +1176,52 @@ function UserCoaches() {
               required
             />
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2}>
-              <TextField
-                label="From Time"
-                type="time"
-                value={bookingForm.fromTime}
-                onChange={handleFieldChange('fromTime')}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                required
-              />
-              <TextField
-                label="To Time"
-                type="time"
-                value={bookingForm.toTime}
-                onChange={handleFieldChange('toTime')}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                required
-              />
-            </Stack>
-
-            <Stack spacing={0.35}>
-              <Typography sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary, fontWeight: 700 }}>
-                Available slots:
+            <Stack spacing={0.65}>
+              <Typography sx={{ fontSize: '0.88rem', color: theme.palette.text.secondary, fontWeight: 700 }}>
+                Select a slot
               </Typography>
-              {(selectedCoach ? getCoachSlotDisplayLines(selectedCoach) : ['N/A']).map((line, lineIndex) => (
-                <Typography
-                  key={`selected-coach-slot-${lineIndex}`}
-                  sx={{ fontSize: '0.82rem', color: theme.palette.text.secondary }}
-                >
-                  {line}
+              {isSlotsLoading && (
+                <Typography sx={{ fontSize: '0.84rem', color: theme.palette.text.secondary }}>
+                  Loading slots...
                 </Typography>
-              ))}
+              )}
+              {!isSlotsLoading && availableSlots.length === 0 && (
+                <Typography sx={{ fontSize: '0.84rem', color: theme.palette.text.secondary }}>
+                  No available slots for this date. Try another date.
+                </Typography>
+              )}
+              {!isSlotsLoading && availableSlots.length > 0 && (
+                <Stack direction="row" spacing={0.9} useFlexGap flexWrap="wrap">
+                  {availableSlots.map((slot) => {
+                    const isSelected = bookingForm.fromTime === slot.startTime && bookingForm.toTime === slot.endTime;
+                    return (
+                      <Button
+                        key={slot.slotId}
+                        type="button"
+                        disabled={!slot.available}
+                        onClick={() =>
+                          setBookingForm((prev) => ({ ...prev, fromTime: slot.startTime, toTime: slot.endTime }))
+                        }
+                        variant={isSelected ? 'contained' : 'outlined'}
+                        sx={{
+                          textTransform: 'none',
+                          borderRadius: 99,
+                          fontWeight: 700,
+                          borderColor: isSelected ? '#0f766e' : (slot.available ? '#0f766e' : '#9ca3af'),
+                          color: isSelected ? '#ffffff' : (slot.available ? '#0f766e' : '#6b7280'),
+                          backgroundColor: isSelected ? '#0f766e' : (slot.available ? '#ccfbf1' : '#e5e7eb'),
+                          '&:hover': {
+                            borderColor: isSelected ? '#0f766e' : (slot.available ? '#0f766e' : '#9ca3af'),
+                            backgroundColor: isSelected ? '#0f766e' : (slot.available ? '#ccfbf1' : '#e5e7eb'),
+                          },
+                        }}
+                      >
+                        {slot.available ? slot.label : `${slot.label} - Booked`}
+                      </Button>
+                    );
+                  })}
+                </Stack>
+              )}
             </Stack>
 
             {slotError && (
@@ -1204,6 +1255,52 @@ function UserCoaches() {
                 <MenuItem value="weight-reducing">Weight Reducing</MenuItem>
               </Select>
             </FormControl>
+
+            <Box>
+              <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: theme.palette.text.primary, mb: 0.75 }}>
+                Appointment Priority
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                {APPOINTMENT_PRIORITY_OPTIONS.map((option) => {
+                  const selected = bookingForm.appointmentPriority === option.value;
+                  return (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      variant={selected ? 'contained' : 'outlined'}
+                      disabled={Boolean(editingBookingId)}
+                      onClick={() => setBookingForm((prev) => ({ ...prev, appointmentPriority: option.value }))}
+                      sx={{
+                        flex: 1,
+                        textTransform: 'none',
+                        borderRadius: 99,
+                        justifyContent: 'flex-start',
+                        px: 1.5,
+                        py: 1,
+                        color: selected ? '#ffffff' : option.color,
+                        borderColor: option.color,
+                        backgroundColor: selected ? option.color : option.bg,
+                        '&:hover': {
+                          borderColor: option.color,
+                          backgroundColor: selected ? option.color : option.bg,
+                        },
+                        '&.Mui-disabled': {
+                          opacity: 0.7,
+                          color: option.color,
+                        },
+                      }}
+                    >
+                      {option.label} - {option.helper}
+                    </Button>
+                  );
+                })}
+              </Stack>
+              {editingBookingId && (
+                <Typography sx={{ mt: 0.6, fontSize: '0.78rem', color: theme.palette.text.secondary }}>
+                  Priority can be set only at booking creation.
+                </Typography>
+              )}
+            </Box>
 
             <TextField
               label="Description"
