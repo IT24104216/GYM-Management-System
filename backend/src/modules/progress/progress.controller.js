@@ -32,6 +32,42 @@ const toIsoDate = (value) => {
   if (Number.isNaN(parsed.getTime())) return '';
   return parsed.toISOString().slice(0, 10);
 };
+const MAX_PROGRESS_PHOTO_BYTES = 5 * 1024 * 1024;
+
+const toPhotosDto = (photos = []) =>
+  (Array.isArray(photos) ? photos : [])
+    .map((photo) => ({
+      slot: Number(photo?.slot || 0),
+      base64Image: String(photo?.base64Image || ''),
+      fileName: String(photo?.fileName || ''),
+      fileSize: Number(photo?.fileSize || 0),
+      uploadedAt: photo?.uploadedAt || null,
+      label: String(photo?.label || ''),
+      note: String(photo?.note || ''),
+    }))
+    .filter((photo) => [1, 2, 3, 4].includes(photo.slot))
+    .sort((a, b) => a.slot - b.slot);
+
+const getAuthUserProgressDoc = async (req) => {
+  const userId = String(req.user?.id || '').trim();
+  if (!userId) {
+    throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+  }
+  const memberUser = await User.findById(userId).select('_id');
+  if (!memberUser) {
+    throw new AppError('User not found', HTTP_STATUS.NOT_FOUND);
+  }
+
+  let doc = await ProgressTracking.findOne({ userId });
+  if (!doc) {
+    doc = await ProgressTracking.create({
+      userId,
+      measurements: [],
+      photos: [],
+    });
+  }
+  return doc;
+};
 
 const mapMeasurementsByDate = (measurements = []) => {
   const sorted = [...measurements].sort((a, b) => a.date.localeCompare(b.date));
@@ -120,6 +156,7 @@ export const getUserProgress = asyncHandler(async (req, res) => {
       userId,
       weightHistoryByDate,
       measurementsByDate,
+      photos: toPhotosDto(progressDoc?.photos || []),
       ...completion,
       score,
     },
@@ -195,5 +232,96 @@ export const getCoachMemberScores = asyncHandler(async (req, res) => {
 
   res.status(HTTP_STATUS.OK).json({
     data: scoreData,
+  });
+});
+
+export const uploadProgressPhoto = asyncHandler(async (req, res) => {
+  const payload = req.body || {};
+  const slot = Number(payload.slot);
+  const base64Image = String(payload.base64Image || '').trim();
+  const fileName = String(payload.fileName || '').trim();
+  const fileSize = Number(payload.fileSize || 0);
+  const label = String(payload.label || '').trim();
+  const note = String(payload.note || '').trim();
+  const uploadedAtRaw = payload.uploadedAt;
+
+  if (![1, 2, 3, 4].includes(slot)) {
+    throw new AppError('Invalid slot. Allowed values are 1 to 4.', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (!base64Image.startsWith('data:image/')) {
+    throw new AppError('Invalid file type.', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (!Number.isFinite(fileSize) || fileSize <= 0) {
+    throw new AppError('Invalid file size.', HTTP_STATUS.BAD_REQUEST);
+  }
+  if (fileSize > MAX_PROGRESS_PHOTO_BYTES) {
+    throw new AppError('File too large. Max 5MB allowed.', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const uploadedAt = (() => {
+    const parsed = new Date(uploadedAtRaw || Date.now());
+    if (Number.isNaN(parsed.getTime())) return new Date();
+    return parsed;
+  })();
+
+  const doc = await getAuthUserProgressDoc(req);
+  const currentPhotos = Array.isArray(doc.photos) ? doc.photos : [];
+  doc.photos = currentPhotos.filter((photo) => Number(photo?.slot) !== slot);
+  doc.photos.push({
+    slot,
+    base64Image,
+    fileName,
+    fileSize,
+    uploadedAt,
+    label,
+    note,
+  });
+  await doc.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Progress photo uploaded successfully',
+    photos: toPhotosDto(doc.photos),
+  });
+});
+
+export const deleteProgressPhoto = asyncHandler(async (req, res) => {
+  const slot = Number(req.params?.slot);
+  if (![1, 2, 3, 4].includes(slot)) {
+    throw new AppError('Invalid slot. Allowed values are 1 to 4.', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const doc = await getAuthUserProgressDoc(req);
+  doc.photos = (Array.isArray(doc.photos) ? doc.photos : []).filter(
+    (photo) => Number(photo?.slot) !== slot,
+  );
+  await doc.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Progress photo deleted successfully',
+    photos: toPhotosDto(doc.photos),
+  });
+});
+
+export const updatePhotoNote = asyncHandler(async (req, res) => {
+  const slot = Number(req.params?.slot);
+  const note = String(req.body?.note || '').trim();
+  if (![1, 2, 3, 4].includes(slot)) {
+    throw new AppError('Invalid slot. Allowed values are 1 to 4.', HTTP_STATUS.BAD_REQUEST);
+  }
+
+  const doc = await getAuthUserProgressDoc(req);
+  const photos = Array.isArray(doc.photos) ? doc.photos : [];
+  const index = photos.findIndex((photo) => Number(photo?.slot) === slot);
+  if (index === -1) {
+    throw new AppError('Photo not found for this slot.', HTTP_STATUS.NOT_FOUND);
+  }
+
+  photos[index].note = note;
+  await doc.save();
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Photo note updated successfully',
+    photo: toPhotosDto([photos[index]])[0] || null,
+    photos: toPhotosDto(doc.photos),
   });
 });
