@@ -1,5 +1,6 @@
 import { Appointment } from './appointments.model.js';
 import {
+  delegateAppointmentSchema,
   appointmentIdParamsSchema,
   appointmentQuerySchema,
   createAppointmentSchema,
@@ -9,6 +10,7 @@ import {
 import { AppError } from '../../shared/errors/AppError.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { HTTP_STATUS } from '../../shared/constants/httpStatus.js';
+import { User } from '../users/users.model.js';
 import {
   createNotification,
   createNotificationForAdmins,
@@ -38,6 +40,21 @@ function statusToTitle(status) {
   if (status === 'cancelled') return 'Booking Cancelled';
   if (status === 'completed') return 'Session Completed';
   return 'Booking Updated';
+}
+
+function normalizePriority(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
+}
+
+function withPriorityFallback(record) {
+  if (!record) return record;
+  const data = typeof record.toObject === 'function' ? record.toObject() : { ...record };
+  return {
+    ...data,
+    priority: normalizePriority(data.priority),
+  };
 }
 
 function enforceAppointmentAccess(item, authUser) {
@@ -77,7 +94,10 @@ export const createAppointment = asyncHandler(async (req, res) => {
     );
   }
 
-  const created = await Appointment.create(payload);
+  const created = await Appointment.create({
+    ...payload,
+    priority: normalizePriority(payload.priority),
+  });
 
   await Promise.allSettled([
     createNotification({
@@ -110,7 +130,7 @@ export const createAppointment = asyncHandler(async (req, res) => {
 
   res.status(HTTP_STATUS.CREATED).json({
     message: 'Appointment created successfully',
-    data: created,
+    data: withPriorityFallback(created),
   });
 });
 
@@ -149,7 +169,7 @@ export const getAppointments = asyncHandler(async (req, res) => {
   ]);
 
   res.status(HTTP_STATUS.OK).json({
-    data: items,
+    data: items.map(withPriorityFallback),
     pagination: {
       page: query.page,
       limit: query.limit,
@@ -168,7 +188,7 @@ export const getAppointmentById = asyncHandler(async (req, res) => {
   }
   enforceAppointmentAccess(item, req.user);
 
-  res.status(HTTP_STATUS.OK).json({ data: item });
+  res.status(HTTP_STATUS.OK).json({ data: withPriorityFallback(item) });
 });
 
 export const updateAppointmentStatus = asyncHandler(async (req, res) => {
@@ -180,19 +200,29 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
     throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
   }
   enforceAppointmentAccess(item, req.user);
-  if (req.user?.role === 'user') {
+  const role = String(req.user?.role || '');
+  if (role === 'user') {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
   }
+  const nextStatus = typeof payload.status === 'string' ? payload.status : String(item.status);
   const isTerminalDecision = ['approved', 'rejected'].includes(String(item.status));
-  const isDecisionUpdate = ['approved', 'rejected'].includes(String(payload.status));
-  if (isTerminalDecision && isDecisionUpdate) {
+  const isDecisionUpdate = ['approved', 'rejected'].includes(String(nextStatus));
+  if (payload.status && isTerminalDecision && isDecisionUpdate) {
     throw new AppError(
       'This booking is already decided and cannot be approved/rejected again.',
       HTTP_STATUS.CONFLICT,
     );
   }
 
-  item.status = payload.status;
+  if (payload.status) {
+    item.status = payload.status;
+  }
+  if (payload.priority) {
+    if (!['admin', 'coach', 'dietitian'].includes(role)) {
+      throw new AppError('Only providers or admins can change appointment priority.', HTTP_STATUS.FORBIDDEN);
+    }
+    item.priority = normalizePriority(payload.priority);
+  }
   if (typeof payload.notes === 'string') {
     item.notes = payload.notes;
   }
@@ -204,14 +234,18 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
       recipientId: item.userId,
       recipientRole: 'user',
       type: 'booking',
-      title: statusToTitle(payload.status),
-      message: `Your booking was ${payload.status} by ${getProviderLabel(item.sessionType)}.`,
+      title: statusToTitle(nextStatus),
+      message: payload.status
+        ? `Your booking was ${payload.status} by ${getProviderLabel(item.sessionType)}.`
+        : 'Your booking details were updated by your provider.',
       entityType: 'appointment',
       entityId: String(item._id),
     }),
     createNotificationForAdmins({
       title: 'Booking Status Changed',
-      message: `A booking was marked as ${payload.status}.`,
+      message: payload.status
+        ? `A booking was marked as ${payload.status}.`
+        : 'A booking priority/details were updated.',
       entityType: 'appointment',
       entityId: String(item._id),
     }),
@@ -219,7 +253,7 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Appointment status updated',
-    data: item,
+    data: withPriorityFallback(item),
   });
 });
 
@@ -234,6 +268,9 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   enforceAppointmentAccess(item, req.user);
   if (!['admin', 'user'].includes(String(req.user?.role || ''))) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
+  if (typeof payload.priority === 'string' && String(req.user?.role || '') === 'user') {
+    throw new AppError('Members cannot change appointment priority after booking.', HTTP_STATUS.FORBIDDEN);
   }
   if (String(item.status) !== 'pending') {
     throw new AppError(
@@ -265,12 +302,13 @@ export const updateAppointment = asyncHandler(async (req, res) => {
   item.startsAt = payload.startsAt;
   item.endsAt = payload.endsAt;
   if (payload.sessionType) item.sessionType = payload.sessionType;
+  if (typeof payload.priority === 'string') item.priority = normalizePriority(payload.priority);
   if (typeof payload.notes === 'string') item.notes = payload.notes;
   await item.save();
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Appointment updated successfully',
-    data: item,
+    data: withPriorityFallback(item),
   });
 });
 
@@ -289,5 +327,103 @@ export const deleteAppointment = asyncHandler(async (req, res) => {
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Appointment deleted successfully',
+  });
+});
+
+export const delegateAppointment = asyncHandler(async (req, res) => {
+  const { id } = parseOrThrow(appointmentIdParamsSchema, req.params);
+  const { subCoachId } = parseOrThrow(delegateAppointmentSchema, req.body);
+
+  const role = String(req.user?.role || '');
+  const authUserId = String(req.user?.id || '');
+  if (!authUserId) {
+    throw new AppError('Unauthorized', HTTP_STATUS.UNAUTHORIZED);
+  }
+  if (!['coach', 'admin'].includes(role)) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
+
+  const item = await Appointment.findById(id);
+  if (!item) {
+    throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
+  }
+  if (String(item.sessionType) === 'nutrition') {
+    throw new AppError('Only coach appointments can be delegated', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+  }
+  if (String(item.status) !== 'pending') {
+    throw new AppError('Only pending appointments can be delegated', HTTP_STATUS.CONFLICT);
+  }
+
+  const [subCoach, actorCoach] = await Promise.all([
+    User.findById(subCoachId).select('_id name role coachRole headCoachId status'),
+    role === 'coach'
+      ? User.findById(authUserId).select('_id name role coachRole status')
+      : Promise.resolve(null),
+  ]);
+
+  if (!subCoach || subCoach.role !== 'coach' || subCoach.status !== 'active') {
+    throw new AppError('Sub-coach not found or inactive', HTTP_STATUS.NOT_FOUND);
+  }
+  if (String(subCoach.coachRole || 'head').toLowerCase() !== 'sub') {
+    throw new AppError('Selected coach is not a sub-coach', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+  }
+
+  const overlap = await Appointment.findOne({
+    _id: { $ne: item._id },
+    coachId: String(subCoach._id),
+    status: { $in: ['pending', 'approved'] },
+    startsAt: { $lt: item.endsAt },
+    endsAt: { $gt: item.startsAt },
+  });
+  if (overlap) {
+    throw new AppError('Selected sub-coach is already booked in this slot', HTTP_STATUS.CONFLICT);
+  }
+
+  if (role === 'coach') {
+    if (!actorCoach || actorCoach.role !== 'coach') {
+      throw new AppError('Coach not found', HTTP_STATUS.NOT_FOUND);
+    }
+    if (String(actorCoach.coachRole || 'head').toLowerCase() !== 'head') {
+      throw new AppError('Only head coaches can delegate appointments', HTTP_STATUS.FORBIDDEN);
+    }
+    if (String(item.coachId || '') !== authUserId) {
+      throw new AppError('You can only delegate your own pending appointments', HTTP_STATUS.FORBIDDEN);
+    }
+    if (String(subCoach.headCoachId || '') !== authUserId) {
+      throw new AppError('You can only delegate to your own sub-coaches', HTTP_STATUS.FORBIDDEN);
+    }
+
+    item.coachId = String(subCoach._id);
+    item.delegatedByCoachId = String(actorCoach._id);
+    item.delegatedByCoachName = String(actorCoach.name || '');
+  } else {
+    item.coachId = String(subCoach._id);
+    item.delegatedByCoachId = String(item.delegatedByCoachId || '');
+    item.delegatedByCoachName = String(item.delegatedByCoachName || '');
+  }
+  item.delegatedAt = new Date();
+  await item.save();
+
+  await Promise.allSettled([
+    createNotification({
+      recipientId: String(subCoach._id),
+      recipientRole: 'coach',
+      type: 'booking',
+      title: 'Appointment Delegated To You',
+      message: `A pending appointment was delegated to you${item.delegatedByCoachName ? ` by ${item.delegatedByCoachName}` : ''}.`,
+      entityType: 'appointment',
+      entityId: String(item._id),
+    }),
+    createNotificationForAdmins({
+      title: 'Appointment Delegated',
+      message: `Appointment ${String(item._id)} was delegated to coach ${subCoach.name}.`,
+      entityType: 'appointment',
+      entityId: String(item._id),
+    }),
+  ]);
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Appointment delegated successfully',
+    data: withPriorityFallback(item),
   });
 });
