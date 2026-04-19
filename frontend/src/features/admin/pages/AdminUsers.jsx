@@ -218,9 +218,6 @@ function AdminUsers() {
       if (isCoachRole) {
         payload.coachRole = nextCoachRole === 'sub' ? 'sub' : 'head';
         payload.headCoachId = nextCoachRole === 'sub' ? String(nextHeadCoachId || '') : null;
-      } else {
-        payload.coachRole = '';
-        payload.headCoachId = null;
       }
       const { data } = await updateUserApi(editingUser.id, payload);
       await loadUsers();
