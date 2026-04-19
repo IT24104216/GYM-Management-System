@@ -22,7 +22,7 @@ import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getCoachAppointments, getCoachMemberProgressScores } from '../api/coach.api';
+import { getCoachAppointments, getCoachMemberProgressScores, getMyTeam } from '../api/coach.api';
 import {
   BarChart,
   Bar,
@@ -97,8 +97,14 @@ const typeToColor = {
 
 const priorityGrad = {
   urgent: 'linear-gradient(135deg, #EF4444, #DC2626)',
-  high: 'linear-gradient(135deg, #F97316, #EF4444)',
-  normal: 'linear-gradient(135deg, #3B82F6, #0D9488)',
+  normal: 'linear-gradient(135deg, #F59E0B, #D97706)',
+  low: 'linear-gradient(135deg, #22C55E, #15803D)',
+};
+const priorityRank = { urgent: 0, normal: 1, low: 2 };
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
 };
 
 function CircularScore({ score, id, isDark }) {
@@ -144,6 +150,7 @@ function CoachDashboard() {
   const [flippedMemberIds, setFlippedMemberIds] = useState({});
   const [appointments, setAppointments] = useState([]);
   const [memberProgressScores, setMemberProgressScores] = useState({});
+  const [teamMembers, setTeamMembers] = useState([]);
   const [toast, setToast] = useState({ open: false, message: '', severity: 'error' });
   const isDark = theme.palette.mode === 'dark';
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
@@ -162,9 +169,11 @@ function CoachDashboard() {
   const loadDashboardData = useCallback(async () => {
     if (!coachId) return;
     try {
-      const [{ data }, { data: scorePayload }] = await Promise.all([
+      const isHeadCoach = String(user?.coachRole || 'head').toLowerCase() === 'head';
+      const [{ data }, { data: scorePayload }, teamPayload] = await Promise.all([
         getCoachAppointments({ page: 1, limit: 300 }),
         getCoachMemberProgressScores(coachId, { days: 7 }),
+        isHeadCoach ? getMyTeam().catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
       ]);
 
       const all = Array.isArray(data?.data) ? data.data : [];
@@ -178,9 +187,11 @@ function CoachDashboard() {
       });
       setAppointments(mine);
       setMemberProgressScores(scorePayload?.data?.byUserId || {});
+      setTeamMembers(Array.isArray(teamPayload?.data?.data) ? teamPayload.data.data : []);
     } catch (error) {
       setAppointments([]);
       setMemberProgressScores({});
+      setTeamMembers([]);
       setToast({
         open: true,
         message: error?.response?.data?.message || 'Failed to load coach dashboard data',
@@ -188,6 +199,12 @@ function CoachDashboard() {
       });
     }
   }, [coachId, user]);
+
+  const isHeadCoach = String(user?.coachRole || 'head').toLowerCase() === 'head';
+  const overloadedTeamMembers = useMemo(
+    () => teamMembers.filter((item) => Number(item?.pendingCount || 0) > 5),
+    [teamMembers],
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -202,7 +219,7 @@ function CoachDashboard() {
     };
   }, [loadDashboardData]);
 
-  const { stats, schedule, consultations, members, weeklyData, scheduleDateLabel } = useMemo(() => {
+  const { stats, schedule, consultations, members, weeklyData, scheduleDateLabel, urgentQueueCount } = useMemo(() => {
     const now = new Date();
     const todayStart = startOfDay(now);
     const tomorrowStart = new Date(todayStart);
@@ -291,11 +308,15 @@ function CoachDashboard() {
       }));
 
     const queueRows = pendingAppointments
-      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      .sort((a, b) => {
+        const rankDiff = priorityRank[normalizePriority(a.priority)] - priorityRank[normalizePriority(b.priority)];
+        if (rankDiff !== 0) return rankDiff;
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      })
       .slice(0, 6)
       .map((item) => {
-        const priorityRaw = (getNoteValue(item.notes, 'Priority') || 'Normal').toLowerCase();
-        const priorityLabel = priorityRaw === 'urgent' ? 'URGENT' : priorityRaw === 'high' ? 'HIGH' : 'NORMAL';
+        const priorityRaw = normalizePriority(item.priority);
+        const priorityLabel = priorityRaw === 'urgent' ? 'URGENT' : priorityRaw === 'low' ? 'LOW' : 'NORMAL';
         const userName = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
         return {
           name: userName,
@@ -303,9 +324,10 @@ function CoachDashboard() {
           priority: priorityLabel,
           wait: formatWait(item.createdAt),
           avatar: getInitials(userName),
-          priorityGrad: priorityRaw === 'urgent' ? priorityGrad.urgent : priorityRaw === 'high' ? priorityGrad.high : priorityGrad.normal,
+          priorityGrad: priorityGrad[priorityRaw] || priorityGrad.normal,
         };
       });
+    const urgentCount = pendingAppointments.filter((item) => normalizePriority(item.priority) === 'urgent').length;
 
     const membersByUser = new Map();
     activeAppointments
@@ -349,7 +371,7 @@ function CoachDashboard() {
           phone: getNoteValue(latest.notes, 'Mobile') || '-',
           preferredSlot: formatTime12(latest.startsAt) || '-',
           trainingDays: 'As scheduled',
-          priority: getNoteValue(latest.notes, 'Priority') || 'Normal',
+          priority: normalizePriority(latest.priority),
           notes: getNoteValue(latest.notes, 'Description') || latest.notes || '-',
         };
       });
@@ -376,6 +398,7 @@ function CoachDashboard() {
       members: memberRows,
       weeklyData: weeklyRows,
       scheduleDateLabel: now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+      urgentQueueCount: urgentCount,
     };
   }, [appointments, memberProgressScores]);
 
@@ -385,6 +408,32 @@ function CoachDashboard() {
 
   return (
     <Motion.div variants={containerVariants} initial="hidden" animate="visible" style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 24 }}>
+      {urgentQueueCount > 0 && (
+        <Alert
+          severity="error"
+          sx={{ borderRadius: 2, alignItems: 'center' }}
+          action={(
+            <Button color="inherit" size="small" onClick={() => navigate(ROUTES.COACH_CLIENTS)} sx={{ fontWeight: 700, textTransform: 'none' }}>
+              Open Queue
+            </Button>
+          )}
+        >
+          {`You have ${urgentQueueCount} urgent appointment(s) requiring immediate attention.`}
+        </Alert>
+      )}
+      {isHeadCoach && overloadedTeamMembers.length > 0 && (
+        <Alert
+          severity="warning"
+          sx={{ borderRadius: 2, alignItems: 'center' }}
+          action={(
+            <Button color="inherit" size="small" onClick={() => navigate(ROUTES.COACH_CLIENTS)} sx={{ fontWeight: 700, textTransform: 'none' }}>
+              Manage Queue
+            </Button>
+          )}
+        >
+          {`${overloadedTeamMembers[0]?.name || 'A sub-coach'} has ${Number(overloadedTeamMembers[0]?.pendingCount || 0)} pending bookings - consider reassigning some.`}
+        </Alert>
+      )}
       <MotionBox
         variants={itemVariants}
         sx={{
@@ -510,6 +559,43 @@ function CoachDashboard() {
         </Motion.div>
       </Box>
 
+      {isHeadCoach && (
+        <Motion.div variants={itemVariants}>
+          <Box sx={{ background: panelBg, borderRadius: 2, p: 2.5, border: '1px solid', borderColor: panelBorder, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+            <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
+              <Typography sx={{ fontWeight: 700, color: primaryText, fontSize: '1.25rem' }}>My Team</Typography>
+              <Chip label={`${teamMembers.length} sub-coaches`} size="small" sx={{ fontWeight: 700 }} />
+            </Stack>
+            <Stack spacing={1.1}>
+              {!teamMembers.length && (
+                <Typography sx={{ fontSize: '0.9rem', color: mutedText }}>No sub-coaches assigned yet.</Typography>
+              )}
+              {teamMembers.map((member) => (
+                <Stack
+                  key={member.id}
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  justifyContent="space-between"
+                  sx={{ p: 1.2, borderRadius: 1.4, border: '1px solid', borderColor: panelBorder }}
+                >
+                  <Box>
+                    <Typography sx={{ fontSize: '0.92rem', fontWeight: 700, color: primaryText }}>{member.name}</Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: mutedText }}>{member.specialization || 'General Fitness'}</Typography>
+                  </Box>
+                  <Chip
+                    size="small"
+                    label={`${Number(member.pendingCount || 0)} pending`}
+                    color={Number(member.pendingCount || 0) > 5 ? 'warning' : 'default'}
+                    sx={{ fontWeight: 800 }}
+                  />
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+        </Motion.div>
+      )}
+
       <Motion.div variants={itemVariants}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Typography sx={{ fontWeight: 700, color: primaryText, fontSize: '1.25rem' }}>Active Members</Typography>
@@ -605,7 +691,9 @@ function CoachDashboard() {
                       <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Phone:</strong> {m.phone}</Typography>
                       <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Preferred Slot:</strong> {m.preferredSlot}</Typography>
                       <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Training Days:</strong> {m.trainingDays}</Typography>
-                      <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}><strong>Priority:</strong> {m.priority}</Typography>
+                      <Typography sx={{ color: mutedText, fontSize: '0.78rem', mb: 0.5 }}>
+                        <strong>Priority:</strong> {m.priority === 'urgent' ? 'URGENT' : m.priority === 'low' ? 'LOW' : 'NORMAL'}
+                      </Typography>
                       <Typography sx={{ color: mutedText, fontSize: '0.78rem' }}><strong>Notes:</strong> {m.notes}</Typography>
                     </Box>
                     <Button
