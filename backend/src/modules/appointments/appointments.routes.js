@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   createAppointment,
+  delegateAppointment,
   deleteAppointment,
   getAppointmentById,
   getAppointments,
@@ -46,6 +47,7 @@ router.post(
 );
 router.patch('/:id', authorizeRoles('admin', 'user'), updateAppointment);
 router.patch('/:id/status', authorizeRoles('admin', 'coach', 'dietitian'), updateAppointmentStatus);
+router.patch('/:id/delegate', authorizeRoles('admin', 'coach'), delegateAppointment);
 router.delete('/:id', authorizeRoles('admin', 'user'), deleteAppointment);
 
 export { router as appointmentsRouter };
