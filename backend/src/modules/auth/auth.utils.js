@@ -15,6 +15,10 @@ export const toPublicUser = (userDoc) => ({
   name: userDoc.name,
   email: userDoc.email,
   role: normalizeRole(userDoc.role),
+  coachRole: userDoc.role === 'coach'
+    ? (String(userDoc.coachRole || 'head').toLowerCase() === 'sub' ? 'sub' : 'head')
+    : null,
+  headCoachId: userDoc.headCoachId ? String(userDoc.headCoachId) : '',
   status: userDoc.status,
   branch: userDoc.branch || '',
   notificationPreferences: {
