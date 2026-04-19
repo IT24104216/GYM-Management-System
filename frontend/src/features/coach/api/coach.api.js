@@ -36,8 +36,17 @@ export const getCoachAppointments = (params) =>
 export const updateCoachAppointmentStatus = (id, data) =>
   axiosClient.patch(`/appointments/${id}/status`, data);
 
+export const delegateAppointment = (appointmentId, subCoachId) =>
+  axiosClient.patch(`/appointments/${appointmentId}/delegate`, { subCoachId });
+
 export const getCoachSchedulingSlots = (coachId) =>
   axiosClient.get(`/coach/scheduling/${coachId}`);
+
+export const getCoachAvailableSlots = (coachId, date) =>
+  axiosClient.get(`/coach/${coachId}/slots`, { params: { date } });
+
+export const getMyTeam = () =>
+  axiosClient.get('/coach/team');
 
 export const createCoachSchedulingSlot = (coachId, data) =>
   axiosClient.post(`/coach/scheduling/${coachId}`, data);
