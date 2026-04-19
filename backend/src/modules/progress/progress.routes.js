@@ -3,16 +3,37 @@ import { authenticateJWT } from '../../shared/middleware/auth/authenticateJWT.js
 import { authorizeRoles } from '../../shared/middleware/auth/authorizeRoles.js';
 import { requireOwnership } from '../../shared/middleware/auth/requireOwnership.js';
 import {
+  deleteProgressPhoto,
   getCoachMemberScores,
   getProgressStatus,
   getUserProgressScore,
   getUserProgress,
+  updatePhotoNote,
+  uploadProgressPhoto,
   upsertUserMeasurement,
 } from './progress.controller.js';
 
 const router = Router();
 
 router.get('/', getProgressStatus);
+router.post(
+  '/photo/upload',
+  authenticateJWT,
+  authorizeRoles('user'),
+  uploadProgressPhoto,
+);
+router.delete(
+  '/photo/:slot',
+  authenticateJWT,
+  authorizeRoles('user'),
+  deleteProgressPhoto,
+);
+router.patch(
+  '/photo/:slot/note',
+  authenticateJWT,
+  authorizeRoles('user'),
+  updatePhotoNote,
+);
 router.get(
   '/coach/:coachId/member-scores',
   authenticateJWT,
