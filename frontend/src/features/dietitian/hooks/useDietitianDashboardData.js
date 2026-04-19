@@ -7,6 +7,7 @@ import {
 } from '../api/dietitian.api';
 import {
   createDietPlanForm,
+  FOOD_UNIT_OPTIONS,
   createMealOption,
   getNoteValue,
   getWeekdayLabel,
@@ -63,13 +64,27 @@ export function useDietitianMealsAndPlans(dietitianId, setSlotError) {
   const [mealSuggestions, setMealSuggestions] = useState([]);
   const [savedDietPlans, setSavedDietPlans] = useState({});
 
-  const toClientPlanForm = (plan) => ({
-    breakfast: Array.isArray(plan?.breakfast) ? plan.breakfast : [createMealOption(), createMealOption(), createMealOption()],
-    lunch: Array.isArray(plan?.lunch) ? plan.lunch : [createMealOption(), createMealOption(), createMealOption()],
-    dinner: Array.isArray(plan?.dinner) ? plan.dinner : [createMealOption(), createMealOption(), createMealOption()],
-    snacks: Array.isArray(plan?.snacks) ? plan.snacks : [createMealOption(), createMealOption(), createMealOption()],
+  const normalizeSection = useCallback((section = []) =>
+    (Array.isArray(section) ? section : []).map((item) => ({
+      ...createMealOption(),
+      ...item,
+      quantity: (() => {
+        const parsed = Number(item?.quantity);
+        if (!Number.isFinite(parsed) || parsed < 0.1) return '1';
+        return String(parsed);
+      })(),
+      unit: FOOD_UNIT_OPTIONS.includes(String(item?.unit || '').trim())
+        ? String(item?.unit || '').trim()
+        : 'g',
+    })), []);
+
+  const toClientPlanForm = useCallback((plan) => ({
+    breakfast: Array.isArray(plan?.breakfast) ? normalizeSection(plan.breakfast) : [createMealOption(), createMealOption(), createMealOption()],
+    lunch: Array.isArray(plan?.lunch) ? normalizeSection(plan.lunch) : [createMealOption(), createMealOption(), createMealOption()],
+    dinner: Array.isArray(plan?.dinner) ? normalizeSection(plan.dinner) : [createMealOption(), createMealOption(), createMealOption()],
+    snacks: Array.isArray(plan?.snacks) ? normalizeSection(plan.snacks) : [createMealOption(), createMealOption(), createMealOption()],
     additionalNotes: plan?.additionalNotes || '',
-  });
+  }), [normalizeSection]);
 
   const loadDietitianMealsAndPlans = useCallback(async () => {
     if (!dietitianId) return;
@@ -98,7 +113,7 @@ export function useDietitianMealsAndPlans(dietitianId, setSlotError) {
       setSavedDietPlans({});
       setSlotError(error?.response?.data?.message || 'Failed to load diet plans.');
     }
-  }, [dietitianId, setSlotError]);
+  }, [dietitianId, setSlotError, toClientPlanForm]);
 
   useEffect(() => {
     let isMounted = true;

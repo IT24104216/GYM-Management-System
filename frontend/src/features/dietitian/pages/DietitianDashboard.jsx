@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   Chip,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -35,6 +36,7 @@ import {
 } from '../api/dietitian.api';
 import {
   createDietPlanForm,
+  FOOD_UNIT_OPTIONS,
   getWeekdayLabel,
   mealSections,
   sanitizePlanSection,
@@ -438,10 +440,18 @@ function DietitianDashboard() {
         const protein = parseNumber(option?.protein);
         const carbs = parseNumber(option?.carbs);
         const lipids = parseNumber(option?.lipids);
+        const quantity = parseNumber(option?.quantity);
+        const unit = String(option?.unit || '').trim();
 
         const numericValues = [calories, protein, carbs, lipids].filter((value) => value !== null);
         if (numericValues.some((value) => Number.isNaN(value) || value < 0)) {
           return 'Calories and macros must be valid non-negative numbers.';
+        }
+        if (quantity !== null && (Number.isNaN(quantity) || quantity < 0.1)) {
+          return 'Quantity must be a valid number and at least 0.1.';
+        }
+        if (unit && !FOOD_UNIT_OPTIONS.includes(unit)) {
+          return 'Please select a valid food unit.';
         }
         if (calories !== null && calories > 3000) return 'Calories must be between 0 and 3000.';
         if (protein !== null && protein > 500) return 'Protein must be between 0 and 500 g.';
@@ -457,6 +467,8 @@ function DietitianDashboard() {
             || (protein !== null && protein > 0)
             || (carbs !== null && carbs > 0)
             || (lipids !== null && lipids > 0)
+            || (quantity !== null && quantity >= 0.1)
+            || Boolean(unit)
           ) {
             hasCompleteOption = true;
           }
@@ -582,6 +594,8 @@ function DietitianDashboard() {
             carbs: selectedMeal.carbs ?? option.carbs,
             lipids: selectedMeal.lipids ?? option.lipids,
             vitamins: selectedMeal.vitamins ?? option.vitamins,
+            quantity: selectedMeal.quantity ?? option.quantity ?? '1',
+            unit: selectedMeal.unit ?? option.unit ?? 'g',
           }
           : option,
       ),
@@ -1019,6 +1033,40 @@ function DietitianDashboard() {
                           '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
                         }}
                       />
+
+                      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.8, mb: 0.8 }}>
+                        <TextField
+                          label="Quantity"
+                          type="number"
+                          value={option.quantity ?? '1'}
+                          onChange={(e) => updateMealField(section.key, index, 'quantity', e.target.value)}
+                          size="small"
+                          inputProps={{ min: 0.1, step: 0.1 }}
+                          sx={{
+                            '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.05rem', fontWeight: 700 },
+                            '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                          }}
+                        />
+                        <TextField
+                          label="Unit"
+                          select
+                          value={option.unit || 'g'}
+                          onChange={(e) => updateMealField(section.key, index, 'unit', e.target.value)}
+                          size="small"
+                          sx={{
+                            '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.05rem', fontWeight: 700 },
+                            '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                          }}
+                        >
+                          {FOOD_UNIT_OPTIONS.map((unitOption) => (
+                            <MenuItem key={unitOption} value={unitOption}>
+                              {unitOption}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      </Box>
 
                       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.8 }}>
                         <TextField
