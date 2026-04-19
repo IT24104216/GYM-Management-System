@@ -25,6 +25,14 @@ const numericWithBounds = (label, max) =>
 
 const caloriesSchema = numericWithBounds('Calories', 3000);
 const macroSchema = numericWithBounds('Macro value', 500);
+const quantitySchema = z.preprocess(
+  toZeroWhenEmpty,
+  z.coerce
+    .number({ invalid_type_error: 'Quantity must be a valid number' })
+    .finite('Quantity must be a valid number')
+    .min(0.1, 'Quantity must be at least 0.1'),
+);
+const unitSchema = z.enum(['g', 'ml', 'cups', 'tbsp', 'tsp', 'piece']);
 
 export const mealLibraryQuerySchema = z.object({
   dietitianId: idSchema,
@@ -81,6 +89,8 @@ const mealOptionSchema = z.object({
   carbs: macroSchema.optional().default(0),
   lipids: macroSchema.optional().default(0),
   vitamins: z.string().trim().max(220).optional().default(''),
+  quantity: quantitySchema.optional().default(1),
+  unit: unitSchema.optional().default('g'),
 });
 
 const mealSectionSchema = z.array(mealOptionSchema).min(1).max(12);
@@ -139,6 +149,8 @@ export const createFoodLogSchema = z.object({
   carbs: macroSchema.optional().default(0),
   fat: macroSchema.optional().default(0),
   notes: z.string().trim().max(500).optional().default(''),
+  quantity: quantitySchema.optional().default(1),
+  unit: unitSchema.optional().default('g'),
 });
 
 export const updateFoodLogSchema = z
@@ -151,6 +163,8 @@ export const updateFoodLogSchema = z
     carbs: macroSchema.optional(),
     fat: macroSchema.optional(),
     notes: z.string().trim().max(500).optional(),
+    quantity: quantitySchema.optional(),
+    unit: unitSchema.optional(),
   })
   .refine((payload) => Object.keys(payload).length > 0, {
     message: 'At least one field is required',

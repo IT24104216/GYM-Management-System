@@ -101,6 +101,16 @@ const mealOptionSchema = new mongoose.Schema(
       maxlength: 220,
       default: '',
     },
+    quantity: {
+      type: Number,
+      min: 0.1,
+      default: 1,
+    },
+    unit: {
+      type: String,
+      enum: ['g', 'ml', 'cups', 'tbsp', 'tsp', 'piece'],
+      default: 'g',
+    },
   },
   {
     _id: false,
@@ -224,6 +234,16 @@ const foodLogSchema = new mongoose.Schema(
       trim: true,
       maxlength: 500,
       default: '',
+    },
+    quantity: {
+      type: Number,
+      min: 0.1,
+      default: 1,
+    },
+    unit: {
+      type: String,
+      enum: ['g', 'ml', 'cups', 'tbsp', 'tsp', 'piece'],
+      default: 'g',
     },
   },
   {

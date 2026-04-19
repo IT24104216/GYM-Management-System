@@ -14,6 +14,7 @@ import {
   Snackbar,
   Stack,
   TextField,
+  MenuItem,
   Typography,
   useTheme,
 } from '@mui/material';
@@ -35,16 +36,17 @@ import {
 const CLIENTS_PER_PAGE = 6;
 
 const mealSections = [
-  { key: 'breakfast', title: 'Breakfast Options', icon: '🌅' },
-  { key: 'lunch', title: 'Lunch Options', icon: '🌞' },
-  { key: 'dinner', title: 'Dinner Options', icon: '🌙' },
-  { key: 'snacks', title: 'Snacks Options', icon: '🍎' },
+  { key: 'breakfast', title: 'Breakfast Options', icon: 'B' },
+  { key: 'lunch', title: 'Lunch Options', icon: 'L' },
+  { key: 'dinner', title: 'Dinner Options', icon: 'D' },
+  { key: 'snacks', title: 'Snacks Options', icon: 'S' },
 ];
 const MEAL_CATEGORY_LABELS = {
   weight_gain: 'Weight Gaining',
   weight_loss: 'Weight Losing',
   other: 'Other',
 };
+const FOOD_UNIT_OPTIONS = ['g', 'ml', 'cups', 'tbsp', 'tsp', 'piece'];
 
 const createMealOption = () => ({
   mealName: '',
@@ -54,6 +56,8 @@ const createMealOption = () => ({
   carbs: '',
   lipids: '',
   vitamins: '',
+  quantity: '1',
+  unit: 'g',
 });
 
 const createDietPlanForm = () => ({
@@ -80,6 +84,14 @@ const sanitizePlanSection = (section = []) =>
       carbs: toNumericOrZero(item?.carbs),
       lipids: toNumericOrZero(item?.lipids),
       vitamins: String(item?.vitamins || '').trim(),
+      quantity: (() => {
+        const parsed = Number(item?.quantity);
+        if (!Number.isFinite(parsed) || parsed < 0.1) return 1;
+        return parsed;
+      })(),
+      unit: FOOD_UNIT_OPTIONS.includes(String(item?.unit || '').trim())
+        ? String(item?.unit || '').trim()
+        : 'g',
     };
   });
 
@@ -305,10 +317,18 @@ function DietitianClients() {
         const protein = parseNumber(option?.protein);
         const carbs = parseNumber(option?.carbs);
         const lipids = parseNumber(option?.lipids);
+        const quantity = parseNumber(option?.quantity);
+        const unit = String(option?.unit || '').trim();
 
         const numericValues = [calories, protein, carbs, lipids].filter((value) => value !== null);
         if (numericValues.some((value) => Number.isNaN(value) || value < 0)) {
           return 'Calories and macros must be valid non-negative numbers.';
+        }
+        if (quantity !== null && (Number.isNaN(quantity) || quantity < 0.1)) {
+          return 'Quantity must be a valid number and at least 0.1.';
+        }
+        if (unit && !FOOD_UNIT_OPTIONS.includes(unit)) {
+          return 'Please select a valid food unit.';
         }
         if (calories !== null && calories > 3000) return 'Calories must be between 0 and 3000.';
         if (protein !== null && protein > 500) return 'Protein must be between 0 and 500 g.';
@@ -324,6 +344,8 @@ function DietitianClients() {
             || (protein !== null && protein > 0)
             || (carbs !== null && carbs > 0)
             || (lipids !== null && lipids > 0)
+            || (quantity !== null && quantity >= 0.1)
+            || Boolean(unit)
           ) {
             hasCompleteOption = true;
           }
@@ -360,6 +382,8 @@ function DietitianClients() {
             carbs: selectedMeal.carbs ?? option.carbs,
             lipids: selectedMeal.lipids ?? option.lipids,
             vitamins: selectedMeal.vitamins ?? option.vitamins,
+            quantity: selectedMeal.quantity ?? option.quantity ?? '1',
+            unit: selectedMeal.unit ?? option.unit ?? 'g',
           }
           : option,
       ),
@@ -726,6 +750,11 @@ function DietitianClients() {
                       <Typography sx={{ color: '#f8fafc', fontWeight: 800, mb: 1, fontSize: '1.45rem' }}>
                         Option {index + 1}
                       </Typography>
+                      <Typography sx={{ color: '#c6d6ef', fontSize: '0.85rem', mb: 0.8 }}>
+                        {String(option.mealName || '').trim()
+                          ? `${String(option.mealName || '').trim()} - ${String(option.quantity || '1').trim() || '1'} ${String(option.unit || 'g').trim() || 'g'}`
+                          : 'Meal summary appears here'}
+                      </Typography>
 
                       <Autocomplete
                         freeSolo
@@ -808,6 +837,37 @@ function DietitianClients() {
                       />
 
                       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0.8 }}>
+                        <TextField
+                          label="Quantity"
+                          type="number"
+                          value={option.quantity ?? '1'}
+                          onChange={(e) => updateMealField(section.key, index, 'quantity', e.target.value)}
+                          size="small"
+                          inputProps={{ min: 0.1, step: 0.1 }}
+                          sx={{
+                            '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.05rem', fontWeight: 700 },
+                            '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                          }}
+                        />
+                        <TextField
+                          label="Unit"
+                          select
+                          value={option.unit || 'g'}
+                          onChange={(e) => updateMealField(section.key, index, 'unit', e.target.value)}
+                          size="small"
+                          sx={{
+                            '& .MuiInputLabel-root': { color: '#c6d6ef', fontSize: '1.05rem', fontWeight: 700 },
+                            '& .MuiOutlinedInput-root': { color: '#edf5ff', background: '#4b6286', borderRadius: 1.2 },
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: '#6f86aa' },
+                          }}
+                        >
+                          {FOOD_UNIT_OPTIONS.map((unitOption) => (
+                            <MenuItem key={unitOption} value={unitOption}>
+                              {unitOption}
+                            </MenuItem>
+                          ))}
+                        </TextField>
                         <TextField
                           label="Calories"
                           type="number"
