@@ -9,6 +9,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  InputLabel,
   MenuItem,
   Select,
   Snackbar,
@@ -25,16 +27,30 @@ import {
 } from '@mui/material';
 import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getCoachAppointments, updateCoachAppointmentStatus } from '@/features/coach/api/coach.api';
+import {
+  delegateAppointment,
+  getCoachAppointments,
+  getMyTeam,
+  updateCoachAppointmentStatus,
+} from '@/features/coach/api/coach.api';
 
 const MotionBox = motion(Box);
 
 const PRIORITY_GRADIENT = {
-  Urgent: 'linear-gradient(135deg, #EF4444, #DC2626)',
-  High: 'linear-gradient(135deg, #F97316, #EF4444)',
-  Medium: 'linear-gradient(135deg, #6366f1, #3b82f6)',
-  Normal: 'linear-gradient(135deg, #3B82F6, #0D9488)',
-  Low: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+  urgent: 'linear-gradient(135deg, #EF4444, #DC2626)',
+  normal: 'linear-gradient(135deg, #F59E0B, #D97706)',
+  low: 'linear-gradient(135deg, #22C55E, #15803D)',
+};
+const PRIORITY_RANK = { urgent: 0, normal: 1, low: 2 };
+const normalizePriority = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'urgent' || normalized === 'low') return normalized;
+  return 'normal';
+};
+const priorityBadgeMeta = {
+  urgent: { label: 'URGENT', fg: '#dc2626', bg: '#fee2e2' },
+  normal: { label: 'NORMAL', fg: '#d97706', bg: '#fef3c7' },
+  low: { label: 'LOW', fg: '#15803d', bg: '#dcfce7' },
 };
 
 const getInitials = (name = '') => name
@@ -109,9 +125,13 @@ function CoachClients() {
   const panelBg = isDark ? '#0f1b34' : '#ffffff';
   const panelBorder = isDark ? '#24344f' : '#e5e7eb';
   const muted = isDark ? '#94a3b8' : '#6b7280';
+  const isHeadCoach = String(user?.coachRole || 'head').toLowerCase() === 'head';
+  const isSubCoach = String(user?.coachRole || 'head').toLowerCase() === 'sub';
 
   const [appointments, setAppointments] = useState([]);
-  const [priorityById, setPriorityById] = useState({});
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [queuePriorityFilter, setQueuePriorityFilter] = useState('all');
+  const [queueSortMode, setQueueSortMode] = useState('priority');
   const [flippedMemberIds, setFlippedMemberIds] = useState({});
   const [toast, setToast] = useState({ open: false, message: '' });
   const [rejectDialog, setRejectDialog] = useState({
@@ -121,10 +141,17 @@ function CoachClients() {
     error: '',
     isSubmitting: false,
   });
+  const [delegateDialog, setDelegateDialog] = useState({
+    open: false,
+    appointment: null,
+    subCoachId: '',
+    error: '',
+    isSubmitting: false,
+  });
 
   const mapAppointmentRow = useCallback((item) => {
     const name = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
-    const priority = priorityById[item._id] || 'Normal';
+    const priority = normalizePriority(item.priority);
     return {
       id: item._id,
       userId: item.userId,
@@ -135,7 +162,7 @@ function CoachClients() {
       requestedAt: toDateTimeLabel(item.startsAt),
       priority,
       avatar: getInitials(name),
-      gradient: PRIORITY_GRADIENT[priority] || PRIORITY_GRADIENT.Normal,
+      gradient: PRIORITY_GRADIENT[priority] || PRIORITY_GRADIENT.normal,
       email: getNoteValue(item.notes, 'User Email') || '-',
       branchUserId: getNoteValue(item.notes, 'Branch User ID') || '-',
       phone: getNoteValue(item.notes, 'Mobile') || '-',
@@ -145,16 +172,22 @@ function CoachClients() {
       startsAt: item.startsAt,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
+      delegatedByCoachId: String(item.delegatedByCoachId || ''),
+      delegatedByCoachName: String(item.delegatedByCoachName || ''),
+      delegatedAt: item.delegatedAt || null,
     };
-  }, [priorityById]);
+  }, []);
 
   const loadAppointments = useCallback(async () => {
     if (!coachId) return;
     try {
-      const { data } = await getCoachAppointments({
-        page: 1,
-        limit: 200,
-      });
+      const [{ data }, teamPayload] = await Promise.all([
+        getCoachAppointments({
+          page: 1,
+          limit: 200,
+        }),
+        isHeadCoach ? getMyTeam().catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
+      ]);
       const all = Array.isArray(data?.data) ? data.data : [];
       const coachName = String(user?.name || '').trim().toLowerCase();
       const mine = all.filter((item) => {
@@ -167,12 +200,14 @@ function CoachClients() {
       });
 
       setAppointments(mine);
+      setTeamMembers(Array.isArray(teamPayload?.data?.data) ? teamPayload.data.data : []);
     } catch (error) {
       setAppointments([]);
+      setTeamMembers([]);
       const message = error?.response?.data?.message || 'Failed to load appointments';
       setToast({ open: true, message });
     }
-  }, [coachId, user]);
+  }, [coachId, isHeadCoach, user]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -188,13 +223,29 @@ function CoachClients() {
   }, [loadAppointments]);
 
   const pendingRows = useMemo(
-    () =>
-      appointments
-        .filter((item) => item.status === 'pending')
-        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-        .map(mapAppointmentRow),
+    () => appointments.filter((item) => item.status === 'pending').map(mapAppointmentRow),
     [appointments, mapAppointmentRow],
   );
+  const queueSummary = useMemo(() => {
+    const counts = { urgent: 0, normal: 0, low: 0 };
+    pendingRows.forEach((row) => {
+      counts[row.priority] += 1;
+    });
+    return counts;
+  }, [pendingRows]);
+  const visiblePendingRows = useMemo(() => {
+    const filtered = queuePriorityFilter === 'all'
+      ? [...pendingRows]
+      : pendingRows.filter((row) => row.priority === queuePriorityFilter);
+    if (queueSortMode === 'date') {
+      return filtered.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    }
+    return filtered.sort((a, b) => {
+      const rankDiff = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+      if (rankDiff !== 0) return rankDiff;
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
+  }, [pendingRows, queuePriorityFilter, queueSortMode]);
 
   const members = useMemo(() => {
     const accepted = appointments.filter((item) => item.status === 'approved' || item.status === 'completed');
@@ -228,14 +279,10 @@ function CoachClients() {
         preferredSlot: toDateTimeLabel(item.startsAt),
         trainingDays: 'To be scheduled',
         notes: getNoteValue(item.notes, 'Description') || item.notes || '-',
-        priority: 'Normal',
+        priority: normalizePriority(item.priority),
       };
     });
   }, [appointments]);
-
-  const updatePriority = (id, priority) => {
-    setPriorityById((prev) => ({ ...prev, [id]: priority }));
-  };
 
   const approveRequest = async (request) => {
     try {
@@ -300,6 +347,48 @@ function CoachClients() {
     }
   };
 
+  const openDelegateDialog = (request) => {
+    setDelegateDialog({
+      open: true,
+      appointment: request,
+      subCoachId: '',
+      error: '',
+      isSubmitting: false,
+    });
+  };
+
+  const closeDelegateDialog = () => {
+    setDelegateDialog({
+      open: false,
+      appointment: null,
+      subCoachId: '',
+      error: '',
+      isSubmitting: false,
+    });
+  };
+
+  const submitDelegate = async () => {
+    if (!delegateDialog.appointment?.id) return;
+    if (!delegateDialog.subCoachId) {
+      setDelegateDialog((prev) => ({ ...prev, error: 'Please select a sub-coach.' }));
+      return;
+    }
+
+    setDelegateDialog((prev) => ({ ...prev, error: '', isSubmitting: true }));
+    try {
+      await delegateAppointment(delegateDialog.appointment.id, delegateDialog.subCoachId);
+      await loadAppointments();
+      setToast({ open: true, message: 'Appointment delegated successfully.' });
+      closeDelegateDialog();
+    } catch (error) {
+      setDelegateDialog((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        error: error?.response?.data?.message || 'Failed to delegate appointment',
+      }));
+    }
+  };
+
   const toggleMemberCard = (id) => {
     setFlippedMemberIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
@@ -330,8 +419,39 @@ function CoachClients() {
       >
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.2 }}>
           <Typography sx={{ fontWeight: 800, color: 'text.primary', fontSize: '1.05rem' }}>Appointments</Typography>
-          <Chip label={`${pendingRows.length} pending`} size="small" sx={{ fontWeight: 700 }} />
+          <Chip label={`${visiblePendingRows.length} pending`} size="small" sx={{ fontWeight: 700 }} />
         </Stack>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mb: 1.2 }}>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            {[
+              { value: 'all', label: 'All' },
+              { value: 'urgent', label: 'Urgent' },
+              { value: 'normal', label: 'Normal' },
+              { value: 'low', label: 'Low' },
+            ].map((option) => (
+              <Button
+                key={option.value}
+                size="small"
+                variant={queuePriorityFilter === option.value ? 'contained' : 'outlined'}
+                onClick={() => setQueuePriorityFilter(option.value)}
+                sx={{ textTransform: 'none', borderRadius: 99, fontWeight: 700 }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </Stack>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setQueueSortMode((prev) => (prev === 'priority' ? 'date' : 'priority'))}
+            sx={{ textTransform: 'none', borderRadius: 99, fontWeight: 700, alignSelf: { xs: 'flex-start', md: 'center' } }}
+          >
+            {queueSortMode === 'priority' ? 'Priority Order' : 'Date Order'}
+          </Button>
+        </Stack>
+        <Typography sx={{ color: muted, fontSize: '0.84rem', fontWeight: 700, mb: 1 }}>
+          {`🔴 ${queueSummary.urgent} Urgent  🟡 ${queueSummary.normal} Normal  🟢 ${queueSummary.low} Low`}
+        </Typography>
 
         <TableContainer>
           <Table size="small">
@@ -355,7 +475,7 @@ function CoachClients() {
                 </TableRow>
               )}
 
-              {pendingRows.map((row) => (
+              {visiblePendingRows.map((row) => (
                 <TableRow key={row.id} hover>
                   <TableCell>
                     <Stack direction="row" spacing={1} alignItems="center">
@@ -365,6 +485,11 @@ function CoachClients() {
                       <Box>
                         <Typography sx={{ fontWeight: 700, fontSize: '0.88rem' }}>{row.name}</Typography>
                         <Typography sx={{ color: muted, fontSize: '0.76rem' }}>Age {row.age}</Typography>
+                        {isSubCoach && row.delegatedByCoachName && (
+                          <Typography sx={{ color: '#0d9488', fontSize: '0.72rem', fontWeight: 700 }}>
+                            Delegated by {row.delegatedByCoachName}
+                          </Typography>
+                        )}
                       </Box>
                     </Stack>
                   </TableCell>
@@ -385,18 +510,15 @@ function CoachClients() {
                     <Typography sx={{ fontSize: '0.84rem', color: muted }}>{row.requestedAt}</Typography>
                   </TableCell>
                   <TableCell>
-                    <Select
+                    <Chip
                       size="small"
-                      value={row.priority}
-                      onChange={(e) => updatePriority(row.id, e.target.value)}
-                      sx={{ minWidth: 110, '& .MuiSelect-select': { py: 0.6 } }}
-                    >
-                      <MenuItem value="Urgent">Urgent</MenuItem>
-                      <MenuItem value="High">High</MenuItem>
-                      <MenuItem value="Medium">Medium</MenuItem>
-                      <MenuItem value="Normal">Normal</MenuItem>
-                      <MenuItem value="Low">Low</MenuItem>
-                    </Select>
+                      label={priorityBadgeMeta[row.priority]?.label || 'NORMAL'}
+                      sx={{
+                        fontWeight: 800,
+                        color: priorityBadgeMeta[row.priority]?.fg || '#d97706',
+                        bgcolor: priorityBadgeMeta[row.priority]?.bg || '#fef3c7',
+                      }}
+                    />
                   </TableCell>
                   <TableCell align="right">
                     <Stack direction="row" spacing={0.8} justifyContent="flex-end">
@@ -417,10 +539,29 @@ function CoachClients() {
                       >
                         Reject
                       </Button>
+                      {isHeadCoach && teamMembers.length > 0 && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => openDelegateDialog(row)}
+                          sx={{ textTransform: 'none', borderRadius: 1.4 }}
+                        >
+                          Delegate
+                        </Button>
+                      )}
                     </Stack>
                   </TableCell>
                 </TableRow>
               ))}
+              {pendingRows.length > 0 && visiblePendingRows.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7}>
+                    <Typography sx={{ color: 'text.secondary', py: 1 }}>
+                      No requests match the selected priority filter.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -540,7 +681,9 @@ function CoachClients() {
                       ? client.priorityTags.map((tag) => <Chip key={`${client.id}-${tag}`} label={tag} size="small" />)
                       : <Typography sx={{ color: muted, fontSize: '0.84rem' }}>-</Typography>}
                   </Stack>
-                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}><strong>Priority:</strong> {client.priority}</Typography>
+                  <Typography sx={{ color: muted, fontSize: '0.84rem', mb: 0.5 }}>
+                    <strong>Priority:</strong> {priorityBadgeMeta[client.priority]?.label || 'NORMAL'}
+                  </Typography>
                   <Typography sx={{ color: muted, fontSize: '0.84rem' }}><strong>Notes:</strong> {client.notes}</Typography>
                 </Box>
                 <Button
@@ -604,6 +747,50 @@ function CoachClients() {
             disabled={rejectDialog.isSubmitting}
           >
             {rejectDialog.isSubmitting ? 'Submitting...' : 'Submit Rejection'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={delegateDialog.open} onClose={closeDelegateDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>Delegate Appointment</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 1, color: muted, fontSize: '0.9rem' }}>
+            Select a sub-coach to reassign this pending booking.
+          </Typography>
+          <Typography sx={{ mb: 1.2, color: 'text.primary', fontSize: '0.9rem', fontWeight: 700 }}>
+            {delegateDialog.appointment?.name || ''}
+          </Typography>
+          <FormControl fullWidth size="small">
+            <InputLabel id="delegate-subcoach-label">Sub-Coach</InputLabel>
+            <Select
+              labelId="delegate-subcoach-label"
+              label="Sub-Coach"
+              value={delegateDialog.subCoachId}
+              onChange={(event) =>
+                setDelegateDialog((prev) => ({
+                  ...prev,
+                  subCoachId: event.target.value,
+                  error: '',
+                }))
+              }
+            >
+              {teamMembers.map((member) => (
+                <MenuItem key={member.id} value={member.id}>
+                  {`${member.name} (${Number(member.pendingCount || 0)} pending)`}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {delegateDialog.error && (
+            <Typography sx={{ mt: 1, color: '#ef4444', fontSize: '0.84rem', fontWeight: 600 }}>
+              {delegateDialog.error}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDelegateDialog}>Cancel</Button>
+          <Button variant="contained" onClick={submitDelegate} disabled={delegateDialog.isSubmitting}>
+            {delegateDialog.isSubmitting ? 'Delegating...' : 'Delegate'}
           </Button>
         </DialogActions>
       </Dialog>
