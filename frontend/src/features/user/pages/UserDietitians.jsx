@@ -124,7 +124,7 @@ const APPOINTMENT_PRIORITY_OPTIONS = [
   {
     value: 'normal',
     label: 'Normal',
-    helper: 'Standard booking',
+    helper: 'Standard booking, no rush',
     color: '#d97706',
     bg: '#fef3c7',
   },
@@ -1212,7 +1212,7 @@ function UserDietitians() {
 
             <Box>
               <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: theme.palette.text.primary, mb: 0.75 }}>
-                Appointment Priority
+                How urgent is this appointment?
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                 {APPOINTMENT_PRIORITY_OPTIONS.map((option) => {
@@ -1249,6 +1249,9 @@ function UserDietitians() {
                   );
                 })}
               </Stack>
+              <Typography sx={{ mt: 0.7, fontSize: '0.78rem', color: theme.palette.text.secondary }}>
+                Urgent bookings are reviewed first. Please only select Urgent if genuinely needed.
+              </Typography>
               {editingBookingId && (
                 <Typography sx={{ mt: 0.6, fontSize: '0.78rem', color: theme.palette.text.secondary }}>
                   Priority can be set only at booking creation.
