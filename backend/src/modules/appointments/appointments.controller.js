@@ -4,6 +4,7 @@ import {
   appointmentIdParamsSchema,
   appointmentQuerySchema,
   createAppointmentSchema,
+  snoozeAppointmentSchema,
   updateAppointmentSchema,
   updateAppointmentStatusSchema,
 } from './appointments.validation.js';
@@ -15,6 +16,13 @@ import {
   createNotification,
   createNotificationForAdmins,
 } from '../notifications/notifications.service.js';
+import {
+  assignQueuePosition,
+  calculateSlaDeadline,
+  ensureQueueWorkerStarted,
+  processSnooze,
+  runEscalationCheck,
+} from './appointments.queue.js';
 
 function parseOrThrow(schema, payload) {
   const result = schema.safeParse(payload);
@@ -47,6 +55,36 @@ function normalizePriority(value) {
   if (normalized === 'urgent' || normalized === 'low') return normalized;
   return 'normal';
 }
+
+const HOUR_MS = 60 * 60 * 1000;
+
+function toHours(value) {
+  return Number((Number(value || 0)).toFixed(2));
+}
+
+function asDate(value, fallback = null) {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+  return parsed;
+}
+
+function toQueueDto(item) {
+  const queueEnteredAt = asDate(item.queueEnteredAt, asDate(item.createdAt, new Date()));
+  const slaDeadline = asDate(item.slaDeadline, null);
+  const now = Date.now();
+  const waitTimeHours = toHours((now - queueEnteredAt.getTime()) / HOUR_MS);
+  const slaRemainingHours = slaDeadline
+    ? toHours((slaDeadline.getTime() - now) / HOUR_MS)
+    : null;
+
+  return {
+    ...withPriorityFallback(item),
+    waitTimeHours,
+    slaRemainingHours,
+  };
+}
+
+ensureQueueWorkerStarted();
 
 function withPriorityFallback(record) {
   if (!record) return record;
@@ -94,10 +132,23 @@ export const createAppointment = asyncHandler(async (req, res) => {
     );
   }
 
+  const now = new Date();
+  const normalizedPriority = normalizePriority(payload.priority);
   const created = await Appointment.create({
     ...payload,
-    priority: normalizePriority(payload.priority),
+    priority: normalizedPriority,
+    queueEnteredAt: now,
+    queuePosition: null,
+    slaDeadline: calculateSlaDeadline(normalizedPriority, now),
+    slaBreached: false,
+    escalationHistory: [],
+    lastEscalatedAt: null,
+    snoozedUntil: null,
   });
+
+  if (payload.coachId) {
+    await assignQueuePosition(payload.coachId);
+  }
 
   await Promise.allSettled([
     createNotification({
@@ -257,6 +308,140 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
   });
 });
 
+export const getCoachQueue = asyncHandler(async (req, res) => {
+  const role = String(req.user?.role || '');
+  const authUserId = String(req.user?.id || '');
+  if (!['coach', 'admin'].includes(role)) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
+
+  const coachId = role === 'coach'
+    ? authUserId
+    : String(req.query?.coachId || '').trim();
+  if (!coachId) {
+    throw new AppError('coachId is required', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+  }
+
+  await runEscalationCheck(coachId);
+  const activeQueue = await assignQueuePosition(coachId);
+  const now = new Date();
+  const snoozed = await Appointment.find({
+    coachId,
+    status: 'pending',
+    snoozedUntil: { $gt: now },
+  }).sort({ snoozedUntil: 1, queueEnteredAt: 1, createdAt: 1 });
+
+  res.status(HTTP_STATUS.OK).json({
+    data: activeQueue.map(toQueueDto),
+    snoozed: snoozed.map(toQueueDto),
+  });
+});
+
+export const snoozeAppointment = asyncHandler(async (req, res) => {
+  const role = String(req.user?.role || '');
+  const authUserId = String(req.user?.id || '');
+  if (role !== 'coach') {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
+
+  const { id } = parseOrThrow(appointmentIdParamsSchema, req.params);
+  const { snoozeMinutes } = parseOrThrow(snoozeAppointmentSchema, req.body);
+
+  const item = await Appointment.findById(id);
+  if (!item) {
+    throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
+  }
+  if (String(item.coachId || '') !== authUserId) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
+  if (String(item.status) !== 'pending') {
+    throw new AppError('Only pending appointments can be snoozed', HTTP_STATUS.CONFLICT);
+  }
+
+  const updated = await processSnooze(id, snoozeMinutes);
+  if (!updated) {
+    throw new AppError('Appointment not found', HTTP_STATUS.NOT_FOUND);
+  }
+  await assignQueuePosition(authUserId);
+
+  res.status(HTTP_STATUS.OK).json({
+    message: 'Appointment snoozed',
+    data: toQueueDto(updated),
+  });
+});
+
+export const getQueueStats = asyncHandler(async (req, res) => {
+  const role = String(req.user?.role || '');
+  const authUserId = String(req.user?.id || '');
+  if (!['coach', 'admin'].includes(role)) {
+    throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
+  }
+
+  const coachId = role === 'coach'
+    ? authUserId
+    : String(req.query?.coachId || '').trim();
+  if (!coachId) {
+    throw new AppError('coachId is required', HTTP_STATUS.UNPROCESSABLE_ENTITY);
+  }
+
+  await runEscalationCheck(coachId);
+  await assignQueuePosition(coachId);
+
+  const pendingItems = await Appointment.find({
+    coachId,
+    status: 'pending',
+  });
+  const now = Date.now();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const stats = pendingItems.reduce(
+    (acc, item) => {
+      const priority = normalizePriority(item.priority);
+      if (priority === 'urgent') acc.urgentCount += 1;
+      if (priority === 'normal') acc.normalCount += 1;
+      if (priority === 'low') acc.lowCount += 1;
+      if (item.slaBreached) acc.slaBreachedCount += 1;
+
+      const enteredAt = asDate(item.queueEnteredAt, asDate(item.createdAt, new Date()));
+      const waitHours = (now - enteredAt.getTime()) / HOUR_MS;
+      acc.waitTotal += waitHours;
+      acc.longestWaitHours = Math.max(acc.longestWaitHours, waitHours);
+
+      const escalations = Array.isArray(item.escalationHistory) ? item.escalationHistory : [];
+      escalations.forEach((entry) => {
+        const escalatedAt = asDate(entry?.escalatedAt, null);
+        if (escalatedAt && escalatedAt >= todayStart) {
+          acc.escalatedTodayCount += 1;
+        }
+      });
+      return acc;
+    },
+    {
+      urgentCount: 0,
+      normalCount: 0,
+      lowCount: 0,
+      slaBreachedCount: 0,
+      waitTotal: 0,
+      longestWaitHours: 0,
+      escalatedTodayCount: 0,
+    },
+  );
+
+  const itemCount = pendingItems.length;
+  res.status(HTTP_STATUS.OK).json({
+    data: {
+      urgentCount: stats.urgentCount,
+      normalCount: stats.normalCount,
+      lowCount: stats.lowCount,
+      slaBreachedCount: stats.slaBreachedCount,
+      avgWaitHours: itemCount ? toHours(stats.waitTotal / itemCount) : 0,
+      longestWaitHours: toHours(stats.longestWaitHours),
+      escalatedTodayCount: stats.escalatedTodayCount,
+    },
+  });
+});
+
 export const updateAppointment = asyncHandler(async (req, res) => {
   const { id } = parseOrThrow(appointmentIdParamsSchema, req.params);
   const payload = parseOrThrow(updateAppointmentSchema, req.body);
@@ -323,7 +508,11 @@ export const deleteAppointment = asyncHandler(async (req, res) => {
   if (!['admin', 'user'].includes(String(req.user?.role || ''))) {
     throw new AppError('Forbidden', HTTP_STATUS.FORBIDDEN);
   }
+  const coachId = String(item.coachId || '');
   await item.deleteOne();
+  if (coachId) {
+    await assignQueuePosition(coachId);
+  }
 
   res.status(HTTP_STATUS.OK).json({
     message: 'Appointment deleted successfully',
@@ -379,6 +568,7 @@ export const delegateAppointment = asyncHandler(async (req, res) => {
     throw new AppError('Selected sub-coach is already booked in this slot', HTTP_STATUS.CONFLICT);
   }
 
+  const previousCoachId = String(item.coachId || '');
   if (role === 'coach') {
     if (!actorCoach || actorCoach.role !== 'coach') {
       throw new AppError('Coach not found', HTTP_STATUS.NOT_FOUND);
@@ -403,6 +593,13 @@ export const delegateAppointment = asyncHandler(async (req, res) => {
   }
   item.delegatedAt = new Date();
   await item.save();
+  await Promise.allSettled([
+    previousCoachId ? assignQueuePosition(previousCoachId) : Promise.resolve(null),
+    item.coachId ? assignQueuePosition(item.coachId) : Promise.resolve(null),
+  ]);
+  if (item.coachId) {
+    await assignQueuePosition(item.coachId);
+  }
 
   await Promise.allSettled([
     createNotification({
