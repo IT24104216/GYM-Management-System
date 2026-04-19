@@ -22,7 +22,13 @@ import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/shared/utils/constants';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { getCoachAppointments, getCoachMemberProgressScores, getMyTeam } from '../api/coach.api';
+import {
+  getCoachAppointments,
+  getCoachMemberProgressScores,
+  getCoachQueue,
+  getCoachQueueStats,
+  getMyTeam,
+} from '../api/coach.api';
 import {
   BarChart,
   Bar,
@@ -74,17 +80,6 @@ const formatTime12 = (dateInput) => {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 };
 
-const formatWait = (createdAt) => {
-  const created = new Date(createdAt);
-  if (Number.isNaN(created.getTime())) return 'just now';
-  const diffMs = Math.max(Date.now() - created.getTime(), 0);
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  if (diffHours < 1) return 'just now';
-  if (diffHours < 24) return `${diffHours} hours`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} days`;
-};
-
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const typeToColor = {
@@ -100,7 +95,6 @@ const priorityGrad = {
   normal: 'linear-gradient(135deg, #F59E0B, #D97706)',
   low: 'linear-gradient(135deg, #22C55E, #15803D)',
 };
-const priorityRank = { urgent: 0, normal: 1, low: 2 };
 const normalizePriority = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   if (normalized === 'urgent' || normalized === 'low') return normalized;
@@ -149,6 +143,14 @@ function CoachDashboard() {
   const coachId = String(user?.id || user?._id || '');
   const [flippedMemberIds, setFlippedMemberIds] = useState({});
   const [appointments, setAppointments] = useState([]);
+  const [queuePreview, setQueuePreview] = useState([]);
+  const [queueStats, setQueueStats] = useState({
+    urgentCount: 0,
+    normalCount: 0,
+    lowCount: 0,
+    slaBreachedCount: 0,
+    avgWaitHours: 0,
+  });
   const [memberProgressScores, setMemberProgressScores] = useState({});
   const [teamMembers, setTeamMembers] = useState([]);
   const [toast, setToast] = useState({ open: false, message: '', severity: 'error' });
@@ -170,8 +172,10 @@ function CoachDashboard() {
     if (!coachId) return;
     try {
       const isHeadCoach = String(user?.coachRole || 'head').toLowerCase() === 'head';
-      const [{ data }, { data: scorePayload }, teamPayload] = await Promise.all([
+      const [{ data }, { data: queuePayload }, { data: queueStatsPayload }, { data: scorePayload }, teamPayload] = await Promise.all([
         getCoachAppointments({ page: 1, limit: 300 }),
+        getCoachQueue(),
+        getCoachQueueStats(),
         getCoachMemberProgressScores(coachId, { days: 7 }),
         isHeadCoach ? getMyTeam().catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
       ]);
@@ -186,10 +190,27 @@ function CoachDashboard() {
         return item.sessionType !== 'nutrition' && (byId || byNoteId || byName);
       });
       setAppointments(mine);
+      const queueRows = Array.isArray(queuePayload?.data) ? queuePayload.data : [];
+      setQueuePreview(queueRows.slice(0, 3));
+      setQueueStats({
+        urgentCount: Number(queueStatsPayload?.data?.urgentCount || 0),
+        normalCount: Number(queueStatsPayload?.data?.normalCount || 0),
+        lowCount: Number(queueStatsPayload?.data?.lowCount || 0),
+        slaBreachedCount: Number(queueStatsPayload?.data?.slaBreachedCount || 0),
+        avgWaitHours: Number(queueStatsPayload?.data?.avgWaitHours || 0),
+      });
       setMemberProgressScores(scorePayload?.data?.byUserId || {});
       setTeamMembers(Array.isArray(teamPayload?.data?.data) ? teamPayload.data.data : []);
     } catch (error) {
       setAppointments([]);
+      setQueuePreview([]);
+      setQueueStats({
+        urgentCount: 0,
+        normalCount: 0,
+        lowCount: 0,
+        slaBreachedCount: 0,
+        avgWaitHours: 0,
+      });
       setMemberProgressScores({});
       setTeamMembers([]);
       setToast({
@@ -219,7 +240,15 @@ function CoachDashboard() {
     };
   }, [loadDashboardData]);
 
-  const { stats, schedule, consultations, members, weeklyData, scheduleDateLabel, urgentQueueCount } = useMemo(() => {
+  const {
+    stats,
+    schedule,
+    consultations,
+    members,
+    weeklyData,
+    scheduleDateLabel,
+    slaBreachedCount,
+  } = useMemo(() => {
     const now = new Date();
     const todayStart = startOfDay(now);
     const tomorrowStart = new Date(todayStart);
@@ -235,8 +264,6 @@ function CoachDashboard() {
 
     const validAppointments = appointments.filter((item) => item.status !== 'cancelled' && item.status !== 'rejected');
     const activeAppointments = appointments.filter((item) => item.status === 'approved' || item.status === 'completed');
-    const pendingAppointments = appointments.filter((item) => item.status === 'pending');
-
     const uniqueActiveClients = new Set(activeAppointments.map((item) => String(item.userId))).size;
 
     const todayAppointments = validAppointments.filter((item) => {
@@ -307,27 +334,22 @@ function CoachDashboard() {
         status: index === 0 && item.status === 'pending' ? 'current' : item.status === 'completed' ? 'done' : 'upcoming',
       }));
 
-    const queueRows = pendingAppointments
-      .sort((a, b) => {
-        const rankDiff = priorityRank[normalizePriority(a.priority)] - priorityRank[normalizePriority(b.priority)];
-        if (rankDiff !== 0) return rankDiff;
-        return new Date(a.createdAt) - new Date(b.createdAt);
-      })
-      .slice(0, 6)
+    const queueRows = queuePreview
+      .slice(0, 3)
       .map((item) => {
         const priorityRaw = normalizePriority(item.priority);
         const priorityLabel = priorityRaw === 'urgent' ? 'URGENT' : priorityRaw === 'low' ? 'LOW' : 'NORMAL';
-        const userName = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId).slice(0, 6)}`;
+        const userName = getNoteValue(item.notes, 'User Name') || `User ${String(item.userId || '').slice(0, 6)}`;
+        const position = Number(item.queuePosition || 0);
         return {
           name: userName,
           issue: getNoteValue(item.notes, 'Description') || item.notes || 'Consultation request',
           priority: priorityLabel,
-          wait: formatWait(item.createdAt),
+          wait: `#${position || '-'} in queue`,
           avatar: getInitials(userName),
           priorityGrad: priorityGrad[priorityRaw] || priorityGrad.normal,
         };
       });
-    const urgentCount = pendingAppointments.filter((item) => normalizePriority(item.priority) === 'urgent').length;
 
     const membersByUser = new Map();
     activeAppointments
@@ -398,9 +420,9 @@ function CoachDashboard() {
       members: memberRows,
       weeklyData: weeklyRows,
       scheduleDateLabel: now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
-      urgentQueueCount: urgentCount,
+      slaBreachedCount: Number(queueStats.slaBreachedCount || 0),
     };
-  }, [appointments, memberProgressScores]);
+  }, [appointments, memberProgressScores, queuePreview, queueStats]);
 
   const toggleMemberCard = (id) => {
     setFlippedMemberIds((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -408,7 +430,7 @@ function CoachDashboard() {
 
   return (
     <Motion.div variants={containerVariants} initial="hidden" animate="visible" style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 24 }}>
-      {urgentQueueCount > 0 && (
+      {slaBreachedCount > 0 && (
         <Alert
           severity="error"
           sx={{ borderRadius: 2, alignItems: 'center' }}
@@ -418,7 +440,7 @@ function CoachDashboard() {
             </Button>
           )}
         >
-          {`You have ${urgentQueueCount} urgent appointment(s) requiring immediate attention.`}
+          {`You have ${slaBreachedCount} appointment(s) that require immediate attention - SLA deadline passed.`}
         </Alert>
       )}
       {isHeadCoach && overloadedTeamMembers.length > 0 && (
@@ -475,6 +497,22 @@ function CoachDashboard() {
         })}
       </MotionBox>
 
+      <Motion.div variants={itemVariants}>
+        <Box sx={{ background: panelBg, borderRadius: 2, p: 2, border: '1px solid', borderColor: panelBorder, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
+            <Typography sx={{ fontWeight: 700, color: primaryText, fontSize: '1.05rem' }}>Queue Stats</Typography>
+            <Typography sx={{ fontSize: '0.82rem', color: secondaryText }}>
+              Avg wait: {Number(queueStats.avgWaitHours || 0).toFixed(1)} hrs
+            </Typography>
+          </Stack>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1.2 }}>
+            <Chip label={`${Number(queueStats.urgentCount || 0)} Urgent`} sx={{ fontWeight: 800, bgcolor: '#fee2e2', color: '#dc2626' }} />
+            <Chip label={`${Number(queueStats.normalCount || 0)} Normal`} sx={{ fontWeight: 800, bgcolor: '#fef3c7', color: '#d97706' }} />
+            <Chip label={`${Number(queueStats.lowCount || 0)} Low`} sx={{ fontWeight: 800, bgcolor: '#dcfce7', color: '#15803d' }} />
+          </Stack>
+        </Box>
+      </Motion.div>
+
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
         <Motion.div variants={itemVariants}>
           <Box sx={{ background: panelBg, borderRadius: 2, p: 2.5, border: '1px solid', borderColor: panelBorder, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
@@ -525,7 +563,7 @@ function CoachDashboard() {
             <Stack direction="row" justifyContent="space-between" sx={{ mb: 2 }}>
               <Typography sx={{ fontWeight: 700, color: primaryText, fontSize: '1.25rem' }}>Consultation Queue</Typography>
               <Box component="span" sx={{ px: 1, py: 0.5, borderRadius: 999, color: '#fff', fontWeight: 700, fontSize: '0.75rem', background: 'linear-gradient(135deg, #EF4444, #F97316)' }}>
-                {consultations.length} pending
+                {Number(queueStats.urgentCount || 0) + Number(queueStats.normalCount || 0) + Number(queueStats.lowCount || 0)} pending
               </Box>
             </Stack>
             <Stack spacing={1.5}>
