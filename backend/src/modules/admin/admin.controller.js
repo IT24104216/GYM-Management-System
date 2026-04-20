@@ -73,7 +73,7 @@ async function getAdminByIdOrThrow(adminId) {
   return admin;
 }
 
-export const getAdminStatus = (_req, res) => {
+export const getAdminStatus = (_req, res) => { 
   res.json({
     module: 'admin',
     status: 'ready',
